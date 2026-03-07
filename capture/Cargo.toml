@@ -1,0 +1,20 @@
+[package]
+name = "q3ide-capture"
+version = "0.1.0"
+edition = "2021"
+description = "Screen capture dylib for q3ide — wraps ScreenCaptureKit via C-ABI"
+
+[lib]
+name = "q3ide_capture"
+crate-type = ["cdylib"]
+
+[dependencies]
+screencapturekit = { path = "screencapturekit-rs" }
+crossbeam-queue = "0.3"
+log = "0.4"
+env_logger = "0.11"
+chrono = "0.4"
+libc = "0.2"
+
+[build-dependencies]
+cbindgen = "0.29"

@@ -1,0 +1,126 @@
+# Quake3e Makefile - Build System Reference
+
+> **Source:** https://raw.githubusercontent.com/ec-/Quake3e/main/Makefile
+> **Fetched:** 2026-03-07
+> **Purpose:** Build system documentation for the Quake3e engine Unix/cross-platform Makefile.
+
+---
+
+## Overview
+
+The Quake3e Makefile is a comprehensive GNU Make build system that handles compilation
+across Windows (MinGW), macOS (Darwin), and Linux/Unix platforms with x86, x86_64, ARM,
+and PowerPC architectures.
+
+## Platform Detection
+
+The makefile automatically detects the compilation platform and architecture using shell
+commands, then normalizes values:
+- `i.86` -> `x86`
+- `arm64` -> `aarch64`
+- Detects MinGW, Darwin, Linux, FreeBSD
+
+## Build Configuration Variables
+
+These variables can be overridden on the command line (e.g., `make USE_VULKAN=1`):
+
+| Variable | Default | Description |
+|---|---|---|
+| `BUILD_CLIENT` | 1 | Build client executable |
+| `BUILD_SERVER` | 1 | Build dedicated server executable |
+| `USE_SDL` | 0 (Linux) / varies | Use SDL2 for windowing/input |
+| `USE_OPENGL` | 1 | Build OpenGL renderer |
+| `USE_OPENGL2` | 0 | Build OpenGL2 renderer |
+| `USE_VULKAN` | 1 | Build Vulkan renderer |
+| `USE_RENDERER_DLOPEN` | 1 | Dynamic renderer loading |
+| `RENDERER_DEFAULT` | opengl | Default renderer when dynamic loading |
+| `USE_CURL` | 1 | Enable HTTP downloads |
+| `USE_OGG_VORBIS` | 1 | Enable OGG Vorbis audio |
+| `USE_SYSTEM_JPEG` | 0 | Use system libjpeg |
+
+## Platform-Specific Configuration
+
+### macOS (Darwin)
+- Renderer dynamic loading is DISABLED on macOS
+- Includes framework support for SDL2
+- Supports both x86_64 and ARM64 (Apple Silicon)
+- Links against system frameworks (OpenGL, Cocoa, IOKit, etc.)
+
+### Linux/Unix
+- Standard X11 or SDL2 integration
+- Architecture-specific optimizations (MMX, SSE for x86)
+- Links against libGL, libX11, libXrandr, etc.
+
+### Windows (MinGW)
+- Includes compiler prefix detection for cross-compilation
+- Windows resource handling (.rc files)
+- DirectX library linking
+- All required libraries are bundled
+
+## Compiler Flags
+
+- Optimization: `-O2` for release, `-O0 -g` for debug
+- Function visibility: `-fvisibility=hidden`
+- Link-time optimization enabled
+- Architecture-specific SIMD support (MMX, SSE, x86_64)
+- Warning flags: `-Wall -Wno-missing-braces`
+
+## Build Targets
+
+### Executables
+- `quake3e` (or `quake3e.exe` on Windows) - Client executable
+- `quake3e.ded` - Dedicated server executable
+
+### Renderer Libraries (when USE_RENDERER_DLOPEN=1)
+- `renderer_opengl_<arch>.so/.dylib/.dll` - OpenGL renderer
+- `renderer_opengl2_<arch>.so/.dylib/.dll` - OpenGL2 renderer
+- `renderer_vulkan_<arch>.so/.dylib/.dll` - Vulkan renderer
+
+## Source Directory Structure
+
+Source code is organized into these subdirectories under `code/`:
+- `client/` - Client-side code
+- `server/` - Server-side code
+- `renderer/` - OpenGL renderer
+- `renderer2/` - OpenGL2 renderer
+- `renderervk/` - Vulkan renderer
+- `renderercommon/` - Shared renderer code
+- `qcommon/` - Common/shared engine code
+- `botlib/` - Bot AI library
+- `cgame/` - Client game (public headers only)
+- `game/` - Game logic
+- `ui/` - UI system
+- `unix/` - Unix/Linux platform code
+- `win32/` - Windows platform code
+- `sdl/` - SDL2 integration
+- `libjpeg/` - JPEG library
+- `libogg/` - OGG container library
+- `libvorbis/` - Vorbis audio codec
+- `libcurl/` - HTTP client library
+- `libsdl/` - SDL2 headers
+
+## Build Rules
+
+- C source compilation with separate rules for client, server, and renderer code
+- Assembly file compilation for x86 optimizations
+- GLSL shader compilation (converted to C strings)
+- Resource file compilation (.rc) for Windows
+- Automatic dependency generation for incremental compilation
+
+## Additional Features
+
+- CCACHE support for faster rebuilds
+- `Makefile.local` override capability for local customization
+- `make install` target with binary stripping
+- `make clean` target for build cleanup
+
+## Q3IDE-Relevant Build Notes
+
+For Q3IDE integration, the key build approach is:
+```bash
+# macOS ARM64 build with Vulkan (static linking, macOS default)
+make ARCH=arm64 USE_VULKAN=1 BUILD_SERVER=0
+
+# macOS does NOT support USE_RENDERER_DLOPEN
+# Renderer is always statically linked on Darwin
+```

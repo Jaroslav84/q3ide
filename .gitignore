@@ -1,0 +1,33 @@
+# Build outputs
+baseq3/*
+!baseq3/.gitkeep
+capture/target/*
+quake3e/build/*
+quake3e/output/*
+
+# Logs
+logs/
+*.log
+
+# IDE/Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# AI/Agent files
+.agents/
+.claude/
+CLAUDE.md
+AGENTS.md
+*.prompt.md
+
+# Temporary files
+*.tmp
+*.temp
+.*.swp

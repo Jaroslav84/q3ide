@@ -1,0 +1,28 @@
+# Vendored + patched: fixed sample_handler to route frames by stream pointer
+# instead of broadcasting to all handlers (causes frame mixing with multiple streams).
+# Original: https://github.com/svtlabs/screencapturekit-rs v1.5.3
+
+[package]
+name = "screencapturekit"
+version = "1.5.3"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+build = "build.rs"
+
+[lib]
+name = "screencapturekit"
+crate-type = ["lib"]
+
+[features]
+default = []
+cargo-clippy = []
+async = []
+macos_13_0 = []
+macos_14_0 = ["macos_13_0"]
+macos_14_2 = ["macos_14_0"]
+macos_14_4 = ["macos_14_2"]
+macos_15_0 = ["macos_14_4"]
+macos_15_2 = ["macos_15_0"]
+macos_26_0 = ["macos_15_2"]
+
+[dependencies]

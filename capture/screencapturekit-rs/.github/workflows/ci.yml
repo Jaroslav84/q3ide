@@ -1,0 +1,220 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Cancel in-progress runs when a new push is made to the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ==========================================================================
+  # Lint (runs once, not per-platform)
+  # ==========================================================================
+  lint:
+    runs-on: macos-latest
+    name: Lint
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-lint-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-lint-cargo-
+      - name: Run clippy
+        run: cargo clippy --all-features -- -D warnings
+      - name: Check formatting
+        run: cargo fmt --check
+
+  # ==========================================================================
+  # Build & Test (per-platform)
+  # ==========================================================================
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS 14 (Sonoma) ARM64
+            features: "async,macos_14_4"
+            assert_symbol_absent: ""
+            assert_symbol_present: ""
+          - os: macos-15
+            name: macOS 15 (Sequoia) ARM64
+            features: "async,macos_15_2"
+            assert_symbol_absent: ""
+            assert_symbol_present: ""
+          - os: macos-15-intel
+            name: macOS 15 (Sequoia) Intel
+            features: "async,macos_15_2"
+            assert_symbol_absent: ""
+            assert_symbol_present: ""
+          - os: macos-26
+            name: macOS 26 (Tahoe) ARM64
+            features: "async,macos_26_0"
+            assert_symbol_absent: ""
+            assert_symbol_present: "SCScreenshotConfiguration"
+          # Cross-version: build on macOS 26 SDK with only macOS 15 features
+          # to verify no macOS 26 symbols leak into the binary (issue #127)
+          - os: macos-26
+            name: macOS 26 (Tahoe) cross-version (macos_15_2 only)
+            features: "async,macos_15_2"
+            assert_symbol_absent: "SCScreenshotConfiguration"
+            assert_symbol_present: ""
+          # Cross-arch: verify x86_64 cross-compilation on ARM64 runner
+          - os: macos-15
+            name: macOS 15 Cross-compile (x86_64 on ARM64)
+            features: "async,macos_15_2"
+            cross_target: x86_64-apple-darwin
+            assert_symbol_absent: ""
+            assert_symbol_present: ""
+    runs-on: ${{ matrix.os }}
+    name: Build - ${{ matrix.name }}
+    needs: [lint]
+    env:
+      TARGET_FLAG: ${{ matrix.cross_target && format('--target {0}', matrix.cross_target) || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.cross_target || '' }}
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.os }}-cargo-
+      - name: Build (default features)
+        run: cargo build --verbose $TARGET_FLAG
+      - name: Build with version-specific features (${{ matrix.features }})
+        run: cargo build --verbose --features "${{ matrix.features }}" $TARGET_FLAG
+      - name: Run tests (default features)
+        if: ${{ !matrix.cross_target }}
+        run: cargo test --verbose
+      - name: Run tests with version-specific features
+        if: ${{ !matrix.cross_target }}
+        run: cargo test --verbose --features "${{ matrix.features }}"
+      - name: Verify macOS 26 symbols are absent (cross-version safety)
+        if: matrix.assert_symbol_absent != ''
+        run: ./scripts/check_symbols.sh --assert-absent "${{ matrix.assert_symbol_absent }}"
+      - name: Verify macOS 26 symbols are present
+        if: matrix.assert_symbol_present != ''
+        run: ./scripts/check_symbols.sh --assert-present "${{ matrix.assert_symbol_present }}"
+
+  # ==========================================================================
+  # Memory Leak Check (per-platform, runs parallel to build)
+  # ==========================================================================
+  leak-check:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS 14 (Sonoma) ARM64
+            features: "async,macos_14_4"
+          - os: macos-15
+            name: macOS 15 (Sequoia) ARM64
+            features: "async,macos_15_2"
+          - os: macos-15-intel
+            name: macOS 15 (Sequoia) Intel
+            features: "async,macos_15_2"
+          - os: macos-26
+            name: macOS 26 (Tahoe) ARM64
+            features: "async,macos_26_0"
+    runs-on: ${{ matrix.os }}
+    name: Leak Check - ${{ matrix.name }}
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-${{ matrix.os }}-leak-check-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.os }}-leak-check-cargo-
+      - name: Build leak check example
+        run: cargo build --example 15_memory_leak_check --features "${{ matrix.features }}"
+      - name: Run memory leak check
+        run: cargo run --example 15_memory_leak_check --features "${{ matrix.features }}"
+
+  # ==========================================================================
+  # Release (only on main, after successful build and leak-check)
+  # ==========================================================================
+  release-pr:
+    runs-on: macos-latest
+    needs: [lint, build, leak-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: release
+    concurrency:
+      group: release-plz-${{ github.ref }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache release-plz
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/release-plz
+          key: ${{ runner.os }}-release-plz
+      - name: Install release-plz
+        run: command -v release-plz || cargo install release-plz
+      - name: Create release PR
+        run: release-plz release-pr --git-token ${{ secrets.RELEASE_PLZ_TOKEN }}
+
+  release:
+    runs-on: macos-latest
+    needs: [lint, build, leak-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_PLZ_TOKEN }}
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache release-plz
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/release-plz
+          key: ${{ runner.os }}-release-plz
+      - name: Install release-plz
+        run: command -v release-plz || cargo install release-plz
+      - name: Release
+        run: release-plz release --git-token ${{ secrets.RELEASE_PLZ_TOKEN }}
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}

@@ -1,0 +1,12 @@
+[package]
+name = "test_capture"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "test_capture"
+path = "test_capture.rs"
+
+[dependencies]
+screencapturekit = { git = "https://github.com/July541/screencapturekit-rs.git" }
+env_logger = "0.11"
