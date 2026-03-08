@@ -59,21 +59,46 @@ if [ "$DO_CLEAN" -eq 1 ]; then
     echo "=== Cleaning engine build ==="
     make clean ARCH="$Q3E_ARCH"
 fi
-make ARCH="$Q3E_ARCH"
+make ARCH="$Q3E_ARCH" BUILD_SERVER=0
 
 # 3. Find the build output directory
-BUILD_DIR="$ROOT/quake3e/build/release-darwin-${Q3E_ARCH}"
+# Detect OS for build directory naming
+OS_NAME="$(uname -s)"
+case "$OS_NAME" in
+    Darwin) BUILD_OS="darwin" ;;
+    Linux)  BUILD_OS="linux"  ;;
+    *)      echo "Unsupported OS: $OS_NAME"; exit 1 ;;
+esac
+
+BUILD_DIR="$ROOT/quake3e/build/release-${BUILD_OS}-${Q3E_ARCH}"
 if [ ! -d "$BUILD_DIR" ]; then
-    BUILD_DIR="$ROOT/quake3e/build/release-darwin-aarch64"
+    # Fallback for aarch64
+    BUILD_DIR="$ROOT/quake3e/build/release-${BUILD_OS}-aarch64"
 fi
 if [ ! -d "$BUILD_DIR" ]; then
-    echo "ERROR: Build output directory not found. Check make output above."
+    echo "ERROR: Build output directory not found. Checked:"
+    echo "  - $ROOT/quake3e/build/release-${BUILD_OS}-${Q3E_ARCH}"
+    echo "  - $ROOT/quake3e/build/release-${BUILD_OS}-aarch64"
+    echo "Check make output above."
     exit 1
 fi
 
-# 4. Copy dylib next to the engine binary
-echo "=== Copying capture dylib ==="
-cp "$ROOT/capture/target/release/libq3ide_capture.dylib" "$BUILD_DIR/"
+# 4. Copy dylib/so next to the engine binary (skip if --engine-only)
+if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
+    echo "=== Copying capture library ==="
+    if [ "$BUILD_OS" = "darwin" ]; then
+        DYLIB_NAME="libq3ide_capture.dylib"
+    else
+        DYLIB_NAME="libq3ide_capture.so"
+    fi
+    DYLIB_SRC="$ROOT/capture/target/release/$DYLIB_NAME"
+    if [ -f "$DYLIB_SRC" ]; then
+        cp "$DYLIB_SRC" "$BUILD_DIR/"
+        echo "Copied $DYLIB_NAME"
+    else
+        echo "WARNING: Capture library not found at $DYLIB_SRC"
+    fi
+fi
 
 # 5. Symlink baseq3 if not already there
 if [ ! -e "$BUILD_DIR/baseq3" ]; then
@@ -118,8 +143,8 @@ echo "  In-game console (~):"
 	echo "  Usage: build.sh [--run] [--api] [--level 0] [--bots 1] [--execute 'q3ide desktop']"
 echo "========================================"
 
-# 7. Ensure Screen Recording permission
-if [ -n "$ENGINE_BIN" ] && [ -f "$ENGINE_BIN" ]; then
+# 7. Ensure Screen Recording permission (macOS only)
+if [ "$BUILD_OS" = "darwin" ] && [ -n "$ENGINE_BIN" ] && [ -f "$ENGINE_BIN" ]; then
     PERMISSION_MARKER="$ROOT/.q3ide_screen_permission_granted"
     if [ ! -f "$PERMISSION_MARKER" ]; then
         echo ""
