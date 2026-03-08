@@ -97,6 +97,32 @@ typedef struct Q3ideQ3ideFrame {
 } Q3ideQ3ideFrame;
 
 /**
+ * A single window change event (window opened or closed).
+ */
+typedef struct Q3ideQ3ideWindowChange {
+    unsigned int window_id;
+    /**
+     * Added events: heap-allocated null-terminated app name, freed by q3ide_free_change_list.
+     * Removed events: null.
+     */
+    char *app_name;
+    unsigned int width;
+    unsigned int height;
+    /**
+     * 1 = window was added, 0 = window was removed.
+     */
+    int is_added;
+} Q3ideQ3ideWindowChange;
+
+/**
+ * List of window changes since the last `q3ide_poll_window_changes` call.
+ */
+typedef struct Q3ideQ3ideWindowChangeList {
+    struct Q3ideQ3ideWindowChange *changes;
+    unsigned int count;
+} Q3ideQ3ideWindowChangeList;
+
+/**
  * Display info returned to the engine.
  */
 typedef struct Q3ideQ3ideDisplayInfo {
@@ -114,6 +140,14 @@ typedef struct Q3ideQ3ideDisplayList {
     const struct Q3ideQ3ideDisplayInfo *displays;
     unsigned int count;
 } Q3ideQ3ideDisplayList;
+
+/**
+ * CGPoint used for mouse event injection.
+ */
+typedef struct Q3ideCGPoint {
+    double x;
+    double y;
+} Q3ideCGPoint;
 
 /**
  * Initialize the capture system. Returns an opaque handle.
@@ -204,6 +238,26 @@ q3ide_ char *q3ide_list_windows_formatted(struct Q3ideQ3ideCapture *handle);
 q3ide_ void q3ide_free_string(char *s);
 
 /**
+ * Poll for window open/close events since the last call.
+ *
+ * First call always returns an empty list and establishes the baseline snapshot.
+ * Subsequent calls return diffs. Caller must free the list with `q3ide_free_change_list`.
+ *
+ * # Safety
+ * `handle` must be a valid pointer from `q3ide_init`.
+ */
+q3ide_
+struct Q3ideQ3ideWindowChangeList q3ide_poll_window_changes(struct Q3ideQ3ideCapture *handle);
+
+/**
+ * Free a change list returned by `q3ide_poll_window_changes`.
+ *
+ * # Safety
+ * `list` must have been returned by `q3ide_poll_window_changes`.
+ */
+q3ide_ void q3ide_free_change_list(struct Q3ideQ3ideWindowChangeList list);
+
+/**
  * Attach a window by title substring match.
  * Convenience for `/q3ide_attach <title>`.
  * Returns the window ID on success, 0 on failure.
@@ -249,6 +303,47 @@ q3ide_
 enum Q3ideQ3ideError q3ide_start_display_capture(struct Q3ideQ3ideCapture *handle,
                                                  unsigned int display_id,
                                                  unsigned int target_fps);
+
+extern void *CGEventCreateMouseEvent(void *source,
+                                     uint32_t mouse_type,
+                                     struct Q3ideCGPoint mouse_cursor_position,
+                                     uint32_t mouse_button);
+
+extern void *CGEventCreateKeyboardEvent(void *source, uint16_t virtual_key, uint8_t key_down);
+
+extern void CGEventPost(uint32_t tap, void *event);
+
+extern void CFRelease(void *cf);
+
+/**
+ * Inject a left mouse click at UV coordinates within a captured window.
+ *
+ * `uv_x` and `uv_y` are in [0.0, 1.0] relative to the window's content area.
+ * The window's current screen bounds are looked up via ScreenCaptureKit.
+ *
+ * # Safety
+ * `handle` must be a valid pointer from `q3ide_init`.
+ */
+q3ide_
+void q3ide_inject_click(struct Q3ideQ3ideCapture *_handle,
+                        unsigned int window_id,
+                        float uv_x,
+                        float uv_y);
+
+/**
+ * Inject a keyboard key event into a captured window.
+ *
+ * `q3key` is a Q3 keycode (from keycodes.h). `is_down` is 1 for press, 0 for release.
+ * Maps Q3 key codes to macOS CGKeyCode (ANSI layout).
+ *
+ * # Safety
+ * `handle` must be a valid pointer from `q3ide_init`.
+ */
+q3ide_
+void q3ide_inject_key(struct Q3ideQ3ideCapture *_handle,
+                      unsigned int window_id,
+                      int q3key,
+                      int is_down);
 
 /**
  * Start capturing all displays, composited vertically into a single frame.

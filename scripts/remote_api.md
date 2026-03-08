@@ -20,12 +20,52 @@ sh ./scripts/build.sh --api
 |--------|------|-------------|
 | GET | `/` | Health check + game running? |
 | GET | `/status` | PID, uptime, running bool |
-| POST | `/build` | Run build.sh, return stdout/stderr |
+| POST | `/build` | **Enqueue** a build — returns `queue_id` immediately |
+| GET | `/build_status?id=<id>` | Status of a specific build by `queue_id` |
+| GET | `/queue` | Full queue: `current`, `pending[]`, `history[]` |
+| DELETE | `/queue/<id>` | Cancel a pending (not yet started) build |
 | POST | `/run` | Launch game in background |
 | POST | `/stop` | Kill game process |
 | GET | `/logs` | Tail a log file |
 | POST | `/console` | Send RCON command, return response |
 | GET | `/ws` | **WebSocket** — live log stream + RCON |
+
+## Build Queue
+
+`POST /build` now enqueues rather than blocking. Multiple agents can submit builds simultaneously — they run one at a time, FIFO. When a new build starts, any in-progress build is killed first.
+
+```python
+# Enqueue a build (agent_id is optional label for tracking)
+r = api('POST', '/build', {
+    'args': ['--clean', '--engine-only'],
+    'agent_id': 'my-agent',   # optional tag
+    'auto_run': True,         # launch game after successful build
+})
+qid = r['queue_id']
+print(f"Queued as {qid}, position {r['position']}, at {r['queued_at_iso']}")
+
+# Poll until done
+import time
+while True:
+    s = api('GET', f'/build_status?id={qid}')
+    print(s['status'], s.get('elapsed_s'), s.get('returncode'))
+    if s['status'] in ('done', 'failed', 'cancelled'):
+        break
+    time.sleep(3)
+
+# Inspect full queue
+q = api('GET', '/queue')
+print('current:', q['current'])
+print('pending:', q['pending'])   # list of queued items with timestamps
+print('history:', q['history'])   # last 20 completed/cancelled
+
+# Cancel a pending build
+api('DELETE', f'/queue/{qid}')
+```
+
+Entry fields: `id`, `agent_id`, `args`, `status`, `returncode`, `queued_at_iso`, `started_at_iso`, `finished_at_iso`, `elapsed_s`
+
+Statuses: `queued` → `building` → `done` | `failed` | `cancelled`
 
 ## WebSocket (`/ws`) — preferred debug interface
 

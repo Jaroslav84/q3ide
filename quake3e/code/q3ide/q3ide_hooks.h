@@ -8,6 +8,8 @@
 #ifndef Q3IDE_HOOKS_H
 #define Q3IDE_HOOKS_H
 
+#include "../qcommon/q_shared.h"
+
 /* Called from CL_Init() — loads dylib, registers "q3ide" command. */
 void Q3IDE_Init(void);
 
@@ -25,6 +27,18 @@ void Q3IDE_AddPolysToScene(void);
 
 /* Called after renderer re-init (vid_restart or first init). */
 void Q3IDE_OnVidRestart(void);
+
+/* Called from CL_KeyEvent for every key press/release.
+ * Returns 1 if q3ide consumed the key (caller should return immediately). */
+qboolean Q3IDE_OnKeyEvent(int key, qboolean down);
+
+/* Returns 1 if q3ide is consuming input (Pointer or Keyboard mode).
+ * Called from CL_CreateNewCommands to suppress BUTTON_ATTACK. */
+qboolean Q3IDE_ConsumesInput(void);
+
+/* Called from CL_CreateNewCommands before BUTTON_ATTACK is cleared.
+ * Saves the raw button state so Q3IDE_Frame can still detect attack presses. */
+void Q3IDE_SaveRawButtons(int buttons);
 
 /*
  * Called from CG_R_RENDERSCENE in cl_cgame.c instead of re.RenderScene()

@@ -50,4 +50,13 @@ qboolean Q3IDE_WM_DetachById(unsigned int capture_id);
 void Q3IDE_WM_CmdAttach(void);
 void Q3IDE_WM_CmdDesktop(void);
 
+/* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_cmd.c) */
+void Q3IDE_WM_PollChanges(void);
+
+/* Called from Q3IDE_Frame with current player eye position */
+void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz);
+
+/* Update hover state for a specific window (called from interaction system) */
+void Q3IDE_WM_SetHover(int idx, float hover_t);
+
 #endif /* Q3IDE_WM_H */

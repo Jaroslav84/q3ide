@@ -2,8 +2,8 @@
  * q3ide_cmd.c — Q3IDE attach/desktop commands.
  *
  * "q3ide attach":
- *   - Terminal apps (iTerm2, Terminal) → float in air, spread side-by-side
- *   - Browser apps (Chrome, Safari, …) → placed on walls around player
+ *   Scans 12 directions to find unique walls, then distributes all windows
+ *   side-by-side (centered) on each wall. Round-robin wall assignment.
  * "q3ide desktop" — mirrors all displays on the nearest wall.
  */
 
@@ -32,44 +32,6 @@ static qboolean q3ide_match(const char *app, const char **list)
 	return qfalse;
 }
 
-/* ── Wall yaw offsets (browsers) ────────────────────────────────── */
-
-static const float q3ide_yaw_offsets[] = {0.0f, -45.0f, 45.0f, -90.0f, 90.0f, -135.0f, 135.0f, 180.0f};
-#define Q3IDE_NUM_OFFSETS 8
-
-/* ── Floating placement (terminals) ────────────────────────────────
- * Places N windows side-by-side in the air in front of the player.
- * dist   — how far forward (Quake units)
- * height — Z offset from eye
- * idx    — which window in the row (0-based)
- * total  — total windows in this row
- */
-static void q3ide_attach_floating(unsigned int id, float aspect, vec3_t eye, float yaw, int idx, int total, float dist,
-                                  float height_offset)
-{
-	float oh = Q3IDE_WIN_INCHES;
-	float ow = oh * aspect;
-	float fwd_x = cosf(yaw);
-	float fwd_y = sinf(yaw);
-	/* vertical stack: spread windows up/down in Z */
-	float z_spread = (float) (idx - (total - 1) * 0.5f) * (oh + 8.0f);
-	vec3_t pos, normal;
-
-	pos[0] = eye[0] + fwd_x * dist;
-	pos[1] = eye[1] + fwd_y * dist;
-	pos[2] = eye[2] + height_offset + z_spread;
-
-	/* normal faces back toward player */
-	normal[0] = -fwd_x;
-	normal[1] = -fwd_y;
-	normal[2] = 0.0f;
-
-	if (Q3IDE_WM_Attach(id, pos, normal, ow, oh, qtrue))
-		Com_Printf("q3ide: terminal [%d/%d] floating dist=%.0f\n", idx + 1, total, dist);
-	else
-		Com_Printf("q3ide: terminal [%d/%d] attach failed\n", idx + 1, total);
-}
-
 /* ── DetachById ─────────────────────────────────────────────────── */
 
 qboolean Q3IDE_WM_DetachById(unsigned int cid)
@@ -93,16 +55,24 @@ qboolean Q3IDE_WM_DetachById(unsigned int cid)
 
 /* ── CmdAttach ──────────────────────────────────────────────────── */
 
+/* Number of directions to scan for unique walls (every 30 degrees) */
+#define Q3IDE_SCAN_DIRS 12
+
 void Q3IDE_WM_CmdAttach(void)
 {
 	Q3ideWindowList wlist;
-	/* separate buckets for terminals and browsers */
-	unsigned int term_ids[Q3IDE_MAX_WIN], brow_ids[Q3IDE_MAX_WIN];
-	float term_asp[Q3IDE_MAX_WIN], brow_asp[Q3IDE_MAX_WIN];
-	int term_n = 0, brow_n = 0;
+	unsigned int win_ids[Q3IDE_MAX_WIN];
+	float win_asp[Q3IDE_MAX_WIN];
+	int win_n = 0;
 	int i, j, attached = 0;
-	vec3_t eye, wall_pos, wall_normal, dir;
-	float yaw, pitch;
+	vec3_t eye, dir;
+	float yaw;
+
+	/* Wall discovery state */
+	vec3_t wall_pos[Q3IDE_SCAN_DIRS], wall_norm[Q3IDE_SCAN_DIRS];
+	int wall_win[Q3IDE_SCAN_DIRS][Q3IDE_MAX_WIN]; /* window indices per wall */
+	int wall_wcnt[Q3IDE_SCAN_DIRS];
+	int n_walls = 0;
 
 	if (!q3ide_wm.cap || !q3ide_wm.cap_list_wins) {
 		Com_Printf("q3ide: not ready\n");
@@ -117,42 +87,30 @@ void Q3IDE_WM_CmdAttach(void)
 		return;
 	}
 
-	/* Bucket windows into terminals / browsers */
-	for (i = 0; i < (int) wlist.count; i++) {
+	/* Collect all terminal + browser windows */
+	for (i = 0; i < (int) wlist.count && win_n < Q3IDE_MAX_WIN; i++) {
 		const Q3ideWindowInfo *w = &wlist.windows[i];
 		qboolean dupe = qfalse;
 		if ((int) w->width < Q3IDE_MIN_WIN_W || (int) w->height < Q3IDE_MIN_WIN_H)
 			continue;
-		/* dedup by window id across both buckets */
-		for (j = 0; j < term_n; j++)
-			if (term_ids[j] == w->window_id) {
-				dupe = qtrue;
-				break;
-			}
-		for (j = 0; j < brow_n && !dupe; j++)
-			if (brow_ids[j] == w->window_id) {
+		if (!q3ide_match(w->app_name, q3ide_terminal_apps) && !q3ide_match(w->app_name, q3ide_browser_apps))
+			continue;
+		for (j = 0; j < win_n; j++)
+			if (win_ids[j] == w->window_id) {
 				dupe = qtrue;
 				break;
 			}
 		if (dupe)
 			continue;
-
-		if (q3ide_match(w->app_name, q3ide_terminal_apps) && term_n < Q3IDE_MAX_WIN) {
-			term_asp[term_n] = w->height ? (float) w->width / w->height : 16.0f / 9.0f;
-			term_ids[term_n++] = w->window_id;
-			Com_Printf("q3ide: terminal [%d] wid=%u \"%s\" %ux%u\n", term_n - 1, w->window_id, w->app_name, w->width,
-			           w->height);
-		} else if (q3ide_match(w->app_name, q3ide_browser_apps) && brow_n < Q3IDE_MAX_WIN) {
-			brow_asp[brow_n] = w->height ? (float) w->width / w->height : 16.0f / 9.0f;
-			brow_ids[brow_n++] = w->window_id;
-			Com_Printf("q3ide: browser  [%d] wid=%u \"%s\" %ux%u\n", brow_n - 1, w->window_id, w->app_name, w->width,
-			           w->height);
-		}
+		win_asp[win_n] = w->height ? (float) w->width / w->height : 16.0f / 9.0f;
+		win_ids[win_n++] = w->window_id;
+		Com_Printf("q3ide: found [%d] wid=%u \"%s\" %ux%u\n", win_n - 1, w->window_id, w->app_name, w->width,
+		           w->height);
 	}
 	if (q3ide_wm.cap_free_wlist)
 		q3ide_wm.cap_free_wlist(wlist);
 
-	if (!term_n && !brow_n) {
+	if (!win_n) {
 		Com_Printf("q3ide: no iTerm2/Terminal/browser windows found\n");
 		return;
 	}
@@ -160,38 +118,177 @@ void Q3IDE_WM_CmdAttach(void)
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
 	yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
-	pitch = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
 
-	/* Terminals — float in air, side-by-side, 300 units forward */
-	for (i = 0; i < term_n; i++) {
-		q3ide_attach_floating(term_ids[i], term_asp[i], eye, yaw, i, term_n, 300.0f, 0.0f);
-		attached++;
-	}
-
-	/* Browsers — place on walls, round-robin yaw offsets */
-	for (i = 0; i < brow_n; i++) {
-		float oh = Q3IDE_WIN_INCHES;
-		float ow = oh * brow_asp[i];
-		int t;
-		int base = i % Q3IDE_NUM_OFFSETS;
-		for (t = 0; t < Q3IDE_NUM_OFFSETS; t++) {
-			int slot = (base + t) % Q3IDE_NUM_OFFSETS;
-			float yt = yaw + q3ide_yaw_offsets[slot] * (float) M_PI / 180.0f;
-			dir[0] = cosf(pitch) * cosf(yt);
-			dir[1] = cosf(pitch) * sinf(yt);
-			dir[2] = -sinf(pitch) * 0.2f;
-			if (!Q3IDE_WM_TraceWall(eye, dir, wall_pos, wall_normal))
-				continue;
-			wall_pos[2] = eye[2];
-			if (Q3IDE_WM_Attach(brow_ids[i], wall_pos, wall_normal, ow, oh, qtrue)) {
-				attached++;
-				Com_Printf("q3ide: browser  [%d] on wall yaw+%.0f\n", i, q3ide_yaw_offsets[slot]);
+	/* Scan Q3IDE_SCAN_DIRS evenly-spaced horizontal directions for unique walls */
+	memset(wall_wcnt, 0, sizeof(wall_wcnt));
+	for (i = 0; i < Q3IDE_SCAN_DIRS; i++) {
+		vec3_t wp, wn;
+		float yt = yaw + (float) i * (2.0f * (float) M_PI / (float) Q3IDE_SCAN_DIRS);
+		qboolean dup = qfalse;
+		dir[0] = cosf(yt);
+		dir[1] = sinf(yt);
+		dir[2] = 0.0f;
+		if (!Q3IDE_WM_TraceWall(eye, dir, wp, wn))
+			continue;
+		/* Deduplicate by wall normal: skip if we already have a wall facing the same way */
+		for (j = 0; j < n_walls; j++) {
+			if (DotProduct(wn, wall_norm[j]) > 0.85f) {
+				dup = qtrue;
 				break;
 			}
 		}
+		if (dup || n_walls >= Q3IDE_SCAN_DIRS)
+			continue;
+		VectorCopy(wp, wall_pos[n_walls]);
+		VectorCopy(wn, wall_norm[n_walls]);
+		n_walls++;
 	}
 
-	Com_Printf("q3ide: attached %d windows (%d terminal, %d browser)\n", attached, term_n, brow_n);
+	if (!n_walls) {
+		Com_Printf("q3ide: no walls found\n");
+		return;
+	}
+	Com_Printf("q3ide: found %d unique wall(s)\n", n_walls);
+
+	/* Assign windows round-robin to walls */
+	memset(wall_win, 0, sizeof(wall_win));
+	for (i = 0; i < win_n; i++) {
+		int wi = i % n_walls;
+		wall_win[wi][wall_wcnt[wi]++] = i;
+	}
+
+	/* Place each wall's windows side-by-side, horizontally centered */
+	for (i = 0; i < n_walls; i++) {
+		vec3_t right;
+		float nx, ny, horiz_len, total_w, gap, x_cursor;
+		int cnt = wall_wcnt[i];
+
+		if (!cnt)
+			continue;
+
+		/* Compute right vector for this wall (same basis as q3ide_add_poly) */
+		nx = wall_norm[i][0];
+		ny = wall_norm[i][1];
+		horiz_len = sqrtf(nx * nx + ny * ny);
+		if (horiz_len > 0.01f) {
+			right[0] = -ny / horiz_len;
+			right[1] = nx / horiz_len;
+			right[2] = 0.0f;
+		} else {
+			right[0] = 1.0f;
+			right[1] = 0.0f;
+			right[2] = 0.0f;
+		}
+
+		/* Compute total span = sum of widths + gaps between */
+		gap = 16.0f;
+		total_w = 0.0f;
+		for (j = 0; j < cnt; j++) {
+			float oh = Q3IDE_WIN_INCHES;
+			total_w += oh * win_asp[wall_win[i][j]];
+		}
+		total_w += gap * (float) (cnt - 1);
+
+		/* Place windows centered on the wall hit point */
+		x_cursor = -total_w * 0.5f;
+		for (j = 0; j < cnt; j++) {
+			int wi = wall_win[i][j];
+			float oh = Q3IDE_WIN_INCHES;
+			float ow = oh * win_asp[wi];
+			float cx = x_cursor + ow * 0.5f;
+			vec3_t pos;
+			pos[0] = wall_pos[i][0] + right[0] * cx;
+			pos[1] = wall_pos[i][1] + right[1] * cx;
+			pos[2] = eye[2]; /* eye height */
+			if (Q3IDE_WM_Attach(win_ids[wi], pos, wall_norm[i], ow, oh, qtrue)) {
+				attached++;
+				Com_Printf("q3ide: win [%d] wall %d x=%.0f\n", wi, i, cx);
+			} else {
+				Com_Printf("q3ide: win [%d] attach failed\n", wi);
+			}
+			x_cursor += ow + gap;
+		}
+	}
+
+	q3ide_wm.auto_attach = qtrue; /* live-track new windows from here on */
+	Com_Printf("q3ide: attached %d/%d windows\n", attached, win_n);
+}
+
+/* ── Auto-place a newly opened window on the nearest free wall ───── */
+
+static void q3ide_auto_attach_new(unsigned int id, float aspect)
+{
+	vec3_t eye, dir, wp, wn;
+	float yaw, oh, ow;
+	int t;
+
+	oh = Q3IDE_WIN_INCHES;
+	ow = oh * aspect;
+	VectorCopy(cl.snap.ps.origin, eye);
+	eye[2] += cl.snap.ps.viewheight;
+	yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+
+	for (t = 0; t < Q3IDE_SCAN_DIRS; t++) {
+		float yt = yaw + (float) t * (2.0f * (float) M_PI / (float) Q3IDE_SCAN_DIRS);
+		dir[0] = cosf(yt);
+		dir[1] = sinf(yt);
+		dir[2] = 0.0f;
+		if (!Q3IDE_WM_TraceWall(eye, dir, wp, wn))
+			continue;
+		wp[2] = eye[2];
+		if (Q3IDE_WM_Attach(id, wp, wn, ow, oh, qtrue)) {
+			Com_Printf("q3ide: auto-attached wid=%u dir=%d\n", id, t);
+			return;
+		}
+	}
+	Com_Printf("q3ide: auto-attach failed wid=%u\n", id);
+}
+
+/* ── PollChanges — called every 2s from Q3IDE_WM_PollFrames ────────
+ * Detaches closed windows; auto-attaches new matching windows when
+ * auto_attach mode is enabled (set by "q3ide attach all").
+ */
+
+static qboolean q3ide_is_attached(unsigned int id)
+{
+	int i;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++)
+		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].capture_id == id)
+			return qtrue;
+	return qfalse;
+}
+
+void Q3IDE_WM_PollChanges(void)
+{
+	Q3ideWindowChangeList clist;
+	unsigned int i;
+
+	if (!q3ide_wm.cap_poll_changes || !q3ide_wm.cap_free_changes)
+		return;
+
+	clist = q3ide_wm.cap_poll_changes(q3ide_wm.cap);
+	if (!clist.changes || !clist.count)
+		return;
+
+	for (i = 0; i < clist.count; i++) {
+		const Q3ideWindowChange *ch = &clist.changes[i];
+		if (!ch->is_added) {
+			/* Window closed — detach silently if we had it */
+			if (q3ide_is_attached(ch->window_id))
+				Q3IDE_WM_DetachById(ch->window_id);
+		} else if (q3ide_wm.auto_attach) {
+			float aspect;
+			/* New window — auto-attach if it matches our app filter */
+			if ((int) ch->width < Q3IDE_MIN_WIN_W || (int) ch->height < Q3IDE_MIN_WIN_H)
+				continue;
+			if (!q3ide_match(ch->app_name, q3ide_terminal_apps) && !q3ide_match(ch->app_name, q3ide_browser_apps))
+				continue;
+			aspect = ch->height ? (float) ch->width / ch->height : 16.0f / 9.0f;
+			q3ide_auto_attach_new(ch->window_id, aspect);
+		}
+	}
+
+	q3ide_wm.cap_free_changes(clist);
 }
 
 /* ── CmdDesktop ─────────────────────────────────────────────────── */

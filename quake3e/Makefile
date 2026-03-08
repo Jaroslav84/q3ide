@@ -787,7 +787,8 @@ endif
 makedirs:
 	@if [ ! -d $(BUILD_DIR) ];then $(MKDIR) $(BUILD_DIR);fi
 	@if [ ! -d $(B) ];then $(MKDIR) $(B);fi
-	@if [ ! -d $(B)/client ];then $(MKDIR) $(B)/client/qvm;fi
+	@if [ ! -d $(B)/client ];then $(MKDIR) $(B)/client;fi
+	@if [ ! -d $(B)/client/qvm ];then $(MKDIR) $(B)/client/qvm;fi
 	@if [ ! -d $(B)/client/jpeg ];then $(MKDIR) $(B)/client/jpeg;fi
 ifeq ($(USE_SYSTEM_OGG),0)
 	@if [ ! -d $(B)/client/ogg ];then $(MKDIR) $(B)/client/ogg;fi
@@ -800,7 +801,8 @@ endif
 	@if [ ! -d $(B)/rend2/glsl ];then $(MKDIR) $(B)/rend2/glsl;fi
 	@if [ ! -d $(B)/rendv ];then $(MKDIR) $(B)/rendv;fi
 ifneq ($(BUILD_SERVER),0)
-	@if [ ! -d $(B)/ded ];then $(MKDIR) $(B)/ded/qvm;fi
+	@if [ ! -d $(B)/ded ];then $(MKDIR) $(B)/ded;fi
+	@if [ ! -d $(B)/ded/qvm ];then $(MKDIR) $(B)/ded/qvm;fi
 endif
 
 #############################################################################
@@ -1139,7 +1141,10 @@ Q3OBJ += \
   $(B)/client/q3ide_hooks.o \
   $(B)/client/q3ide_wm.o \
   $(B)/client/q3ide_cmd.o \
-  $(B)/client/q3ide_render.o
+  $(B)/client/q3ide_render.o \
+  $(B)/client/q3ide_interaction.o \
+  $(B)/client/q3ide_distance.o \
+  $(B)/client/q3ide_geom.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1451,6 +1456,14 @@ $(B)/client/q3ide_wm.o: $(Q3IDEDIR)/q3ide_wm.c
 $(B)/client/q3ide_cmd.o: $(Q3IDEDIR)/q3ide_cmd.c
 	$(DO_CC)
 
+$(B)/client/q3ide_interaction.o: $(Q3IDEDIR)/q3ide_interaction.c
+	$(DO_CC)
+
+$(B)/client/q3ide_distance.o: $(Q3IDEDIR)/q3ide_distance.c
+	$(DO_CC)
+
+$(B)/client/q3ide_geom.o: $(Q3IDEDIR)/q3ide_geom.c
+	$(DO_CC)
 
 $(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c
 	$(DO_CC)

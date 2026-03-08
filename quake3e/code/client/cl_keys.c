@@ -20,6 +20,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 ===========================================================================
 */
 #include "client.h"
+#ifdef USE_Q3IDE
+#include "../q3ide/q3ide_hooks.h"
+#endif
 
 /*
 
@@ -723,6 +726,10 @@ Called by the system for both key up and key down events
 */
 void CL_KeyEvent( int key, qboolean down, unsigned time )
 {
+#ifdef USE_Q3IDE
+	if ( Q3IDE_OnKeyEvent( key, down ) )
+		return; /* consumed by q3ide keyboard passthrough */
+#endif
 	if ( down )
 		CL_KeyDownEvent( key, time );
 	else

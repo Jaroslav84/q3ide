@@ -1,7 +1,6 @@
-- big task: so I have 3 monitors. I would like to run quake on 3 monitors (point of view extended to my other monitors too). This means the quake app needs to launch absolute full screen on my 3
-  monitors. My side monitors close a 30 degree angle with the middle monitor. Add as new param pls. Default value: 30 degrees. So you nee to adjust the quake 3 rendering engine according to that
-  monitor setup, according to that degree :D
-- make claude code run remotelly on my machine!
+
+
+
 - lol: https://terminal.lvlworld.com/ascii-q3a
 
 Yeah. 2,164 lines of vision is more planning than 99% of shipped products ever get. You have:

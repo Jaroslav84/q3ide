@@ -22,6 +22,9 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // cl.input.c  -- builds an intended movement command to send to the server
 
 #include "client.h"
+#ifdef USE_Q3IDE
+#include "../q3ide/q3ide_hooks.h"
+#endif
 
 static unsigned frame_msec;
 static int old_com_frameTime;
@@ -667,6 +670,17 @@ static void CL_CreateNewCommands( void ) {
 	cl.cmdNumber++;
 	cmdNum = cl.cmdNumber & CMD_MASK;
 	cl.cmds[cmdNum] = CL_CreateCmd();
+#ifdef USE_Q3IDE
+	/* Save raw buttons for Q3IDE_Frame detection.
+	 * In Pointer/Keyboard mode: suppress movement but NOT attack —
+	 * weapon fires normally; q3ide injects "give ammo" to keep ammo full. */
+	Q3IDE_SaveRawButtons( cl.cmds[cmdNum].buttons );
+	if ( Q3IDE_ConsumesInput() ) {
+		cl.cmds[cmdNum].forwardmove = 0;
+		cl.cmds[cmdNum].rightmove   = 0;
+		cl.cmds[cmdNum].upmove      = 0;
+	}
+#endif
 }
 
 

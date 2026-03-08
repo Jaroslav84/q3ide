@@ -18,6 +18,8 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
+from collections import deque
 from http.server import BaseHTTPRequestHandler
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -30,9 +32,11 @@ PID_FILE = Path("/tmp/q3ide_game.pid")
 
 def _q3_binary():
     """Return (binary_path, build_dir) or (None, None)."""
+    import sys as _sys
     arch = platform.machine()
     q3e_arch = 'arm64' if arch == 'arm64' else 'x86_64'
-    build_dir = ROOT / 'quake3e' / 'build' / f'release-darwin-{q3e_arch}'
+    os_name = 'darwin' if _sys.platform == 'darwin' else 'linux'
+    build_dir = ROOT / 'quake3e' / 'build' / f'release-{os_name}-{q3e_arch}'
     binary = build_dir / f'quake3e.{q3e_arch}'
     if binary.exists():
         return binary, build_dir
@@ -80,6 +84,16 @@ _game_start = None
 _build_proc = None
 _build_start = None
 _build_timeout = 120  # seconds; set per-build based on --clean
+
+# ── build queue ───────────────────────────────────────────────────────────────
+# Each entry: {id, agent_id, args, run_args, auto_run, queued_at,
+#              started_at, finished_at, status, returncode}
+# status: 'queued' | 'building' | 'done' | 'failed' | 'cancelled'
+_queue = deque()          # pending items (not yet started)
+_queue_history = []       # completed / cancelled items (last 20)
+_queue_lock = threading.Lock()
+_queue_event = threading.Event()  # wakes worker when something is enqueued
+_queue_current = None     # item currently being built
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -164,7 +178,7 @@ def _send_rcon(cmd):
         sock.close()
 
 
-def _do_run(args=None):
+def _do_run(args=None, agent_id=''):
     """Launch the game binary. Returns dict with ok/pid/error."""
     global _game_proc, _game_start
     if args is None:
@@ -179,7 +193,13 @@ def _do_run(args=None):
     cmd = [str(binary)] + engine_args
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     engine_log = LOG_DIR / 'engine.log'
-    log_fh = open(engine_log, 'w')
+    log_fh = open(engine_log, 'a')
+    separator = '═' * 60
+    log_fh.write(f'\n{separator}\n'
+                 f'# session  {time.strftime("%Y-%m-%dT%H:%M:%S")}'
+                 f'  agent={agent_id or "unknown"}  args={args}\n'
+                 f'{separator}\n')
+    log_fh.flush()
     print(f'[game] Launching: {" ".join(cmd)}', flush=True)
     try:
         _game_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -206,6 +226,106 @@ def _tee_output(proc, log_fh, prefix=''):
         pass
     finally:
         log_fh.close()
+
+
+def _enqueue_build(args, run_args, auto_run, agent_id=''):
+    """Add a build request to the queue. Returns the queue entry dict."""
+    entry = {
+        'id': str(uuid.uuid4())[:8],
+        'agent_id': agent_id or '',
+        'args': [str(a) for a in args],
+        'run_args': [str(a) for a in run_args],
+        'auto_run': auto_run,
+        'queued_at': time.time(),
+        'started_at': None,
+        'finished_at': None,
+        'status': 'queued',
+        'returncode': None,
+    }
+    with _queue_lock:
+        _queue.append(entry)
+    _queue_event.set()
+    return entry
+
+
+def _queue_worker():
+    """Background thread: process build queue one item at a time."""
+    global _build_proc, _build_start, _build_timeout, _queue_current
+    while True:
+        _queue_event.wait()
+        _queue_event.clear()
+        while True:
+            with _queue_lock:
+                if not _queue:
+                    break
+                entry = _queue.popleft()
+
+            # Kill any running build first
+            if _build_proc is not None and _build_proc.poll() is None:
+                print(f'[queue] Killing running build for new item {entry["id"]}', flush=True)
+                _build_proc.terminate()
+                try:
+                    _build_proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    _build_proc.kill()
+                _build_proc = None
+
+            # Mark started
+            with _queue_lock:
+                entry['status'] = 'building'
+                entry['started_at'] = time.time()
+                _queue_current = entry
+
+            is_clean = '--clean' in entry['args']
+            timeout = 300 if is_clean else 60
+            _build_timeout = timeout
+
+            cmd = ['bash', str(BUILD_SCRIPT)] + entry['args']
+            LOG_DIR.mkdir(parents=True, exist_ok=True)
+            build_log = LOG_DIR / 'build.log'
+            log_fh = open(build_log, 'a')
+            separator = '═' * 60
+            log_fh.write(f'\n{separator}\n'
+                         f'# session  {time.strftime("%Y-%m-%dT%H:%M:%S")}'
+                         f'  agent={entry["agent_id"] or "unknown"}'
+                         f'  queue_id={entry["id"]}  args={entry["args"]}\n'
+                         f'{separator}\n')
+            log_fh.flush()
+            print(f'[queue] Starting build {entry["id"]} (agent={entry["agent_id"]}): {" ".join(cmd)}', flush=True)
+
+            _build_proc = subprocess.Popen(
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(ROOT))
+            _build_start = time.time()
+            threading.Thread(target=_tee_output, args=(_build_proc, log_fh, '[build] '),
+                             daemon=True).start()
+
+            # Wait for completion (with timeout)
+            deadline = time.time() + timeout
+            while time.time() < deadline:
+                if _build_proc.poll() is not None:
+                    break
+                time.sleep(0.5)
+
+            if _build_proc.poll() is None:
+                print(f'[queue] Build {entry["id"]} TIMEOUT ({timeout}s), killing.', flush=True)
+                _build_proc.kill()
+                _build_proc.wait()
+
+            rc = _build_proc.returncode
+            with _queue_lock:
+                entry['returncode'] = rc
+                entry['finished_at'] = time.time()
+                entry['status'] = 'done' if rc == 0 else 'failed'
+                _queue_current = None
+                _queue_history.append(entry)
+                if len(_queue_history) > 20:
+                    _queue_history.pop(0)
+
+            if rc == 0 and entry['auto_run']:
+                print(f'[queue] Build {entry["id"]} OK — launching game…', flush=True)
+                _do_run(entry['run_args'], agent_id=entry['agent_id'])
+            elif rc != 0:
+                print(f'[queue] Build {entry["id"]} FAILED (rc={rc})', flush=True)
 
 
 def _tail_log(path, n=100):
@@ -364,7 +484,10 @@ def _run_ws_session(sock, log_names):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        print(f'[api] {self.command} {self.path}', flush=True)
+        try:
+            print(f'[api] {self.command} {self.path}', flush=True)
+        except BlockingIOError:
+            pass
 
     def _send(self, code, body):
         data = json.dumps(body, indent=2).encode()
@@ -404,7 +527,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/lint':
             self._handle_lint(fix=False)
         elif path == '/build_status':
-            self._handle_build_status()
+            self._handle_build_status(queue_id=qs.get('id', [None])[0])
+        elif path == '/queue':
+            self._handle_queue_list()
         elif path in ('/', '/status'):
             pid = _game_pid()
             self._send(200, {
@@ -428,6 +553,30 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._send(404, {'error': 'not found'})
 
+    def do_DELETE(self):
+        path = urlparse(self.path).path
+        # DELETE /queue/<id>  — cancel a queued (not yet started) item
+        if path.startswith('/queue/'):
+            qid = path[len('/queue/'):]
+            with _queue_lock:
+                for i, entry in enumerate(_queue):
+                    if entry['id'] == qid:
+                        entry['status'] = 'cancelled'
+                        entry['finished_at'] = time.time()
+                        del _queue[i]
+                        _queue_history.append(entry)
+                        if len(_queue_history) > 20:
+                            _queue_history.pop(0)
+                        self._send(200, {'ok': True, 'cancelled': qid})
+                        return
+                # Check if it's the running build
+                if _queue_current and _queue_current['id'] == qid:
+                    self._send(409, {'error': 'build already started — use POST /stop to kill game'})
+                    return
+            self._send(404, {'error': f'queue_id {qid!r} not found or already done'})
+        else:
+            self._send(404, {'error': 'not found'})
+
     def do_POST(self):
         path = urlparse(self.path).path
         body = self._read_body()
@@ -447,63 +596,64 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {'error': 'not found'})
 
     def _handle_build(self, body):
-        global _build_proc, _build_start, _build_timeout
-        # Kill any in-progress build
-        if _build_proc is not None and _build_proc.poll() is None:
-            _build_proc.terminate()
-            try:
-                _build_proc.wait(timeout=3)
-            except subprocess.TimeoutExpired:
-                _build_proc.kill()
         args = body.get('args', [])
         run_args = body.get('run_args', ['--level', '0', '--execute', 'q3ide attach all'])
         auto_run = body.get('auto_run', True)
-        is_clean = '--clean' in [str(a) for a in args]
-        _build_timeout = 120 if is_clean else 20
-        cmd = ['sh', str(BUILD_SCRIPT)] + [str(a) for a in args]
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        build_log = LOG_DIR / 'build.log'
-        log_fh = open(build_log, 'w')
-        _build_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                                       cwd=str(ROOT))
-        _build_start = time.time()
-        threading.Thread(target=_tee_output, args=(_build_proc, log_fh, '[build] '),
-                         daemon=True).start()
-        def _watchdog(proc, timeout, should_run, run_args_):
-            start = time.time()
-            while time.time() - start < timeout:
-                if proc.poll() is not None:
-                    break
-                time.sleep(0.5)
-            if proc.poll() is None:
-                print(f'[build] TIMEOUT ({timeout}s), killing build.', flush=True)
-                proc.kill()
-                return
-            if proc.returncode == 0 and should_run:
-                print('[build] Build OK — launching game…', flush=True)
-                _do_run(run_args_)
-            elif proc.returncode != 0:
-                print(f'[build] Build FAILED (rc={proc.returncode})', flush=True)
-        threading.Thread(target=_watchdog,
-                         args=(_build_proc, _build_timeout, auto_run, run_args),
-                         daemon=True).start()
-        self._send(200, {'ok': True, 'building': True, 'auto_run': auto_run,
-                         'timeout_s': _build_timeout, 'log': 'build'})
+        agent_id = body.get('agent_id', '')
+        entry = _enqueue_build(args, run_args, auto_run, agent_id)
+        with _queue_lock:
+            position = list(_queue).index(entry) + 1 if entry in _queue else 0
+        self._send(200, {
+            'ok': True,
+            'queue_id': entry['id'],
+            'agent_id': entry['agent_id'],
+            'position': position,
+            'queued_at': entry['queued_at'],
+            'queued_at_iso': time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(entry['queued_at'])),
+            'log': 'build',
+        })
 
-    def _handle_build_status(self):
-        global _build_proc
-        if _build_proc is None:
-            self._send(200, {'building': False, 'returncode': None})
+    def _handle_build_status(self, queue_id=None):
+        with _queue_lock:
+            current = _queue_current
+            pending = list(_queue)
+            history = list(_queue_history)
+        # Look up specific id
+        if queue_id:
+            entry = None
+            if current and current['id'] == queue_id:
+                entry = current
+            else:
+                for e in pending + history:
+                    if e['id'] == queue_id:
+                        entry = e
+                        break
+            if entry is None:
+                self._send(404, {'error': f'queue_id {queue_id!r} not found'})
+                return
+            self._send(200, self._fmt_entry(entry))
             return
-        rc = _build_proc.poll()
-        if rc is None:
-            self._send(200, {'building': True, 'elapsed_s': int(time.time() - (_build_start or time.time()))})
-        else:
-            self._send(200, {'building': False, 'ok': rc == 0, 'returncode': rc})
+        self._send(200, {
+            'current': self._fmt_entry(current) if current else None,
+            'queue_depth': len(pending),
+        })
+
+    @staticmethod
+    def _fmt_entry(e):
+        now = time.time()
+        out = {k: e[k] for k in ('id', 'agent_id', 'args', 'status', 'returncode')}
+        out['queued_at_iso'] = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(e['queued_at']))
+        if e['started_at']:
+            out['started_at_iso'] = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(e['started_at']))
+            out['elapsed_s'] = int((e['finished_at'] or now) - e['started_at'])
+        if e['finished_at']:
+            out['finished_at_iso'] = time.strftime('%Y-%m-%dT%H:%M:%S', time.localtime(e['finished_at']))
+        return out
 
     def _handle_run(self, body):
         args = body.get('args', ['--level', '0', '--execute', 'q3ide attach all'])
-        result = _do_run(args)
+        agent_id = body.get('agent_id', '')
+        result = _do_run(args, agent_id=agent_id)
         if result.get('ok'):
             self._send(200, result)
         else:
@@ -558,7 +708,10 @@ class Handler(BaseHTTPRequestHandler):
             )
             output = result.stdout + result.stderr
             ok = result.returncode == 0
-            print(output, flush=True)
+            try:
+                print(output, flush=True)
+            except BlockingIOError:
+                pass
             self._send(200, {'ok': ok, 'fixed': fix, 'returncode': result.returncode, 'output': output})
         except FileNotFoundError:
             self._send(503, {'error': 'lint.sh not found'})
@@ -566,6 +719,17 @@ class Handler(BaseHTTPRequestHandler):
             self._send(504, {'error': 'lint timeout'})
         except Exception as e:
             self._send(500, {'error': str(e)})
+
+    def _handle_queue_list(self):
+        with _queue_lock:
+            current = _queue_current
+            pending = list(_queue)
+            history = list(_queue_history)
+        self._send(200, {
+            'current': self._fmt_entry(current) if current else None,
+            'pending': [self._fmt_entry(e) for e in pending],
+            'history': [self._fmt_entry(e) for e in reversed(history)],
+        })
 
     def _handle_console(self, body):
         cmd = body.get('cmd', '').strip()
@@ -586,6 +750,8 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    # Start build queue worker
+    threading.Thread(target=_queue_worker, daemon=True, name='build-queue').start()
     server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
     print(f'Q3IDE Remote API  http://0.0.0.0:{PORT}', flush=True)
     print(f'  WebSocket:  ws://{CLIENT_HOST}:{PORT}/ws?logs=engine,multimon,capture', flush=True)

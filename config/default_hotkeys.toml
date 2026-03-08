@@ -1,0 +1,36 @@
+# Q3IDE Default Hotkeys
+# Copied to .q3ide/hotkeys.toml on first run
+
+[modes]
+pointer_enter = "LEFTMOUSE"     # Click on hovered window
+keyboard_enter = "ENTER"        # Enter Keyboard Passthrough
+mode_exit = "ESCAPE"            # Return to FPS Mode
+
+[navigation]
+grapple = "x"                   # Grapple Hook (Batch 5)
+minimap = "m"                   # Minimap Ornament (Batch 5)
+home_view = "h"                 # Home View of all Spaces (Batch 7)
+
+[spaces]
+space_1 = "SHIFT+1"             # Teleport to Space 1 (ASK)
+space_2 = "SHIFT+2"             # Space 2 (PLAN)
+space_3 = "SHIFT+3"             # Space 3 (CODE)
+space_4 = "SHIFT+4"             # Space 4 (BUILD)
+space_5 = "SHIFT+5"             # Space 5 (TEST)
+space_6 = "SHIFT+6"             # Space 6 (RUN)
+space_7 = "SHIFT+7"             # Space 7 (DEBUG)
+space_8 = "SHIFT+8"             # Space 8 (GARAGE)
+
+[capture]
+screenshot = "["                # Screenshot (Batch 8)
+record = "]"                    # Video record toggle (Batch 8)
+
+[ui]
+theater_mode = "t"              # Theater Mode (Batch 6)
+office_mode = "l"               # Office Mode (Batch 6)
+uml_view = "u"                  # UML Navigator (Batch 11)
+file_browser = "f"              # File Browser (Batch 5)
+quick_open = "o"                # Quick Open (Batch 5)
+virtual_keyboard = "k"          # Virtual Keyboard (Batch 8)
+vibrancy = "SHIFT+t"            # Vibrancy toggle (Batch 9)
+focus_mode = "."                # quakeOS native render (Batch 15)

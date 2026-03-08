@@ -57,6 +57,11 @@ extern cvar_t *in_nograb;
 void IN_Init( void );
 void IN_Shutdown( void );
 
+#ifdef USE_Q3IDE
+/* Restore all displays to macOS ICC color calibration (called on focus lost) */
+void GLW_RestoreGamma( void );
+#endif
+
 // signals.c
 void InitSig( void );
 

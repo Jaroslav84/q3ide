@@ -8,6 +8,7 @@
 
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
+#include "../../../q3ide_design.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <dlfcn.h>
@@ -50,6 +51,10 @@ static qboolean q3ide_load_dylib(void)
 	SYM(cap_list_disp, "q3ide_list_displays");
 	SYM(cap_free_dlist, "q3ide_free_display_list");
 	SYM(cap_start_disp, "q3ide_start_display_capture");
+	SYM(cap_inject_click, "q3ide_inject_click");        /* optional */
+	SYM(cap_inject_key, "q3ide_inject_key");            /* optional */
+	SYM(cap_poll_changes, "q3ide_poll_window_changes"); /* optional */
+	SYM(cap_free_changes, "q3ide_free_change_list");    /* optional */
 #undef SYM
 
 	if (!q3ide_wm.cap_init || !q3ide_wm.cap_shutdown || !q3ide_wm.cap_get_frame) {
@@ -119,53 +124,14 @@ static void q3ide_upload_frame(q3ide_win_t *win, const Q3ideFrame *frame)
 	}
 }
 
-static void q3ide_add_poly(q3ide_win_t *win)
-{
-	polyVert_t verts[4];
-	vec3_t right, up;
-	float hw = win->world_w * 0.5f, hh = win->world_h * 0.5f;
-	int i, face;
+/* Change detection — implemented in q3ide_cmd.c */
+extern void Q3IDE_WM_PollChanges(void);
 
-	if (!win->shader || !re.AddPolyToScene)
-		return;
-
-	/* Windows are always upright: project normal onto XY plane so up = world-Z.
-	 * For floor/ceiling normals the window still faces a sensible direction. */
-	{
-		float nx = win->normal[0], ny = win->normal[1];
-		float horiz_len = sqrtf(nx * nx + ny * ny);
-		if (horiz_len > 0.01f) {
-			right[0] = -ny / horiz_len;
-			right[1] = nx / horiz_len;
-			right[2] = 0.0f;
-		} else {
-			right[0] = 1.0f;
-			right[1] = 0.0f;
-			right[2] = 0.0f;
-		}
-		up[0] = 0.0f;
-		up[1] = 0.0f;
-		up[2] = 1.0f;
-	}
-
-	for (face = 0; face < 2; face++) {
-		float sign = face ? -1.0f : 1.0f;
-		for (i = 0; i < 4; i++) {
-			float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
-			float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
-			verts[i].xyz[0] = win->origin[0] + sign * right[0] * sx * hw + up[0] * sy * hh;
-			verts[i].xyz[1] = win->origin[1] + sign * right[1] * sx * hw + up[1] * sy * hh;
-			verts[i].xyz[2] = win->origin[2] + sign * right[2] * sx * hw + up[2] * sy * hh;
-			verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
-			verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
-			verts[i].modulate.rgba[0] = 255;
-			verts[i].modulate.rgba[1] = 255;
-			verts[i].modulate.rgba[2] = 255;
-			verts[i].modulate.rgba[3] = 255;
-		}
-		re.AddPolyToScene(win->shader, 4, verts, 1);
-	}
-}
+/* Geometry helpers — implemented in q3ide_geom.c */
+extern void q3ide_add_depth_quad(q3ide_win_t *win);
+extern void q3ide_add_poly(q3ide_win_t *win);
+extern void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader);
+extern int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir);
 
 qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start)
 {
@@ -212,57 +178,6 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	return qtrue;
 }
 
-int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)
-{
-	int i, best = -1;
-	float best_t = Q3IDE_WALL_DIST;
-
-	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-		q3ide_win_t *win = &q3ide_wm.wins[i];
-		vec3_t right, up, diff, hit;
-		float denom, t, hw, hh, lx, ly;
-
-		if (!win->active || !win->shader)
-			continue;
-
-		denom = DotProduct(dir, win->normal);
-		if (fabsf(denom) < 0.001f)
-			continue;
-
-		VectorSubtract(win->origin, start, diff);
-		t = DotProduct(diff, win->normal) / denom;
-		if (t < 0 || t >= best_t)
-			continue;
-
-		hit[0] = start[0] + dir[0] * t;
-		hit[1] = start[1] + dir[1] * t;
-		hit[2] = start[2] + dir[2] * t;
-
-		if (fabsf(win->normal[2]) > 0.99f) {
-			vec3_t fwd = {1, 0, 0};
-			CrossProduct(win->normal, fwd, right);
-		} else {
-			vec3_t wup = {0, 0, 1};
-			CrossProduct(win->normal, wup, right);
-		}
-		VectorNormalize(right);
-		CrossProduct(right, win->normal, up);
-		VectorNormalize(up);
-
-		VectorSubtract(hit, win->origin, diff);
-		lx = DotProduct(diff, right);
-		ly = DotProduct(diff, up);
-		hw = win->world_w * 0.5f;
-		hh = win->world_h * 0.5f;
-
-		if (fabsf(lx) <= hw && fabsf(ly) <= hh) {
-			best_t = t;
-			best = i;
-		}
-	}
-	return best;
-}
-
 void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal)
 {
 	if (idx < 0 || idx >= Q3IDE_MAX_WIN)
@@ -305,8 +220,16 @@ void Q3IDE_WM_Shutdown(void)
 void Q3IDE_WM_PollFrames(void)
 {
 	int i;
+	unsigned long long now_ms;
 	if (!q3ide_wm.cap || !q3ide_wm.cap_get_frame)
 		return;
+	now_ms = Sys_Milliseconds();
+
+	/* Poll for new/closed windows every 2 seconds */
+	if (now_ms - q3ide_wm.last_scan_ms >= 2000) {
+		Q3IDE_WM_PollChanges();
+		q3ide_wm.last_scan_ms = now_ms;
+	}
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
 		Q3ideFrame frame;
@@ -320,6 +243,20 @@ void Q3IDE_WM_PollFrames(void)
 				Com_Printf("q3ide: MISMATCH [%d] want=%u got=%u\n", i, win->capture_id, frame.source_wid);
 			continue;
 		}
+		/* Batch 1: Update status and timestamps */
+		win->last_frame_ms = now_ms;
+		if (win->first_frame_ms == 0)
+			win->first_frame_ms = now_ms;
+		win->status = Q3IDE_WIN_STATUS_ACTIVE;
+
+		/* Batch 1: Skip frame based on target FPS */
+		if (win->fps_target > 0 && win->fps_target < Q3IDE_FPS_FULL) {
+			int skip_ratio = (Q3IDE_FPS_FULL / win->fps_target) - 1;
+			if (win->skip_counter++ < skip_ratio)
+				continue;
+			win->skip_counter = 0;
+		}
+
 		if (win->tex_w > 0 && ((int) frame.width != win->tex_w || (int) frame.height != win->tex_h)) {
 			win->world_h = win->world_w * ((float) frame.height / (float) frame.width);
 			Com_Printf("q3ide: win %u resized to %dx%d (world %.0fx%.0f)\n", win->capture_id, (int) frame.width,
@@ -337,14 +274,54 @@ void Q3IDE_WM_InvalidateShaders(void)
 		q3ide_wm.wins[i].shader = 0;
 		q3ide_wm.wins[i].frames = 0;
 	}
+	q3ide_wm.border_shader = 0;
+	q3ide_wm.portal_shader = 0;
 }
 
 void Q3IDE_WM_AddPolys(void)
 {
-	int i;
+	int i, j, n = 0;
+	int order[Q3IDE_MAX_WIN];
+
+	/* Lazy-register shaders */
+	if (!q3ide_wm.border_shader && re.RegisterShader)
+		q3ide_wm.border_shader = re.RegisterShader("*white");
+	if (!q3ide_wm.portal_shader && re.RegisterShader) {
+		q3ide_wm.portal_shader = re.RegisterShader("models/mapobjects/teleporter/energy");
+		Com_Printf("q3ide: portal_shader=%d\n", q3ide_wm.portal_shader);
+	}
+
+	/* Collect active textured windows */
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].shader)
-			q3ide_add_poly(&q3ide_wm.wins[i]);
+			order[n++] = i;
+
+	/* Insertion sort back-to-front by player_dist (farthest first = painter's algorithm) */
+	for (i = 1; i < n; i++) {
+		int tmp = order[i];
+		j = i - 1;
+		while (j >= 0 && q3ide_wm.wins[order[j]].player_dist < q3ide_wm.wins[tmp].player_dist) {
+			order[j + 1] = order[j];
+			j--;
+		}
+		order[j + 1] = tmp;
+	}
+
+	/* Portal frame on wins[0] (first attached = first room mirror) —
+	 * rendered before content so the additive energy glow bleeds out
+	 * around the window edges like a teleporter surround (no gate). */
+	if (q3ide_wm.wins[0].active && q3ide_wm.wins[0].shader && q3ide_wm.portal_shader)
+		q3ide_add_portal_frame(&q3ide_wm.wins[0], q3ide_wm.portal_shader);
+
+	/* Pass 1: depth prepass — all windows share *white shader (low shader index),
+	 * so Q3 batches them before any *scratch shaders. Writes correct depth values
+	 * so near windows occlude far windows regardless of Q3's internal poly sort. */
+	for (i = 0; i < n; i++)
+		q3ide_add_depth_quad(&q3ide_wm.wins[order[i]]);
+
+	/* Pass 2: texture render — depth buffer handles occlusion. */
+	for (i = 0; i < n; i++)
+		q3ide_add_poly(&q3ide_wm.wins[order[i]]);
 }
 
 void Q3IDE_WM_CmdList(void)
@@ -374,6 +351,7 @@ void Q3IDE_WM_CmdDetachAll(void)
 	}
 	q3ide_wm.num_active = 0;
 	q3ide_wm.slot_mask = 0;
+	q3ide_wm.auto_attach = qfalse;
 	if (n)
 		Com_Printf("q3ide: detached %d window(s)\n", n);
 }
@@ -381,12 +359,13 @@ void Q3IDE_WM_CmdDetachAll(void)
 void Q3IDE_WM_CmdStatus(void)
 {
 	int i;
+	const char *status_str[] = {"INACTIVE", "ACTIVE", "IDLE", "ERROR"};
 	Com_Printf("q3ide: %d active  dylib=%s\n", q3ide_wm.num_active, q3ide_wm.cap ? "ok" : "not loaded");
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active)
 			continue;
-		Com_Printf("  [%d] wid=%u slot=%d shader=%d %dx%d frames=%llu\n", i, w->capture_id, w->scratch_slot, w->shader,
-		           w->tex_w, w->tex_h, w->frames);
+		Com_Printf("  [%d] wid=%u slot=%d status=%s dist=%.0f fps=%d frames=%llu\n", i, w->capture_id, w->scratch_slot,
+		           status_str[w->status], w->player_dist, w->fps_target, w->frames);
 	}
 }

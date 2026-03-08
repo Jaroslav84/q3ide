@@ -72,7 +72,7 @@ When implementing a batch, **delegate work to the right agent based on which fil
 
 At major milestones, run a **full performance measuring session** — FPS benchmarks, frame time histograms, GPU/CPU usage, texture upload bandwidth, **VRAM usage** (texture memory per Window, total allocation). Record results in `.q3ide/perf_history.json` to track FPS degradation and memory growth over time. Target resolution: 1080p baseline, scalable up. Performance checkpoints occur after:
 
-- **Batch 3** (IOSurface Zero-Copy) — baseline GPU path performance
+- **Batch 3** (Live Window Management) — window lifecycle stability baseline
 - **Batch 7** (Spaces & Navigation) — multi-Space overhead measurement
 - **Batch 11** (UML Navigator) — 3D overlay rendering impact
 - **Batch 14** (Multiplayer) — network + rendering combined load
@@ -148,7 +148,7 @@ The Window data model, multiple simultaneous captures, basic lifecycle managemen
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
 | 1.1 | WindowEntity data structure | ⬜ | Implement the full metadata model (ID, capture source, position, status, etc.) |
-| 1.2 | Multiple window slots (no hard limit) | ⬜ | Multiple SCStreams, each with its own texture, tracked by WindowEntity. Adaptive budget manages performance. |
+| 1.2 | Multiple window slots (up to 16) | ⬜ | Multiple SCStreams, each with its own texture, tracked by WindowEntity. Hard cap of 16 (`Q3IDE_MAX_WIN`) — sufficient for any real workspace. Adaptive budget manages performance. |
 | 1.3 | Anchored Window placement | ⬜ | Place Windows on arbitrary walls via crosshair aim + command |
 | 1.4 | Window close / detach | ⬜ | Stop capture, remove texture, destroy WindowEntity |
 | 1.5 | Window status tracking | ⬜ | Active, Idle, Error states reflected in WindowEntity |
@@ -173,45 +173,47 @@ Pointer Mode, Keyboard Passthrough, the core work/play boundary.
 | 2.6 | Keyboard Passthrough | ⬜ | Enter activates, all keys route to captured app |
 | 2.7 | Escape — Digital Crown | ⬜ | Always exits any mode back to FPS |
 | 2.8 | Left-click dual purpose | ⬜ | Fire weapon in FPS Mode, click in app in Pointer Mode |
-| 2.9 | Weapon cosmetic fire in Pointer Mode | ⬜ | Weapon fires visually (animation, sound, projectile) but no ammo/damage |
+| 2.9 | Weapon cosmetic fire in Pointer Mode | ⬜ | Weapon fires normally (animation, sound, projectile) but ammo never goes down — `give ammo` injected after every shot. Instant reload: firing through a Window triggers immediate `give ammo` so the weapon never pauses to reload. BUTTON_ATTACK is NOT suppressed; damage to bots/players is acceptable collateral. |
 
 **🧪 TEST CHECKPOINT 2:** Aim at a terminal, dwell → hover glow appears. Click → clicks in terminal. Enter → type commands in terminal. Escape → back to fragging. Edge zone exit works. Weapon fires cosmetically through the Window. No accidental clicks during combat.
 
 ---
 
-### BATCH 3 — IOSurface Zero-Copy Optimization
+### BATCH 3 — Live Window Management
 
-Performance first. Eliminate the CPU memcpy bottleneck before stacking more features.
+The world stays in sync with macOS automatically. No manual re-attach.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 3.1 | IOSurface → OpenGL via `CGLTexImageIOSurface2D` | ⬜ | GPU→GPU texture path for OpenGL renderer, skip ring buffer CPU copy |
-| 3.2 | IOSurface → Vulkan via `VK_EXT_metal_objects` | ⬜ | GPU→GPU texture path for Vulkan renderer via MoltenVK |
-| 3.3 | Fallback to ring buffer if zero-copy fails | ⬜ | Graceful degradation on unsupported hardware |
-| 3.4 | Dirty frame detection | ⬜ | Skip texture upload when captured window content hasn't changed |
-| 3.5 | Performance Widget | ⬜ | FPS, texture uploads/sec, capture bandwidth, VRAM, budget status |
+| 3.1 | New window detection | ✅ | `q3ide_poll_window_changes` diffs SCK snapshot every 2s; new terminal/browser windows auto-attach to nearest wall |
+| 3.2 | Closed window detection | ✅ | Removed windows auto-detach; quad disappears within 2s |
+| 3.3 | Auto-attach mode flag | ✅ | `auto_attach` enabled by `q3ide attach all`, cleared by `q3ide detach` |
+| 3.4 | Window title change tracking | ⬜ | Re-label quad when captured window title changes (tab rename, shell cwd) |
+| 3.5 | Minimized / hidden state | ⬜ | Detect when a window is minimized or hidden; fade quad to 30% opacity; restore on un-minimize |
+| 3.6 | Dirty frame detection | ⬜ | Skip texture upload when captured window content is identical to last frame (compare CMSampleBuffer timestamps) |
+| 3.7 | Status HUD | ⬜ | Small overlay quad showing live window count, capture health, idle count |
 
-**🧪 TEST CHECKPOINT 3:** Texture uploads use zero-copy path. No CPU memcpy in the hot path. Performance Widget confirms bandwidth reduction. Idle terminals show 0 uploads/sec. Fallback works if zero-copy disabled.
-**📊 PERFORMANCE CHECKPOINT:** Baseline GPU path benchmarks. Record FPS, frame times, GPU/CPU usage, texture bandwidth to `.q3ide/perf_history.json`.
+**🧪 TEST CHECKPOINT 3:** Open a terminal → appears on wall within 2s. Close it → disappears within 2s. Minimize it → fades. Idle terminal → 0 texture uploads. Status HUD is accurate.
+**📊 PERFORMANCE CHECKPOINT:** Baseline with dirty-frame detection active. Record idle CPU%, texture upload rate, VRAM to `.q3ide/perf_history.json`.
 
 ---
 
-### BATCH 4 — Window Management
+### BATCH 4 — Window Placement & Layout
 
-Move, resize, lock, snap, persist.
+Precise placement, persistence, and navigation.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 4.1 | Floating Window style | ⬜ | Window Bar, free-floating in Space |
-| 4.2 | Long press → drag | ⬜ | Hold click ~300ms on Window enters drag mode |
-| 4.3 | Cmd+Scroll → resize | ⬜ | Resize focused Window, preserve aspect ratio |
-| 4.4 | Lock / Pin | ⬜ | Lock icon, prevents accidental move |
-| 4.5 | Snap alignment | ⬜ | Windows snap edge-to-edge during drag |
-| 4.6 | Wall snap (Anchored ↔ Floating) | ⬜ | Drag near wall = snap to Anchored. Drag away = Floating |
-| 4.7 | Layout persistence | ⬜ | Save to `.q3ide/layout.json` (project-level), restore on restart |
-| 4.8 | Tab cycling (global) | ⬜ | Tab / Shift+Tab cycles Focus across all Windows |
+| 4.1 | Long press → drag | ⬜ | Hold click ~300ms on Window enters drag mode; move by aiming |
+| 4.2 | Wall snap | ⬜ | While dragging: aim at wall → window snaps flush to surface |
+| 4.3 | Float snap | ⬜ | Aim away from wall → window floats at fixed depth from player |
+| 4.4 | Scroll → resize | ⬜ | Mouse wheel while focused resizes Window, preserves aspect ratio |
+| 4.5 | Lock / Pin | ⬜ | Toggle lock on focused window — prevents accidental move/resize |
+| 4.6 | Edge-to-edge snap | ⬜ | Windows snap edge-to-edge when dragged near a sibling |
+| 4.7 | Layout persistence | ⬜ | Save window positions/sizes to `config/layout.json`; restore on restart |
+| 4.8 | Tab cycling | ⬜ | Tab / Shift+Tab moves Focus across all active Windows |
 
-**🧪 TEST CHECKPOINT 4:** Windows can be dragged, resized, locked, snapped. Layout survives restart. Tab cycles through all windows. Floating and Anchored styles both work.
+**🧪 TEST CHECKPOINT 4:** Drag a window to a new wall — it snaps and sticks. Resize it. Lock it — drag does nothing. Layout saved and restored after game restart. Tab cycles focus.
 
 ---
 
@@ -514,11 +516,11 @@ Full Q3IDE compiled to WebAssembly via Emscripten. Play in the browser.
 
 | Batch | Name | Features | Status |
 |-------|------|----------|--------|
-| 0 | Foundation | 7 | 🔧 In Progress |
-| 1 | Window Entity & Multiple Windows | 7 | ⬜ Next |
-| 2 | Interaction Model | 9 | ⬜ |
-| 3 | **IOSurface Zero-Copy** | **5** | ⬜ |
-| 4 | Window Management | 8 | ⬜ |
+| 0 | Foundation | 7 | ✅ Done |
+| 1 | Window Entity & Multiple Windows | 7 | ✅ Done |
+| 2 | Interaction Model | 9 | ✅ Done |
+| 3 | **Live Window Management** | **7** | 🔧 In Progress |
+| 4 | Window Placement & Layout | 8 | ⬜ |
 | 5 | Grapple Hook & Spatial Tools | 7 | ⬜ |
 | 6 | Theater, Office & Focus | 5 | ⬜ |
 | 7 | Spaces & Navigation | 7 | ⬜ |

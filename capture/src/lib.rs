@@ -13,7 +13,7 @@ mod screencapturekit;
 mod window;
 
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_int, c_uint};
+use std::os::raw::{c_char, c_float, c_int, c_uint};
 use std::ptr;
 
 use crate::backend::CaptureBackend;
@@ -22,6 +22,8 @@ use crate::screencapturekit::SCKBackend;
 /// Opaque capture context handle passed across FFI.
 pub struct Q3ideCapture {
     backend: Box<dyn CaptureBackend>,
+    /// Window snapshot for change detection. None = not yet initialized (first poll call sets baseline).
+    known_windows: std::sync::Mutex<Option<HashMap<u32, backend::WindowInfo>>>,
 }
 
 /// Frame data returned to the engine via C-ABI.
@@ -141,6 +143,7 @@ pub extern "C" fn q3ide_init() -> *mut Q3ideCapture {
 
     let ctx = Box::new(Q3ideCapture {
         backend: Box::new(backend),
+        known_windows: std::sync::Mutex::new(None),
     });
 
     Box::into_raw(ctx)
@@ -378,6 +381,127 @@ pub unsafe extern "C" fn q3ide_free_string(s: *mut c_char) {
     }
 }
 
+/// A single window change event (window opened or closed).
+#[repr(C)]
+pub struct Q3ideWindowChange {
+    pub window_id: c_uint,
+    /// Added events: heap-allocated null-terminated app name, freed by q3ide_free_change_list.
+    /// Removed events: null.
+    pub app_name: *mut c_char,
+    pub width: c_uint,
+    pub height: c_uint,
+    /// 1 = window was added, 0 = window was removed.
+    pub is_added: c_int,
+}
+
+/// List of window changes since the last `q3ide_poll_window_changes` call.
+#[repr(C)]
+pub struct Q3ideWindowChangeList {
+    pub changes: *mut Q3ideWindowChange,
+    pub count: c_uint,
+}
+
+/// Poll for window open/close events since the last call.
+///
+/// First call always returns an empty list and establishes the baseline snapshot.
+/// Subsequent calls return diffs. Caller must free the list with `q3ide_free_change_list`.
+///
+/// # Safety
+/// `handle` must be a valid pointer from `q3ide_init`.
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_poll_window_changes(
+    handle: *mut Q3ideCapture,
+) -> Q3ideWindowChangeList {
+    let empty = Q3ideWindowChangeList { changes: ptr::null_mut(), count: 0 };
+    if handle.is_null() {
+        return empty;
+    }
+    let ctx = &mut *handle;
+
+    let current = match ctx.backend.list_windows() {
+        Ok(w) => w,
+        Err(e) => {
+            log::warn!("q3ide_poll_window_changes: list_windows failed: {e}");
+            return empty;
+        }
+    };
+
+    let mut known_lock = ctx.known_windows.lock().unwrap();
+
+    // First call: establish baseline, return no changes.
+    if known_lock.is_none() {
+        let map: HashMap<u32, backend::WindowInfo> =
+            current.into_iter().map(|w| (w.window_id, w)).collect();
+        *known_lock = Some(map);
+        return empty;
+    }
+
+    let known = known_lock.as_ref().unwrap();
+    let mut changes: Vec<Q3ideWindowChange> = Vec::new();
+
+    // Removed: in known but not in current.
+    let current_ids: std::collections::HashSet<u32> =
+        current.iter().map(|w| w.window_id).collect();
+    for id in known.keys() {
+        if !current_ids.contains(id) {
+            changes.push(Q3ideWindowChange {
+                window_id: *id,
+                app_name: ptr::null_mut(),
+                width: 0,
+                height: 0,
+                is_added: 0,
+            });
+        }
+    }
+
+    // Added: in current but not in known.
+    for w in &current {
+        if !known.contains_key(&w.window_id) {
+            let app_name = CString::new(w.app_name.as_str()).unwrap_or_default().into_raw();
+            changes.push(Q3ideWindowChange {
+                window_id: w.window_id,
+                app_name,
+                width: w.width,
+                height: w.height,
+                is_added: 1,
+            });
+        }
+    }
+
+    // Update snapshot to current.
+    let new_known: HashMap<u32, backend::WindowInfo> =
+        current.into_iter().map(|w| (w.window_id, w)).collect();
+    *known_lock = Some(new_known);
+
+    if changes.is_empty() {
+        return empty;
+    }
+
+    let count = changes.len() as c_uint;
+    let ptr = changes.as_mut_ptr();
+    std::mem::forget(changes);
+    Q3ideWindowChangeList { changes: ptr, count }
+}
+
+/// Free a change list returned by `q3ide_poll_window_changes`.
+///
+/// # Safety
+/// `list` must have been returned by `q3ide_poll_window_changes`.
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_free_change_list(list: Q3ideWindowChangeList) {
+    if list.changes.is_null() || list.count == 0 {
+        return;
+    }
+    let changes =
+        Vec::from_raw_parts(list.changes, list.count as usize, list.count as usize);
+    for ch in &changes {
+        if !ch.app_name.is_null() {
+            let _ = CString::from_raw(ch.app_name);
+        }
+    }
+    // Vec drops here, freeing the changes array.
+}
+
 /// Attach a window by title substring match.
 /// Convenience for `/q3ide_attach <title>`.
 /// Returns the window ID on success, 0 on failure.
@@ -540,6 +664,259 @@ pub unsafe extern "C" fn q3ide_start_display_capture(
                 backend::CaptureError::Platform(_) => Q3ideError::PlatformError,
             }
         }
+    }
+}
+
+// ─── Input injection ─────────────────────────────────────────────────────────
+
+/// CGPoint used for mouse event injection.
+#[repr(C)]
+#[derive(Clone, Copy)]
+struct CGPoint {
+    x: f64,
+    y: f64,
+}
+
+// CoreGraphics CGEvent C-ABI. Only compiled on macOS — the dylib is macOS-only.
+#[cfg(target_os = "macos")]
+#[link(name = "CoreGraphics", kind = "framework")]
+extern "C" {
+    fn CGEventCreateMouseEvent(
+        source: *mut std::ffi::c_void,
+        mouse_type: u32,
+        mouse_cursor_position: CGPoint,
+        mouse_button: u32,
+    ) -> *mut std::ffi::c_void;
+
+    fn CGEventCreateKeyboardEvent(
+        source: *mut std::ffi::c_void,
+        virtual_key: u16,
+        key_down: u8,
+    ) -> *mut std::ffi::c_void;
+
+    fn CGEventPost(tap: u32, event: *mut std::ffi::c_void);
+
+    fn CFRelease(cf: *mut std::ffi::c_void);
+}
+
+// CGEventType constants
+const CG_LEFT_MOUSE_DOWN: u32 = 1;
+const CG_LEFT_MOUSE_UP: u32 = 2;
+// CGMouseButton::Left
+const CG_MOUSE_BUTTON_LEFT: u32 = 0;
+// CGEventTapLocation::HID
+const CG_EVENT_TAP_HID: u32 = 0;
+
+/// Map Q3 key codes (from keycodes.h) to macOS CGKeyCode (virtual key codes).
+/// ASCII letters / digits pass through as-is for the most common layout;
+/// special keys (arrows, function keys) are mapped by table lookup.
+fn q3key_to_cgkeycode(key: i32) -> Option<u16> {
+    // ASCII lowercase letters → CGKeyCode (ANSI layout)
+    if key >= b'a' as i32 && key <= b'z' as i32 {
+        const LETTER_MAP: [u16; 26] = [
+            0,  // a
+            11, // b
+            8,  // c
+            2,  // d
+            14, // e
+            3,  // f
+            5,  // g
+            4,  // h
+            34, // i
+            38, // j
+            40, // k
+            37, // l
+            46, // m
+            45, // n
+            31, // o
+            35, // p
+            12, // q
+            15, // r
+            1,  // s
+            17, // t
+            32, // u
+            9,  // v
+            13, // w
+            7,  // x
+            16, // y
+            6,  // z
+        ];
+        return Some(LETTER_MAP[(key - b'a' as i32) as usize]);
+    }
+    // Digits 0-9
+    if key >= b'0' as i32 && key <= b'9' as i32 {
+        const DIGIT_MAP: [u16; 10] = [29, 18, 19, 20, 21, 23, 22, 26, 28, 25];
+        return Some(DIGIT_MAP[(key - b'0' as i32) as usize]);
+    }
+    match key {
+        9   => Some(48),  // K_TAB
+        13  => Some(36),  // K_ENTER
+        27  => Some(53),  // K_ESCAPE
+        32  => Some(49),  // K_SPACE
+        39  => Some(39),  // K_QUOTE (')
+        44  => Some(43),  // K_COMMA
+        45  => Some(27),  // K_MINUS
+        46  => Some(47),  // K_DOT
+        47  => Some(44),  // K_SLASH
+        59  => Some(41),  // K_SEMICOLON
+        61  => Some(24),  // K_EQUAL
+        91  => Some(33),  // K_BRACKET_OPEN  [
+        92  => Some(42),  // K_BACKSLASH
+        93  => Some(30),  // K_BRACKET_CLOSE ]
+        127 => Some(51),  // K_BACKSPACE
+        // K_COMMAND = 128
+        128 => Some(55),
+        // K_CAPSLOCK = 129
+        129 => Some(57),
+        // K_UPARROW = 132
+        132 => Some(126),
+        // K_DOWNARROW = 133
+        133 => Some(125),
+        // K_LEFTARROW = 134
+        134 => Some(123),
+        // K_RIGHTARROW = 135
+        135 => Some(124),
+        // K_ALT = 136
+        136 => Some(58),
+        // K_CTRL = 137
+        137 => Some(59),
+        // K_SHIFT = 138
+        138 => Some(56),
+        // K_INS = 139
+        139 => Some(114),
+        // K_DEL = 140
+        140 => Some(117),
+        // K_PGDN = 141
+        141 => Some(121),
+        // K_PGUP = 142
+        142 => Some(116),
+        // K_HOME = 143
+        143 => Some(115),
+        // K_END = 144
+        144 => Some(119),
+        // K_F1..K_F15 = 145..159
+        145 => Some(122), // F1
+        146 => Some(120), // F2
+        147 => Some(99),  // F3
+        148 => Some(118), // F4
+        149 => Some(96),  // F5
+        150 => Some(97),  // F6
+        151 => Some(98),  // F7
+        152 => Some(100), // F8
+        153 => Some(101), // F9
+        154 => Some(109), // F10
+        155 => Some(103), // F11
+        156 => Some(111), // F12
+        _ => None,
+    }
+}
+
+/// Inject a left mouse click at UV coordinates within a captured window.
+///
+/// `uv_x` and `uv_y` are in [0.0, 1.0] relative to the window's content area.
+/// The window's current screen bounds are looked up via ScreenCaptureKit.
+///
+/// # Safety
+/// `handle` must be a valid pointer from `q3ide_init`.
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_inject_click(
+    _handle: *mut Q3ideCapture,
+    window_id: c_uint,
+    uv_x: c_float,
+    uv_y: c_float,
+) {
+    #[cfg(target_os = "macos")]
+    {
+        // Use ::screencapturekit to reference the external crate,
+        // not the local `mod screencapturekit` module in this file.
+        use ::screencapturekit::shareable_content::{SCShareableContent, SCWindow};
+
+        let content: SCShareableContent = match SCShareableContent::get() {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("q3ide_inject_click: SCShareableContent failed: {}", e);
+                return;
+            }
+        };
+
+        let windows = content.windows();
+        let win: Option<&SCWindow> = windows.iter().find(|w| w.window_id() == window_id);
+        let Some(win) = win else {
+            log::warn!("q3ide_inject_click: window {} not found", window_id);
+            return;
+        };
+
+        let frame = win.frame();
+        let origin = frame.origin();
+        let size = frame.size();
+        let screen_x = origin.x + uv_x as f64 * size.width;
+        let screen_y = origin.y + uv_y as f64 * size.height;
+        let pos = CGPoint { x: screen_x, y: screen_y };
+
+        let down_ev = CGEventCreateMouseEvent(
+            std::ptr::null_mut(),
+            CG_LEFT_MOUSE_DOWN,
+            pos,
+            CG_MOUSE_BUTTON_LEFT,
+        );
+        if !down_ev.is_null() {
+            CGEventPost(CG_EVENT_TAP_HID, down_ev);
+            CFRelease(down_ev);
+        }
+
+        let up_ev = CGEventCreateMouseEvent(
+            std::ptr::null_mut(),
+            CG_LEFT_MOUSE_UP,
+            pos,
+            CG_MOUSE_BUTTON_LEFT,
+        );
+        if !up_ev.is_null() {
+            CGEventPost(CG_EVENT_TAP_HID, up_ev);
+            CFRelease(up_ev);
+        }
+
+        log::info!(
+            "q3ide_inject_click: wid={} uv=({:.3},{:.3}) screen=({:.0},{:.0})",
+            window_id, uv_x, uv_y, screen_x, screen_y
+        );
+    }
+}
+
+/// Inject a keyboard key event into a captured window.
+///
+/// `q3key` is a Q3 keycode (from keycodes.h). `is_down` is 1 for press, 0 for release.
+/// Maps Q3 key codes to macOS CGKeyCode (ANSI layout).
+///
+/// # Safety
+/// `handle` must be a valid pointer from `q3ide_init`.
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_inject_key(
+    _handle: *mut Q3ideCapture,
+    window_id: c_uint,
+    q3key: c_int,
+    is_down: c_int,
+) {
+    #[cfg(target_os = "macos")]
+    {
+        let Some(cgkey) = q3key_to_cgkeycode(q3key) else {
+            log::debug!("q3ide_inject_key: no CGKeyCode mapping for Q3 key {}", q3key);
+            return;
+        };
+
+        let ev = CGEventCreateKeyboardEvent(
+            std::ptr::null_mut(),
+            cgkey,
+            if is_down != 0 { 1 } else { 0 },
+        );
+        if !ev.is_null() {
+            CGEventPost(CG_EVENT_TAP_HID, ev);
+            CFRelease(ev);
+        }
+
+        log::debug!(
+            "q3ide_inject_key: wid={} q3key={} cgkey={} down={}",
+            window_id, q3key, cgkey, is_down
+        );
     }
 }
 
