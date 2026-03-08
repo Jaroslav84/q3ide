@@ -4,6 +4,9 @@ baseq3/*
 capture/target/*
 quake3e/build/*
 quake3e/output/*
+quake3e/code/libcurl/windows/
+quake3e/code/libsdl/windows/
+quake3e/tail
 
 # Logs
 logs/

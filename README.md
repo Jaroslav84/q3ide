@@ -4,7 +4,7 @@
 
 ![Quake III IDE](idea.png)
 
-Q3IDE ("Quake III IDE") turns a Quake III Arena (quake3e fork) into a live developer workspace with all your existing tools. Live macOS windows stream as real-time textures onto in-game surfaces using ScreenCaptureKit, rendered through a modified Quake3e engine. The project follows Apple VisionOS design language (Glass Material, Windows, Ornaments, Hover effects).
+Q3IDE ("Quake III IDE") turns a Quake III Arena (quake3e fork) into a live developer workspace with all your existing tools on all of your monitors. Live macOS windows stream as real-time textures onto in-game surfaces using ScreenCaptureKit, rendered through a modified Quake3e engine. The project follows Apple VisionOS design language (Glass Material, Windows, Ornaments, Hover effects).
 
 ## Vibe Coding? Pfff! Frag Coding! 
 
@@ -21,28 +21,52 @@ Zuk got it wrong with Meta world. We need some blood here for the love of god.
 
 Yeah. That's my vision. Can you imagine? I'm beliver. 
 
-- This is not only a virtual desktop
-- This is not only an AI orchastrator
+- This is not only a virtual desktop, IDE
+- This is not only an LLM orchastrator with multi-project support
+- This is not only a new way (UML class/component diagrams) to ineract with your code
 - This is not only a boring VR gimmick with stars wallpaper as background
 - This is not only a multiplayer co-working environment
 
 It's the beggining of something more with an awesome FPS engine behind it. 
 
 ---
-
 ## Roadmap
 
-| Phase | Milestone | Status |
-|-------|-----------|--------|
-| 0 | Vision, architecture, design language | ✅ Done |
-| 1 | **MVP — terminal on nearest wall at spawn** | 🔜 Next |
-| 2 | Multiple windows, floating panels, glass material | — |
-| 3 | Ornaments, hover effects, focus system | — |
-| 4 | Multiplayer window sharing, spatial voice | — |
-| 5 | AI agent integration, build notifications | — |
-| 6 | Room-as-module, spatial code navigation | — |
-| 7 | Auto-generate BSP maps from codebase structure | — |
-| VR | Swap engine adapter to VR Quake 3 fork | — |
+| Phase | Milestone | Batch | Status |
+|-------|-----------|-------|--------|
+| 0 | Vision, architecture, design language | 0 | ✅ Done |
+| 1 | **MVP — terminal on nearest wall at spawn** | 0 | ✅ Done |
+| 2 | **Multiple windows, floating panels** | 0 | ✅ Done |
+| 3 | Multi-window capture fix (unique windowID per SCStream) | 0 | ✅ Done |
+| 4 | Three-monitor support | 0 | 🔧 In Progress |
+| 5 | Window Entity data model & lifecycle management | 1 | — |
+| 6 | Interaction model — Pointer Mode, Keyboard Passthrough, dwell detection | 2 | — |
+| 7 | IOSurface zero-copy optimization | 3 | — |
+| 8 | Window management — drag, resize, lock, snap, persist layouts | 4 | — |
+| 9 | Grapple Hook, minimap, File Browser, Quick Open | 5 | — |
+| 10 | Theater Mode, Office Mode, Control Center | 6 | — |
+| 11 | Spaces (ASK→GARAGE) & Portal navigation | 7 | — |
+| 12 | Programmable hotkeys, virtual keyboard, screenshots, video recording | 8 | — |
+| 13 | Glass Material, Ornaments, Vibrancy, context menus | 9 | — |
+| 14 | Project file classification & live filesystem scanning | 10 | — |
+| 15 | UML Navigator — 3D architecture diagrams, node clouds, animated pipes | 11 | — |
+| 16 | AI agent orchestrator — spawn, diff viewer, approve/reject, dashboard | 12 | — |
+| 17 | Spatial audio, per-Window audio, ducking, notifications | 13 | — |
+| 18 | Multiplayer — window sharing, proximity resolution, pair programming | 14 | — |
+| 19 | quakeOS — native rendering, syntax highlighting, nano editor, focus mode | 15 | — |
+| 20 | Game modes — synchronized rounds (CODE→FRAG→TEST→RUN) | 16 | — |
+| 21 | Map skins, Office Mode styles, Volume baseplate | 17 | — |
+| 22 | Spatialized voice chat, multiplayer audio | 18 | — |
+| 23 | Session recording & async playback | 18 | — |
+| 24 | Custom Q3 map designed for 8 Spaces | 19 | — |
+| 25 | OpenClaw bot — fragging AI colleague with chat Window | 20 | — |
+| 26 | AI runtime geometry — props + structural mesh on top of BSP | 21 | — |
+| 27 | Browser-ready WASM port via Emscripten | 22 | — |
+| VR | Swap engine adapter to VR Quake 3 fork | VR | — |
+
+See `/.VISION_IDE.md` for full roadmap.
+
+---
 
 
 ## Run
@@ -55,6 +79,8 @@ Add quake pack files into `/.baseq3` and then
 ```
 ./scripts/build.sh --run --level 0 --execute 'q3ide attach all'
 ```
+
+Big up if u port this to Linux or Windblows. Nah scratch that, Linux only!
 
 ## Manual build
 

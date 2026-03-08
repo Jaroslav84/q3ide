@@ -12,17 +12,23 @@ mkdir -p "$LOG_DIR"
 
 # ─── Parse flags ──────────────────────────────────────────────────────
 DO_RUN=0
+DO_CLEAN=0
+DO_API=0
+DO_ENGINE_ONLY=0
 LEVEL=""
 EXECUTE=""
 BOTS=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --run)      DO_RUN=1; shift ;;
-        --level)    LEVEL="$2"; shift 2 ;;
-        --execute)  EXECUTE="$2"; shift 2 ;;
-        --bots)     BOTS="$2"; shift 2 ;;
-        *)          echo "Unknown flag: $1"; echo "Usage: build.sh [--run] [--level <map>] [--execute '<cmd>'] [--bots <n>]"; exit 1 ;;
+        --run)          DO_RUN=1; shift ;;
+        --clean)        DO_CLEAN=1; shift ;;
+        --api)          DO_API=1; shift ;;
+        --engine-only)  DO_ENGINE_ONLY=1; shift ;;
+        --level)        LEVEL="$2"; shift 2 ;;
+        --execute)      EXECUTE="$2"; shift 2 ;;
+        --bots)         BOTS="$2"; shift 2 ;;
+        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--run] [--api] [--engine-only] [--level <map>] [--execute '<cmd>'] [--bots <n>]"; exit 1 ;;
     esac
 done
 
@@ -37,14 +43,22 @@ esac
 
 echo "=== Detected arch: $Q3E_ARCH ==="
 
-# 1. Build the capture dylib
-echo "=== Building capture dylib ==="
-cd "$ROOT/capture"
-cargo build --release
+# 1. Build the capture dylib (skip with --engine-only)
+if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
+    echo "=== Building capture dylib ==="
+    cd "$ROOT/capture"
+    cargo build --release
+else
+    echo "=== Skipping capture dylib (--engine-only) ==="
+fi
 
 # 2. Build the engine
 echo "=== Building Quake3e engine ==="
 cd "$ROOT/quake3e"
+if [ "$DO_CLEAN" -eq 1 ]; then
+    echo "=== Cleaning engine build ==="
+    make clean ARCH="$Q3E_ARCH"
+fi
 make ARCH="$Q3E_ARCH"
 
 # 3. Find the build output directory
@@ -101,7 +115,7 @@ echo "  In-game console (~):"
 	echo "    $BUILD_DIR/logs/q3ide.log"
 	echo "    $BUILD_DIR/logs/q3ide_capture.log"
 	echo ""
-	echo "  Usage: build.sh [--run] [--level 0] [--bots 1] [--execute 'q3ide desktop']"
+	echo "  Usage: build.sh [--run] [--api] [--level 0] [--bots 1] [--execute 'q3ide desktop']"
 echo "========================================"
 
 # 7. Ensure Screen Recording permission
@@ -124,7 +138,38 @@ if [ -n "$ENGINE_BIN" ] && [ -f "$ENGINE_BIN" ]; then
     fi
 fi
 
-# 8. Run
+# 8. Launch API server in background (--api)
+if [ "$DO_API" = "1" ]; then
+    API_SCRIPT="$ROOT/scripts/remote_api.py"
+    API_LOG="$LOG_DIR/remote_api.log"
+    API_PID_FILE="/tmp/q3ide_api.pid"
+
+    # Kill any existing instance
+    if [ -f "$API_PID_FILE" ]; then
+        OLD_PID="$(cat "$API_PID_FILE" 2>/dev/null)"
+        if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
+            echo "  Stopping existing API server (pid $OLD_PID)..."
+            kill "$OLD_PID" 2>/dev/null
+            sleep 0.5
+        fi
+        rm -f "$API_PID_FILE"
+    fi
+
+    echo "  Starting API server in background..."
+    python3 "$API_SCRIPT" > "$API_LOG" 2>&1 &
+    echo $! > "$API_PID_FILE"
+    sleep 0.5
+    if kill -0 "$(cat "$API_PID_FILE")" 2>/dev/null; then
+        echo "  API server started (pid $(cat "$API_PID_FILE"))"
+        echo "  Log: $API_LOG"
+        echo "  ws://host.docker.internal:${Q3IDE_API_PORT:-6666}/ws"
+    else
+        echo "  WARNING: API server failed to start — check $API_LOG"
+    fi
+    echo ""
+fi
+
+# 9. Run
 if [ -z "$ENGINE_BIN" ] || [ ! -f "$ENGINE_BIN" ]; then
     exit 0
 fi
