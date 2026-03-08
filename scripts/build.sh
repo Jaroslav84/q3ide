@@ -226,6 +226,32 @@ if [ "$DO_RUN" = "1" ]; then
         ENGINE_ARGS="$ENGINE_ARGS +set bot_minplayers $BOT_MIN"
     fi
 
+    # Music: random track on q3dm0 only, picked fresh each launch
+    if [ "$LEVEL" = "q3dm0" ]; then
+        q3_tracks=(
+            "music/fla22k_01_intro.wav music/fla22k_01_loop.wav"
+            "music/fla22k_02.wav"
+            "music/fla22k_03.wav"
+            "music/fla22k_04_intro.wav music/fla22k_04_loop.wav"
+            "music/fla22k_05.wav"
+            "music/fla22k_06.wav"
+            "music/sonic1.wav"
+            "music/sonic2.wav"
+            "music/sonic3.wav"
+            "music/sonic4.wav"
+            "music/sonic5.wav"
+            "music/sonic6.wav"
+        )
+        q3_track="${q3_tracks[$RANDOM % ${#q3_tracks[@]}]}"
+        Q3_MUSIC_CMD="music $q3_track"
+        if [ -n "$EXECUTE" ]; then
+            EXECUTE="$EXECUTE; $Q3_MUSIC_CMD"
+        else
+            EXECUTE="$Q3_MUSIC_CMD"
+        fi
+        echo "[build] Music: $q3_track"
+    fi
+
     # --execute: run a command after a delay (via a temp cfg)
     if [ -n "$EXECUTE" ]; then
         # Write a temp config that waits ~1 sec then executes

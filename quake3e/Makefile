@@ -487,6 +487,7 @@ ifeq ($(COMPILE_PLATFORM),darwin)
   BASE_CFLAGS += -Wno-unused-result
 
   BASE_CFLAGS += -DMACOS_X
+  BASE_CFLAGS += -DUSE_ICON
   USE_Q3IDE=1
   BASE_CFLAGS += -DUSE_Q3IDE
 

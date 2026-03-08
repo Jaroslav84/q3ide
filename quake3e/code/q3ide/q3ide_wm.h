@@ -49,6 +49,7 @@ qboolean Q3IDE_WM_DetachById(unsigned int capture_id);
 /* Complex commands (in q3ide_cmd.c) */
 void Q3IDE_WM_CmdAttach(void);
 void Q3IDE_WM_CmdDesktop(void);
+void Q3IDE_WM_CmdSnap(void);
 
 /* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_cmd.c) */
 void Q3IDE_WM_PollChanges(void);

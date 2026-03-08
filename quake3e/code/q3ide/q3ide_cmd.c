@@ -353,3 +353,26 @@ void Q3IDE_WM_CmdDesktop(void)
 		q3ide_wm.cap_free_dlist(dlist);
 	Com_Printf("q3ide: desktop: %d display(s)\n", attached);
 }
+
+/* ── CmdSnap — snap wins[0] into the q3dm0 first-room teleporter ──
+ *
+ * BSP model *9 (trigger_teleport) center: (-1152, -1876, 66).
+ * Thin in Y (8 units). Energy plane sits at the front face (y≈-1868),
+ * normal (0,1,0) facing the player who approaches from positive Y.
+ * Size 128×128 matches the standard Q3 teleporter arch opening.
+ */
+void Q3IDE_WM_CmdSnap(void)
+{
+	vec3_t pos = {-1152.0f, -1868.0f, 84.0f};
+	vec3_t normal = {0.0f, 1.0f, 0.0f};
+
+	if (!q3ide_wm.wins[0].active) {
+		Com_Printf("q3ide: snap — attach a window first\n");
+		return;
+	}
+	VectorCopy(pos, q3ide_wm.wins[0].origin);
+	VectorCopy(normal, q3ide_wm.wins[0].normal);
+	q3ide_wm.wins[0].world_w = 128.0f;
+	q3ide_wm.wins[0].world_h = 128.0f;
+	Com_Printf("q3ide: snapped win[0] into teleporter at (%.0f,%.0f,%.0f)\n", pos[0], pos[1], pos[2]);
+}

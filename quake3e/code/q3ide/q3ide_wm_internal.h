@@ -116,6 +116,9 @@ typedef struct {
 	/* Batch 2: Interaction */
 	int hover_active; /* 1 = crosshair dwelling on this window */
 	float hover_t;    /* 0..1 hover animation progress */
+	/* Hit effect: blood splat on window surface */
+	unsigned long long hit_time_ms; /* Sys_Milliseconds() at last bullet impact; 0=none */
+	vec3_t hit_pos;                 /* world position of hit point */
 } q3ide_win_t;
 
 /* ── Global window manager state (defined in q3ide_wm.c) ──────── */

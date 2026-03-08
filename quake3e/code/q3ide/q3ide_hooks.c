@@ -32,7 +32,6 @@ static struct {
 	int selected_win;           /* wins[] index, -1 = none selected */
 	int select_time;            /* Sys_Milliseconds() when selected */
 	int last_attack;            /* previous frame BUTTON_ATTACK state */
-	int last_buttons;           /* previous frame button state for edge detection */
 	float last_yaw, last_pitch; /* for mouse delta calculation */
 	/* raw button state saved before BUTTON_ATTACK suppression */
 	int raw_buttons;
@@ -61,6 +60,8 @@ static void Q3IDE_Cmd_f(void)
 			Q3IDE_WM_CmdDetachAll();
 	} else if (!Q_stricmp(sub, "desktop"))
 		Q3IDE_WM_CmdDesktop();
+	else if (!Q_stricmp(sub, "snap"))
+		Q3IDE_WM_CmdSnap();
 	else if (!Q_stricmp(sub, "status"))
 		Q3IDE_WM_CmdStatus();
 	else if (!Q_stricmp(sub, "istate")) {
@@ -186,8 +187,8 @@ void Q3IDE_Init(void)
 
 	Cmd_AddCommand("q3ide", Q3IDE_Cmd_f);
 	q3ide_state.initialized = qtrue;
+	Com_Printf("q3ide: Interaction: dwell 150ms on window (<10m) → Pointer Mode (auto)\n");
 	Com_Printf("q3ide: Key bindings:\n");
-	Com_Printf("  bind <key> \"set q3ide_pointer 1\"     (enter Pointer mode — aim at window first)\n");
 	Com_Printf("  bind <key> \"set q3ide_use_key 1\"     (enter Keyboard mode from Pointer)\n");
 	Com_Printf("  bind <key> \"set q3ide_escape 1\"      (exit Pointer/Keyboard modes)\n");
 }
@@ -199,11 +200,6 @@ void Q3IDE_OnVidRestart(void)
 
 void Q3IDE_Frame(void)
 {
-	vec3_t eye;
-	int buttons;
-	float cur_yaw, cur_pitch, mouse_dx = 0.0f, mouse_dy = 0.0f;
-	qboolean attacking = qfalse, use_key = qfalse, escape = qfalse, pointer_in = qfalse;
-
 	if (!q3ide_state.initialized)
 		return;
 
@@ -222,6 +218,11 @@ void Q3IDE_Frame(void)
 	}
 
 	if (cls.state == CA_ACTIVE) {
+		vec3_t eye;
+		int buttons;
+		float cur_yaw, cur_pitch, mouse_dx, mouse_dy;
+		qboolean attacking, use_key, escape;
+
 		/* Update player position for distance-based rendering */
 		VectorCopy(cl.snap.ps.origin, eye);
 		eye[2] += cl.snap.ps.viewheight;
@@ -252,12 +253,9 @@ void Q3IDE_Frame(void)
 		escape = (Cvar_VariableIntegerValue("q3ide_escape") == 1);
 		if (escape)
 			Cvar_Set("q3ide_escape", "0");
-		pointer_in = (Cvar_VariableIntegerValue("q3ide_pointer") == 1);
-		if (pointer_in)
-			Cvar_Set("q3ide_pointer", "0");
 
 		/* Update interaction state */
-		Q3IDE_Interaction_Frame(attacking, use_key, escape, pointer_in, mouse_dx, mouse_dy);
+		Q3IDE_Interaction_Frame(attacking, use_key, escape, mouse_dx, mouse_dy);
 
 		/* Only call shoot_frame if interaction doesn't consume input.
 		 * shoot_frame() manages last_attack internally.

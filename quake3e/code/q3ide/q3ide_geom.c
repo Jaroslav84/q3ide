@@ -85,21 +85,19 @@ void q3ide_add_poly(q3ide_win_t *win)
 	if (win->hover_t > 0.0f)
 		hover_lift = win->hover_t * 18.0f; /* pop window toward viewer */
 
-	/* Front and back faces — double-sided so windows are visible from any angle.
-	 * Back face flips the right vector (sign=-1) giving a mirrored but visible texture. */
+	/* Double-sided: Q3 backface-culls polys by winding order, so submit both faces.
+	 * Push 1 unit toward viewer so texture beats depth prepass under GL_LESS. */
 	{
 		int face;
 		for (face = 0; face < 2; face++) {
 			float sign = face ? -1.0f : 1.0f;
+			float fwd = hover_lift + 1.0f;
 			for (i = 0; i < 4; i++) {
 				float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
 				float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
-				verts[i].xyz[0] =
-				    win->origin[0] + sign * right[0] * sx * hw + up[0] * sy * hh + win->normal[0] * hover_lift;
-				verts[i].xyz[1] =
-				    win->origin[1] + sign * right[1] * sx * hw + up[1] * sy * hh + win->normal[1] * hover_lift;
-				verts[i].xyz[2] =
-				    win->origin[2] + sign * right[2] * sx * hw + up[2] * sy * hh + win->normal[2] * hover_lift;
+				verts[i].xyz[0] = win->origin[0] + sign * right[0] * sx * hw + up[0] * sy * hh + win->normal[0] * fwd;
+				verts[i].xyz[1] = win->origin[1] + sign * right[1] * sx * hw + up[1] * sy * hh + win->normal[1] * fwd;
+				verts[i].xyz[2] = win->origin[2] + sign * right[2] * sx * hw + up[2] * sy * hh + win->normal[2] * fwd;
 				verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
 				verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
 				verts[i].modulate.rgba[0] = 255;
@@ -111,9 +109,12 @@ void q3ide_add_poly(q3ide_win_t *win)
 		}
 	}
 
-	/* 2-unit red border on the front face when hovering. */
+	/* 2-unit red border on the front face when hovering.
+	 * Push 1 unit forward past hover_lift so borders beat the depth prepass
+	 * (which wrote depth at hover_lift) under GL_LESS from the front. */
 	if (win->hover_t > 0.0f && q3ide_wm.border_shader) {
 		float thick = 2.0f;
+		float border_lift = hover_lift + 1.0f;
 		byte br = (byte) (220.0f * win->hover_t);
 		/* (lx_lo, lx_hi, ly_lo, ly_hi) in local window space */
 		float strips[4][4] = {
@@ -126,12 +127,12 @@ void q3ide_add_poly(q3ide_win_t *win)
 		for (s = 0; s < 4; s++) {
 			float lx0 = strips[s][0], lx1 = strips[s][1];
 			float ly0 = strips[s][2], ly1 = strips[s][3];
-			float qx[4] = {lx0, lx1, lx1, lx0};
-			float qy[4] = {ly0, ly0, ly1, ly1};
+			const float qx[4] = {lx0, lx1, lx1, lx0};
+			const float qy[4] = {ly0, ly0, ly1, ly1};
 			for (i = 0; i < 4; i++) {
-				verts[i].xyz[0] = win->origin[0] + right[0] * qx[i] + up[0] * qy[i] + win->normal[0] * hover_lift;
-				verts[i].xyz[1] = win->origin[1] + right[1] * qx[i] + up[1] * qy[i] + win->normal[1] * hover_lift;
-				verts[i].xyz[2] = win->origin[2] + right[2] * qx[i] + up[2] * qy[i] + win->normal[2] * hover_lift;
+				verts[i].xyz[0] = win->origin[0] + right[0] * qx[i] + up[0] * qy[i] + win->normal[0] * border_lift;
+				verts[i].xyz[1] = win->origin[1] + right[1] * qx[i] + up[1] * qy[i] + win->normal[1] * border_lift;
+				verts[i].xyz[2] = win->origin[2] + right[2] * qx[i] + up[2] * qy[i] + win->normal[2] * border_lift;
 				verts[i].st[0] = 0.5f;
 				verts[i].st[1] = 0.5f;
 				verts[i].modulate.rgba[0] = br;
@@ -145,48 +146,34 @@ void q3ide_add_poly(q3ide_win_t *win)
 }
 
 /*
- * q3ide_add_portal_frame — teleporter energy portal over the first mirror.
+ * q3ide_add_portal_frame — floating teleporter energy portal.
  *
- * Same as the real Q3 teleporter: a flat quad with the additive energy
- * shader. Pushed 6 units forward (toward viewer) so it renders clearly
- * in front of the window. The shader is GL_ONE GL_ONE additive so you
- * see the window content through the glowing swirl — exactly like standing
- * in front of a teleporter portal.
+ * Placed 100 units out from the mirror wall INTO the room (win->normal
+ * points toward the player, so +100 * normal puts it in open air in front
+ * of the mirror). Portal faces back toward the wall so the player sees it
+ * from the room side. No z-fighting — it's floating in free space.
  */
 void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
 {
 	polyVert_t verts[4];
 	vec3_t right, up;
-	/* 1.3x window size: portal extends past the window edges as a glow ring */
-	float hw = win->world_w * 0.5f * 1.3f;
-	float hh = win->world_h * 0.5f * 1.3f;
-	float fwd = 6.0f; /* forward from window toward viewer */
-	float nx = win->normal[0], ny = win->normal[1];
-	float horiz_len = sqrtf(nx * nx + ny * ny);
+	float hw = win->world_w * 0.5f;
+	float hh = win->world_h * 0.5f;
+	/* Float 100 units out from wall into the room */
+	float out = 100.0f;
 	int i;
 
 	if (!shader || !re.AddPolyToScene)
 		return;
 
-	if (horiz_len > 0.01f) {
-		right[0] = -ny / horiz_len;
-		right[1] = nx / horiz_len;
-		right[2] = 0.0f;
-	} else {
-		right[0] = 1.0f;
-		right[1] = 0.0f;
-		right[2] = 0.0f;
-	}
-	up[0] = 0.0f;
-	up[1] = 0.0f;
-	up[2] = 1.0f;
+	q3ide_win_basis(win, right, up);
 
 	for (i = 0; i < 4; i++) {
 		float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
 		float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
-		verts[i].xyz[0] = win->origin[0] + win->normal[0] * fwd + right[0] * sx * hw + up[0] * sy * hh;
-		verts[i].xyz[1] = win->origin[1] + win->normal[1] * fwd + right[1] * sx * hw + up[1] * sy * hh;
-		verts[i].xyz[2] = win->origin[2] + win->normal[2] * fwd + right[2] * sx * hw + up[2] * sy * hh;
+		verts[i].xyz[0] = win->origin[0] + win->normal[0] * out + right[0] * sx * hw + up[0] * sy * hh;
+		verts[i].xyz[1] = win->origin[1] + win->normal[1] * out + right[1] * sx * hw + up[1] * sy * hh;
+		verts[i].xyz[2] = win->origin[2] + win->normal[2] * out + right[2] * sx * hw + up[2] * sy * hh;
 		verts[i].st[0] = (sx + 1.0f) * 0.5f;
 		verts[i].st[1] = (sy + 1.0f) * 0.5f;
 		verts[i].modulate.rgba[0] = 255;
@@ -195,6 +182,71 @@ void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
 		verts[i].modulate.rgba[3] = 255;
 	}
 	re.AddPolyToScene(shader, 4, verts, 1);
+}
+
+/*
+ * q3ide_add_blood_splat — render a blood mark at the bullet hit point.
+ *
+ * A cross of two red rectangles + 4 scattered drip squares. Lives for
+ * Q3IDE_SPLAT_LIFE_MS ms then vanishes.  All geometry lies in the
+ * window's local right/up plane so it sits flush on the window surface.
+ */
+#define Q3IDE_SPLAT_LIFE_MS 700ULL
+
+static void q3ide_splat_quad(vec3_t center, vec3_t right, vec3_t up, vec3_t normal, float hw, float hh, byte r, byte g,
+                             byte b, qhandle_t shader)
+{
+	polyVert_t v[4];
+	int i;
+	const float xs[4] = {-hw, hw, hw, -hw};
+	const float ys[4] = {-hh, -hh, hh, hh};
+	for (i = 0; i < 4; i++) {
+		v[i].xyz[0] = center[0] + right[0] * xs[i] + up[0] * ys[i] + normal[0];
+		v[i].xyz[1] = center[1] + right[1] * xs[i] + up[1] * ys[i] + normal[1];
+		v[i].xyz[2] = center[2] + right[2] * xs[i] + up[2] * ys[i] + normal[2];
+		v[i].st[0] = 0.5f;
+		v[i].st[1] = 0.5f;
+		v[i].modulate.rgba[0] = r;
+		v[i].modulate.rgba[1] = g;
+		v[i].modulate.rgba[2] = b;
+		v[i].modulate.rgba[3] = 255;
+	}
+	re.AddPolyToScene(shader, 4, v, 1);
+}
+
+void q3ide_add_blood_splat(q3ide_win_t *win)
+{
+	unsigned long long now_ms, elapsed;
+	vec3_t right, up;
+	/* Drip offsets in local (right, up) units */
+	static const float drip_r[4] = {28.f, -26.f, 10.f, -18.f};
+	static const float drip_u[4] = {20.f, -22.f, -28.f, 24.f};
+	int i;
+
+	if (!win->hit_time_ms || !q3ide_wm.border_shader || !re.AddPolyToScene)
+		return;
+
+	now_ms = (unsigned long long) Sys_Milliseconds();
+	elapsed = now_ms - win->hit_time_ms;
+	if (elapsed >= Q3IDE_SPLAT_LIFE_MS) {
+		win->hit_time_ms = 0;
+		return;
+	}
+
+	q3ide_win_basis(win, right, up);
+
+	/* Central cross — two rectangles at 90° */
+	q3ide_splat_quad(win->hit_pos, right, up, win->normal, 14.f, 4.f, 220, 0, 0, q3ide_wm.border_shader);
+	q3ide_splat_quad(win->hit_pos, right, up, win->normal, 4.f, 14.f, 180, 0, 0, q3ide_wm.border_shader);
+
+	/* Scattered drip squares */
+	for (i = 0; i < 4; i++) {
+		vec3_t drip;
+		drip[0] = win->hit_pos[0] + right[0] * drip_r[i] + up[0] * drip_u[i];
+		drip[1] = win->hit_pos[1] + right[1] * drip_r[i] + up[1] * drip_u[i];
+		drip[2] = win->hit_pos[2] + right[2] * drip_r[i] + up[2] * drip_u[i];
+		q3ide_splat_quad(drip, right, up, win->normal, 5.f, 5.f, 200, 10, 10, q3ide_wm.border_shader);
+	}
 }
 
 int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)

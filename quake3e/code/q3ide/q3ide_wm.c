@@ -63,6 +63,10 @@ static qboolean q3ide_load_dylib(void)
 		q3ide_wm.dylib = NULL;
 		return qfalse;
 	}
+	Com_Printf("q3ide: dylib loaded ok (inject_click=%s inject_key=%s poll_changes=%s)\n",
+	           q3ide_wm.cap_inject_click ? "yes" : "no",
+	           q3ide_wm.cap_inject_key ? "yes" : "no",
+	           q3ide_wm.cap_poll_changes ? "yes" : "no");
 	return qtrue;
 }
 
@@ -130,7 +134,8 @@ extern void Q3IDE_WM_PollChanges(void);
 /* Geometry helpers — implemented in q3ide_geom.c */
 extern void q3ide_add_depth_quad(q3ide_win_t *win);
 extern void q3ide_add_poly(q3ide_win_t *win);
-extern void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader);
+extern void q3ide_add_blood_splat(q3ide_win_t *win);
+
 extern int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir);
 
 qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start)
@@ -174,6 +179,9 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	VectorCopy(normal, win->normal);
 	win->world_w = ww;
 	win->world_h = wh;
+	Com_Printf("q3ide: attach win[%d] id=%u slot=%d pos=(%.0f,%.0f,%.0f) norm=(%.2f,%.2f,%.2f) size=%.0fx%.0f\n",
+	           i, id, slot, origin[0], origin[1], origin[2], normal[0], normal[1], normal[2],
+	           win->world_w, win->world_h);
 	q3ide_wm.num_active++;
 	return qtrue;
 }
@@ -282,19 +290,32 @@ void Q3IDE_WM_AddPolys(void)
 {
 	int i, j, n = 0;
 	int order[Q3IDE_MAX_WIN];
+	static unsigned long long last_log_ms = 0;
+	unsigned long long now_ms;
 
 	/* Lazy-register shaders */
 	if (!q3ide_wm.border_shader && re.RegisterShader)
 		q3ide_wm.border_shader = re.RegisterShader("*white");
-	if (!q3ide_wm.portal_shader && re.RegisterShader) {
-		q3ide_wm.portal_shader = re.RegisterShader("models/mapobjects/teleporter/energy");
-		Com_Printf("q3ide: portal_shader=%d\n", q3ide_wm.portal_shader);
-	}
 
 	/* Collect active textured windows */
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].shader)
 			order[n++] = i;
+
+	/* Log every 3s: active windows, how many have shaders, border_shader status */
+	now_ms = (unsigned long long) Sys_Milliseconds();
+	if (now_ms - last_log_ms >= 3000) {
+		int active = 0, with_shader = 0;
+		for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+			if (q3ide_wm.wins[i].active)
+				active++;
+			if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].shader)
+				with_shader++;
+		}
+		Com_Printf("q3ide: AddPolys active=%d shader=%d submitting=%d border_sh=%d\n",
+		           active, with_shader, n, q3ide_wm.border_shader);
+		last_log_ms = now_ms;
+	}
 
 	/* Insertion sort back-to-front by player_dist (farthest first = painter's algorithm) */
 	for (i = 1; i < n; i++) {
@@ -307,21 +328,21 @@ void Q3IDE_WM_AddPolys(void)
 		order[j + 1] = tmp;
 	}
 
-	/* Portal frame on wins[0] (first attached = first room mirror) —
-	 * rendered before content so the additive energy glow bleeds out
-	 * around the window edges like a teleporter surround (no gate). */
-	if (q3ide_wm.wins[0].active && q3ide_wm.wins[0].shader && q3ide_wm.portal_shader)
-		q3ide_add_portal_frame(&q3ide_wm.wins[0], q3ide_wm.portal_shader);
-
-	/* Pass 1: depth prepass — all windows share *white shader (low shader index),
-	 * so Q3 batches them before any *scratch shaders. Writes correct depth values
-	 * so near windows occlude far windows regardless of Q3's internal poly sort. */
+	/* Pass 1: depth prepass — *white shader sorts before *scratch, writes depth so
+	 * near windows occlude far windows regardless of Q3's internal poly sort. */
 	for (i = 0; i < n; i++)
 		q3ide_add_depth_quad(&q3ide_wm.wins[order[i]]);
 
-	/* Pass 2: texture render — depth buffer handles occlusion. */
+	/* Pass 2: texture render — 1 unit forward so poly beats depth prepass under GL_LESS. */
 	for (i = 0; i < n; i++)
 		q3ide_add_poly(&q3ide_wm.wins[order[i]]);
+
+	/* Pass 3: blood splats — DISABLED temporarily.
+	for (i = 0; i < Q3IDE_MAX_WIN; i++)
+		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].hit_time_ms)
+			q3ide_add_blood_splat(&q3ide_wm.wins[i]);
+	*/
+	(void) q3ide_add_blood_splat;
 }
 
 void Q3IDE_WM_CmdList(void)

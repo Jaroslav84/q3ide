@@ -190,6 +190,9 @@ def _do_run(args=None, agent_id=''):
     if binary is None:
         return {'ok': False, 'error': 'quake3e binary not found — build first'}
     engine_args = _build_engine_args(args)
+    # Disable tty console to prevent backspace/cursor noise in logs
+    if '+set' not in ' '.join(engine_args) or 'ttycon' not in ' '.join(engine_args):
+        engine_args = ['+set', 'ttycon', '0'] + engine_args
     cmd = [str(binary)] + engine_args
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     engine_log = LOG_DIR / 'engine.log'
@@ -213,12 +216,26 @@ def _do_run(args=None, agent_id=''):
         return {'ok': False, 'error': str(e)}
 
 
+_CTRL_RE = None
+
+def _strip_ctrl(text):
+    """Strip ANSI escape sequences and tty cursor-control chars from Q3 output."""
+    import re
+    global _CTRL_RE
+    if _CTRL_RE is None:
+        # Remove: ESC sequences, backspace+space+backspace cursor tricks, lone \r
+        _CTRL_RE = re.compile(r'\x1b\[[0-9;]*[A-Za-z]|\x08[^\x08]*|\r')
+    return _CTRL_RE.sub('', text)
+
+
 def _tee_output(proc, log_fh, prefix=''):
-    """Read proc stdout/stderr and write to both log_fh and sys.stdout."""
+    """Read proc stdout/stderr, strip tty noise, write to log_fh and sys.stdout."""
     try:
         for line in proc.stdout:
-            text = line.decode(errors='replace')
-            log_fh.write(text)
+            text = _strip_ctrl(line.decode(errors='replace'))
+            if not text.strip():
+                continue
+            log_fh.write(text if text.endswith('\n') else text + '\n')
             log_fh.flush()
             sys.stdout.write(prefix + text)
             sys.stdout.flush()
@@ -483,9 +500,40 @@ def _run_ws_session(sock, log_names):
 # ── HTTP request handler ──────────────────────────────────────────────────────
 
 class Handler(BaseHTTPRequestHandler):
+    @staticmethod
+    def _caller_proc(port):
+        """Best-effort: find process name+pid connected to our port on localhost."""
+        try:
+            r = subprocess.run(
+                ['lsof', '-i', f'TCP:{port}', '-n', '-P', '-F', 'pcn'],
+                capture_output=True, text=True, timeout=1
+            )
+            # lsof -F output: p<pid>\nc<cmd>\nn<addr>
+            pid, cmd = None, None
+            for line in r.stdout.splitlines():
+                if line.startswith('p'):
+                    pid = line[1:]
+                    cmd = None
+                elif line.startswith('c'):
+                    cmd = line[1:]
+                elif line.startswith('n') and '->' in line and str(PORT) in line:
+                    if cmd and cmd not in ('Python', 'remote_ap') and pid:
+                        return f'{cmd}({pid})'
+        except Exception:
+            pass
+        return None
+
     def log_message(self, fmt, *args):
         try:
-            print(f'[api] {self.command} {self.path}', flush=True)
+            ip = self.client_address[0]
+            agent = self.headers.get('X-Agent-ID', '')
+            if not agent:
+                # Fall back to process name for localhost callers without X-Agent-ID
+                if ip in ('127.0.0.1', '::1'):
+                    agent = self._caller_proc(PORT) or self.headers.get('User-Agent', '') or 'unknown'
+                else:
+                    agent = self.headers.get('User-Agent', '') or 'unknown'
+            print(f'[api] {self.command} {self.path}  agent={agent}', flush=True)
         except BlockingIOError:
             pass
 
@@ -526,8 +574,8 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == '/lint':
             self._handle_lint(fix=False)
-        elif path == '/build_status':
-            self._handle_build_status(queue_id=qs.get('id', [None])[0])
+        elif path in ('/build/status', '/build_status'):
+            self._handle_build_status(queue_id=(qs.get('queue_id') or qs.get('id', [None]))[0])
         elif path == '/queue':
             self._handle_queue_list()
         elif path in ('/', '/status'):
@@ -540,7 +588,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         elif path == '/logs':
             alias = qs.get('file', ['engine'])[0]
-            n = int(qs.get('n', ['100'])[0])
+            n = int((qs.get('n') or qs.get('tail') or ['400'])[0])
             log_path = LOG_ALIASES.get(alias)
             if log_path is None:
                 self._send(404, {'error': f'unknown: {alias}', 'available': list(LOG_ALIASES)})
@@ -573,7 +621,7 @@ class Handler(BaseHTTPRequestHandler):
                 if _queue_current and _queue_current['id'] == qid:
                     self._send(409, {'error': 'build already started — use POST /stop to kill game'})
                     return
-            self._send(404, {'error': f'queue_id {qid!r} not found or already done'})
+            self._send(410, {'error': f'queue_id {qid!r} not found — api restarted or already done', 'gone': True})
         else:
             self._send(404, {'error': 'not found'})
 
@@ -629,7 +677,11 @@ class Handler(BaseHTTPRequestHandler):
                         entry = e
                         break
             if entry is None:
-                self._send(404, {'error': f'queue_id {queue_id!r} not found'})
+                # Return 200 with done+gone so polling loops exit normally.
+                # 410 works correctly but agents that catch HTTPError keep retrying.
+                self._send(200, {'ok': True, 'done': True, 'gone': True,
+                                 'status': 'gone', 'returncode': None,
+                                 'error': f'queue_id {queue_id!r} not found — stale (api restarted)'})
                 return
             self._send(200, self._fmt_entry(entry))
             return

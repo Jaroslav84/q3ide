@@ -54,6 +54,8 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 
 	n = Cvar_VariableIntegerValue("r_mmNumMon");
 	if (n <= 1) {
+		if (!(fd->rdflags & RDF_NOWORLDMODEL))
+			Q3IDE_WM_AddPolys();
 		re.RenderScene(fd);
 		return;
 	}
