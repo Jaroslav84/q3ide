@@ -1,6 +1,7 @@
 # Build outputs
 baseq3/*
 !baseq3/.gitkeep
+!baseq3/autoexec.cfg
 capture/target/*
 quake3e/build/*
 quake3e/output/*

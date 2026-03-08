@@ -373,8 +373,8 @@ class Handler(BaseHTTPRequestHandler):
     def _handle_run(self, body):
         global _game_proc, _game_start
         if _game_running():
-            self._send(409, {'error': 'game already running', 'pid': _game_pid()})
-            return
+            _kill_game()
+            time.sleep(1)
         args = body.get('args', [])
         cmd = ['sh', str(BUILD_SCRIPT), '--run'] + [str(a) for a in args]
         LOG_DIR.mkdir(parents=True, exist_ok=True)
