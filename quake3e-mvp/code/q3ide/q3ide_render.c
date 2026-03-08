@@ -47,7 +47,7 @@ static void q3ide_sorted_monitors(int n, int *sorted)
 
 void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 {
-	const refdef_t *fd = (const refdef_t *)refdef_ptr;
+	const refdef_t *fd = (const refdef_t *) refdef_ptr;
 	int n, i, sorted[16];
 	float angle;
 	int center;
@@ -81,19 +81,18 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		int mon_x = Cvar_VariableIntegerValue(va("r_mmMonX%d", idx));
 		int mon_w = Cvar_VariableIntegerValue(va("r_mmMonW%d", idx));
 		int mon_h = Cvar_VariableIntegerValue(va("r_mmMonH%d", idx));
-		float yaw_offset = (float)(center - i) * angle;
+		float yaw_offset = (float) (center - i) * angle;
 
 		view.x = mon_x;
 		view.y = 0;
 		view.width = mon_w;
 		view.height = mon_h;
 		view.fov_x = 90.0f;
-		view.fov_y =
-		    2.0f * RAD2DEG(atanf(tanf(DEG2RAD(45.0f)) * (float)mon_h / (float)mon_w));
+		view.fov_y = 2.0f * RAD2DEG(atanf(tanf(DEG2RAD(45.0f)) * (float) mon_h / (float) mon_w));
 
 		/* Rotate view axis around Z by yaw_offset degrees */
 		if (yaw_offset != 0.0f) {
-			float rad = yaw_offset * (float)M_PI / 180.0f;
+			float rad = yaw_offset * (float) M_PI / 180.0f;
 			float c = cosf(rad), s = sinf(rad);
 			int a;
 			for (a = 0; a < 3; a++) {

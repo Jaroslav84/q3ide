@@ -29,6 +29,29 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../client/client.h"
 #include "sdl_glw.h"
 
+#if defined(USE_Q3IDE) && defined(MACOS_X)
+#include <CoreGraphics/CoreGraphics.h>
+/* Broadcast gamma ramp to every connected display.
+ * SDL_SetWindowGammaRamp only touches the display the SDL window lives on;
+ * side monitors in the spanning window receive no correction and appear darker. */
+static void Q3IDE_SetGammaAllDisplays( Uint16 table[3][256] )
+{
+	CGDirectDisplayID displays[32];
+	uint32_t count, i, j;
+	CGGammaValue r[256], g[256], b[256];
+
+	if ( CGGetOnlineDisplayList( 32, displays, &count ) != kCGErrorSuccess )
+		return;
+	for ( j = 0; j < 256; j++ ) {
+		r[j] = table[0][j] / 65535.0f;
+		g[j] = table[1][j] / 65535.0f;
+		b[j] = table[2][j] / 65535.0f;
+	}
+	for ( i = 0; i < count; i++ )
+		CGSetDisplayTransferByTable( displays[i], 256, r, g, b );
+}
+#endif
+
 static Uint16 r[256];
 static Uint16 g[256];
 static Uint16 b[256];
@@ -111,6 +134,11 @@ void GLimp_SetGamma( unsigned char red[256], unsigned char green[256], unsigned 
 	{
 		Com_DPrintf( "SDL_SetWindowGammaRamp() failed: %s\n", SDL_GetError() );
 	}
+
+#if defined(USE_Q3IDE) && defined(MACOS_X)
+	if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) )
+		Q3IDE_SetGammaAllDisplays( table );
+#endif
 }
 
 

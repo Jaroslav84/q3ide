@@ -16,13 +16,10 @@
 
 /* ── App classification ─────────────────────────────────────────── */
 
-static const char *q3ide_terminal_apps[] = { "iTerm2", "Terminal", NULL };
+static const char *q3ide_terminal_apps[] = {"iTerm2", "Terminal", NULL};
 
-static const char *q3ide_browser_apps[] = {
-	"Google Chrome", "Chromium", "Safari", "Firefox",
-	"Arc",           "Brave Browser", "Opera", "Microsoft Edge",
-	NULL,
-};
+static const char *q3ide_browser_apps[] = {"Google Chrome", "Chromium", "Safari",         "Firefox", "Arc",
+                                           "Brave Browser", "Opera",    "Microsoft Edge", NULL};
 
 static qboolean q3ide_match(const char *app, const char **list)
 {
@@ -37,8 +34,7 @@ static qboolean q3ide_match(const char *app, const char **list)
 
 /* ── Wall yaw offsets (browsers) ────────────────────────────────── */
 
-static const float q3ide_yaw_offsets[] = { 0.0f, -45.0f, 45.0f, -90.0f,
-	                                        90.0f, -135.0f, 135.0f, 180.0f };
+static const float q3ide_yaw_offsets[] = {0.0f, -45.0f, 45.0f, -90.0f, 90.0f, -135.0f, 135.0f, 180.0f};
 #define Q3IDE_NUM_OFFSETS 8
 
 /* ── Floating placement (terminals) ────────────────────────────────
@@ -48,15 +44,15 @@ static const float q3ide_yaw_offsets[] = { 0.0f, -45.0f, 45.0f, -90.0f,
  * idx    — which window in the row (0-based)
  * total  — total windows in this row
  */
-static void q3ide_attach_floating(unsigned int id, float aspect, vec3_t eye, float yaw, int idx,
-                                  int total, float dist, float height_offset)
+static void q3ide_attach_floating(unsigned int id, float aspect, vec3_t eye, float yaw, int idx, int total, float dist,
+                                  float height_offset)
 {
 	float oh = Q3IDE_WIN_INCHES;
 	float ow = oh * aspect;
 	float fwd_x = cosf(yaw);
 	float fwd_y = sinf(yaw);
 	/* vertical stack: spread windows up/down in Z */
-	float z_spread = (float)(idx - (total - 1) * 0.5f) * (oh + 8.0f);
+	float z_spread = (float) (idx - (total - 1) * 0.5f) * (oh + 8.0f);
 	vec3_t pos, normal;
 
 	pos[0] = eye[0] + fwd_x * dist;
@@ -72,6 +68,27 @@ static void q3ide_attach_floating(unsigned int id, float aspect, vec3_t eye, flo
 		Com_Printf("q3ide: terminal [%d/%d] floating dist=%.0f\n", idx + 1, total, dist);
 	else
 		Com_Printf("q3ide: terminal [%d/%d] attach failed\n", idx + 1, total);
+}
+
+/* ── DetachById ─────────────────────────────────────────────────── */
+
+qboolean Q3IDE_WM_DetachById(unsigned int cid)
+{
+	int i;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+		q3ide_win_t *w = &q3ide_wm.wins[i];
+		if (!w->active || w->capture_id != cid)
+			continue;
+		if (q3ide_wm.cap_stop)
+			q3ide_wm.cap_stop(q3ide_wm.cap, cid);
+		q3ide_wm.slot_mask &= ~(1u << w->scratch_slot);
+		memset(w, 0, sizeof(q3ide_win_t));
+		q3ide_wm.num_active--;
+		Com_Printf("q3ide: detached wid=%u\n", cid);
+		return qtrue;
+	}
+	Com_Printf("q3ide: wid=%u not found\n", cid);
+	return qfalse;
 }
 
 /* ── CmdAttach ──────────────────────────────────────────────────── */
@@ -101,10 +118,10 @@ void Q3IDE_WM_CmdAttach(void)
 	}
 
 	/* Bucket windows into terminals / browsers */
-	for (i = 0; i < (int)wlist.count; i++) {
+	for (i = 0; i < (int) wlist.count; i++) {
 		const Q3ideWindowInfo *w = &wlist.windows[i];
 		qboolean dupe = qfalse;
-		if ((int)w->width < Q3IDE_MIN_WIN_W || (int)w->height < Q3IDE_MIN_WIN_H)
+		if ((int) w->width < Q3IDE_MIN_WIN_W || (int) w->height < Q3IDE_MIN_WIN_H)
 			continue;
 		/* dedup by window id across both buckets */
 		for (j = 0; j < term_n; j++)
@@ -121,15 +138,15 @@ void Q3IDE_WM_CmdAttach(void)
 			continue;
 
 		if (q3ide_match(w->app_name, q3ide_terminal_apps) && term_n < Q3IDE_MAX_WIN) {
-			term_asp[term_n] = w->height ? (float)w->width / w->height : 16.0f / 9.0f;
+			term_asp[term_n] = w->height ? (float) w->width / w->height : 16.0f / 9.0f;
 			term_ids[term_n++] = w->window_id;
-			Com_Printf("q3ide: terminal [%d] wid=%u \"%s\" %ux%u\n", term_n - 1,
-			           w->window_id, w->app_name, w->width, w->height);
+			Com_Printf("q3ide: terminal [%d] wid=%u \"%s\" %ux%u\n", term_n - 1, w->window_id, w->app_name, w->width,
+			           w->height);
 		} else if (q3ide_match(w->app_name, q3ide_browser_apps) && brow_n < Q3IDE_MAX_WIN) {
-			brow_asp[brow_n] = w->height ? (float)w->width / w->height : 16.0f / 9.0f;
+			brow_asp[brow_n] = w->height ? (float) w->width / w->height : 16.0f / 9.0f;
 			brow_ids[brow_n++] = w->window_id;
-			Com_Printf("q3ide: browser  [%d] wid=%u \"%s\" %ux%u\n", brow_n - 1,
-			           w->window_id, w->app_name, w->width, w->height);
+			Com_Printf("q3ide: browser  [%d] wid=%u \"%s\" %ux%u\n", brow_n - 1, w->window_id, w->app_name, w->width,
+			           w->height);
 		}
 	}
 	if (q3ide_wm.cap_free_wlist)
@@ -142,8 +159,8 @@ void Q3IDE_WM_CmdAttach(void)
 
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
-	yaw = cl.snap.ps.viewangles[YAW] * (float)M_PI / 180.0f;
-	pitch = cl.snap.ps.viewangles[PITCH] * (float)M_PI / 180.0f;
+	yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+	pitch = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
 
 	/* Terminals — float in air, side-by-side, 300 units forward */
 	for (i = 0; i < term_n; i++) {
@@ -159,7 +176,7 @@ void Q3IDE_WM_CmdAttach(void)
 		int base = i % Q3IDE_NUM_OFFSETS;
 		for (t = 0; t < Q3IDE_NUM_OFFSETS; t++) {
 			int slot = (base + t) % Q3IDE_NUM_OFFSETS;
-			float yt = yaw + q3ide_yaw_offsets[slot] * (float)M_PI / 180.0f;
+			float yt = yaw + q3ide_yaw_offsets[slot] * (float) M_PI / 180.0f;
 			dir[0] = cosf(pitch) * cosf(yt);
 			dir[1] = cosf(pitch) * sinf(yt);
 			dir[2] = -sinf(pitch) * 0.2f;
@@ -168,15 +185,13 @@ void Q3IDE_WM_CmdAttach(void)
 			wall_pos[2] = eye[2];
 			if (Q3IDE_WM_Attach(brow_ids[i], wall_pos, wall_normal, ow, oh, qtrue)) {
 				attached++;
-				Com_Printf("q3ide: browser  [%d] on wall yaw+%.0f\n", i,
-				           q3ide_yaw_offsets[slot]);
+				Com_Printf("q3ide: browser  [%d] on wall yaw+%.0f\n", i, q3ide_yaw_offsets[slot]);
 				break;
 			}
 		}
 	}
 
-	Com_Printf("q3ide: attached %d windows (%d terminal, %d browser)\n", attached, term_n,
-	           brow_n);
+	Com_Printf("q3ide: attached %d windows (%d terminal, %d browser)\n", attached, term_n, brow_n);
 }
 
 /* ── CmdDesktop ─────────────────────────────────────────────────── */
@@ -204,8 +219,8 @@ void Q3IDE_WM_CmdDesktop(void)
 
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
-	yaw = cl.snap.ps.viewangles[YAW] * (float)M_PI / 180.0f;
-	pitch = cl.snap.ps.viewangles[PITCH] * (float)M_PI / 180.0f;
+	yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+	pitch = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
 	dir[0] = cosf(pitch) * cosf(yaw);
 	dir[1] = cosf(pitch) * sinf(yaw);
 	dir[2] = -sinf(pitch);
@@ -217,10 +232,10 @@ void Q3IDE_WM_CmdDesktop(void)
 		return;
 	}
 
-	for (i = 0; i < dlist.count && (int)i < Q3IDE_MAX_WIN; i++) {
+	for (i = 0; i < dlist.count && (int) i < Q3IDE_MAX_WIN; i++) {
 		const Q3ideDisplayInfo *d = &dlist.displays[i];
 		float oh = Q3IDE_WIN_INCHES;
-		float ow = oh * ((float)d->width / (float)d->height);
+		float ow = oh * ((float) d->width / (float) d->height);
 		vec3_t pos;
 
 		if (q3ide_wm.cap_start_disp(q3ide_wm.cap, d->display_id, Q3IDE_CAPTURE_FPS) != 0) {
@@ -229,13 +244,11 @@ void Q3IDE_WM_CmdDesktop(void)
 		}
 
 		VectorCopy(wall_pos, pos);
-		pos[2] = eye[2] + (float)i * (oh + 8.0f) -
-		         (float)(dlist.count - 1) * (oh + 8.0f) * 0.5f;
+		pos[2] = eye[2] + (float) i * (oh + 8.0f) - (float) (dlist.count - 1) * (oh + 8.0f) * 0.5f;
 
 		if (Q3IDE_WM_Attach(d->display_id, pos, wall_normal, ow, oh, qfalse)) {
 			attached++;
-			Com_Printf("q3ide: display %u (%ux%u) %.0fx%.0f\n", d->display_id, d->width,
-			           d->height, ow, oh);
+			Com_Printf("q3ide: display %u (%ux%u) %.0fx%.0f\n", d->display_id, d->width, d->height, ow, oh);
 		}
 	}
 

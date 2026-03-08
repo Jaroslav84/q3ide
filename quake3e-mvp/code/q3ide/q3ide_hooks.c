@@ -48,9 +48,12 @@ static void Q3IDE_Cmd_f(void)
 		Q3IDE_WM_CmdList();
 	else if (!Q_stricmp(sub, "attach"))
 		Q3IDE_WM_CmdAttach();
-	else if (!Q_stricmp(sub, "detach"))
-		Q3IDE_WM_CmdDetachAll();
-	else if (!Q_stricmp(sub, "desktop"))
+	else if (!Q_stricmp(sub, "detach")) {
+		if (Cmd_Argc() >= 3)
+			Q3IDE_WM_DetachById((unsigned int) atoi(Cmd_Argv(2)));
+		else
+			Q3IDE_WM_CmdDetachAll();
+	} else if (!Q_stricmp(sub, "desktop"))
 		Q3IDE_WM_CmdDesktop();
 	else if (!Q_stricmp(sub, "status"))
 		Q3IDE_WM_CmdStatus();
@@ -78,8 +81,7 @@ static void q3ide_shoot_frame(void)
 	if (!attacking || q3ide_state.last_attack) {
 		q3ide_state.last_attack = attacking;
 		/* Expire stale selection */
-		if (q3ide_state.selected_win >= 0 &&
-		    Sys_Milliseconds() - q3ide_state.select_time >= Q3IDE_REPOSITION_MS) {
+		if (q3ide_state.selected_win >= 0 && Sys_Milliseconds() - q3ide_state.select_time >= Q3IDE_REPOSITION_MS) {
 			Com_Printf("q3ide: selection expired\n");
 			q3ide_state.selected_win = -1;
 		}
@@ -89,8 +91,8 @@ static void q3ide_shoot_frame(void)
 
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
-	p = cl.snap.ps.viewangles[PITCH] * (float)M_PI / 180.0f;
-	y = cl.snap.ps.viewangles[YAW] * (float)M_PI / 180.0f;
+	p = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
+	y = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
 	fwd[0] = cosf(p) * cosf(y);
 	fwd[1] = cosf(p) * sinf(y);
 	fwd[2] = -sinf(p);
@@ -103,15 +105,14 @@ static void q3ide_shoot_frame(void)
 		q3ide_state.select_time = Sys_Milliseconds();
 		Com_Printf("q3ide: selected [%d] -> shoot surface to move (5s)\n", hit);
 		Cbuf_AddText("give ammo\n");
-	} else if (q3ide_state.selected_win >= 0 &&
-	           Sys_Milliseconds() - q3ide_state.select_time < Q3IDE_REPOSITION_MS) {
+	} else if (q3ide_state.selected_win >= 0 && Sys_Milliseconds() - q3ide_state.select_time < Q3IDE_REPOSITION_MS) {
 		/* Selection active, shot missed windows → move to hit surface */
 		vec3_t wall_pos, wall_normal;
 		if (Q3IDE_WM_TraceWall(eye, fwd, wall_pos, wall_normal)) {
 			wall_pos[2] = eye[2]; /* keep at eye height */
 			Q3IDE_WM_MoveWindow(q3ide_state.selected_win, wall_pos, wall_normal);
-			Com_Printf("q3ide: moved [%d] to (%.0f,%.0f,%.0f)\n", q3ide_state.selected_win,
-			           wall_pos[0], wall_pos[1], wall_pos[2]);
+			Com_Printf("q3ide: moved [%d] to (%.0f,%.0f,%.0f)\n", q3ide_state.selected_win, wall_pos[0], wall_pos[1],
+			           wall_pos[2]);
 		} else {
 			/* No wall — move to floating position in front */
 			vec3_t float_pos, float_normal;
