@@ -16,7 +16,7 @@
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 
-#define Q3IDE_REPOSITION_MS 5000   /* ms to shoot destination after selecting */
+#define Q3IDE_REPOSITION_MS 5000 /* ms to shoot destination after selecting */
 
 /* ============================================================
  *  State
@@ -25,11 +25,11 @@
 static struct {
 	qboolean initialized;
 	qboolean autoexec_done;
-	int      autoexec_delay;
+	int autoexec_delay;
 	/* shoot-to-place */
-	int      selected_win;   /* wins[] index, -1 = none selected */
-	int      select_time;    /* Sys_Milliseconds() when selected */
-	int      last_attack;    /* previous frame BUTTON_ATTACK state */
+	int selected_win; /* wins[] index, -1 = none selected */
+	int select_time;  /* Sys_Milliseconds() when selected */
+	int last_attack;  /* previous frame BUTTON_ATTACK state */
 } q3ide_state;
 
 /* ============================================================
@@ -44,12 +44,18 @@ static void Q3IDE_Cmd_f(void)
 		return;
 	}
 	sub = Cmd_Argv(1);
-	if      (!Q_stricmp(sub, "list"))    Q3IDE_WM_CmdList();
-	else if (!Q_stricmp(sub, "attach"))  Q3IDE_WM_CmdAttach();
-	else if (!Q_stricmp(sub, "detach"))  Q3IDE_WM_CmdDetachAll();
-	else if (!Q_stricmp(sub, "desktop")) Q3IDE_WM_CmdDesktop();
-	else if (!Q_stricmp(sub, "status"))  Q3IDE_WM_CmdStatus();
-	else    Com_Printf("q3ide: unknown sub-command '%s'\n", sub);
+	if (!Q_stricmp(sub, "list"))
+		Q3IDE_WM_CmdList();
+	else if (!Q_stricmp(sub, "attach"))
+		Q3IDE_WM_CmdAttach();
+	else if (!Q_stricmp(sub, "detach"))
+		Q3IDE_WM_CmdDetachAll();
+	else if (!Q_stricmp(sub, "desktop"))
+		Q3IDE_WM_CmdDesktop();
+	else if (!Q_stricmp(sub, "status"))
+		Q3IDE_WM_CmdStatus();
+	else
+		Com_Printf("q3ide: unknown sub-command '%s'\n", sub);
 }
 
 /* ============================================================
@@ -62,9 +68,10 @@ static void q3ide_shoot_frame(void)
 	float p, y;
 	int buttons, attacking, hit;
 
-	if (cls.state != CA_ACTIVE) return;
+	if (cls.state != CA_ACTIVE)
+		return;
 
-	buttons   = cl.cmds[cl.cmdNumber & CMD_MASK].buttons;
+	buttons = cl.cmds[cl.cmdNumber & CMD_MASK].buttons;
 	attacking = buttons & BUTTON_ATTACK;
 
 	/* Only act on the leading edge of the attack button */
@@ -83,7 +90,7 @@ static void q3ide_shoot_frame(void)
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
 	p = cl.snap.ps.viewangles[PITCH] * (float)M_PI / 180.0f;
-	y = cl.snap.ps.viewangles[YAW]   * (float)M_PI / 180.0f;
+	y = cl.snap.ps.viewangles[YAW] * (float)M_PI / 180.0f;
 	fwd[0] = cosf(p) * cosf(y);
 	fwd[1] = cosf(p) * sinf(y);
 	fwd[2] = -sinf(p);
@@ -92,9 +99,9 @@ static void q3ide_shoot_frame(void)
 
 	if (hit >= 0) {
 		/* Shot hit a window → select it */
-		q3ide_state.selected_win  = hit;
-		q3ide_state.select_time   = Sys_Milliseconds();
-		Com_Printf("q3ide: selected [%d] — shoot surface to move (5s)\n", hit);
+		q3ide_state.selected_win = hit;
+		q3ide_state.select_time = Sys_Milliseconds();
+		Com_Printf("q3ide: selected [%d] -> shoot surface to move (5s)\n", hit);
 		Cbuf_AddText("give ammo\n");
 	} else if (q3ide_state.selected_win >= 0 &&
 	           Sys_Milliseconds() - q3ide_state.select_time < Q3IDE_REPOSITION_MS) {
@@ -103,9 +110,8 @@ static void q3ide_shoot_frame(void)
 		if (Q3IDE_WM_TraceWall(eye, fwd, wall_pos, wall_normal)) {
 			wall_pos[2] = eye[2]; /* keep at eye height */
 			Q3IDE_WM_MoveWindow(q3ide_state.selected_win, wall_pos, wall_normal);
-			Com_Printf("q3ide: moved [%d] to (%.0f,%.0f,%.0f)\n",
-				q3ide_state.selected_win,
-				wall_pos[0], wall_pos[1], wall_pos[2]);
+			Com_Printf("q3ide: moved [%d] to (%.0f,%.0f,%.0f)\n", q3ide_state.selected_win,
+			           wall_pos[0], wall_pos[1], wall_pos[2]);
 		} else {
 			/* No wall — move to floating position in front */
 			vec3_t float_pos, float_normal;
@@ -148,7 +154,8 @@ void Q3IDE_OnVidRestart(void)
 
 void Q3IDE_Frame(void)
 {
-	if (!q3ide_state.initialized) return;
+	if (!q3ide_state.initialized)
+		return;
 
 	/* Fire nextdemo after map settles (~60 frames) */
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
@@ -170,13 +177,15 @@ void Q3IDE_Frame(void)
 
 void Q3IDE_AddPolysToScene(void)
 {
-	if (!q3ide_state.initialized) return;
+	if (!q3ide_state.initialized)
+		return;
 	Q3IDE_WM_AddPolys();
 }
 
 void Q3IDE_Shutdown(void)
 {
-	if (!q3ide_state.initialized) return;
+	if (!q3ide_state.initialized)
+		return;
 	Q3IDE_WM_Shutdown();
 	Cmd_RemoveCommand("q3ide");
 	q3ide_state.initialized = qfalse;

@@ -29,13 +29,18 @@
  */
 static void q3ide_sorted_monitors(int n, int *sorted)
 {
-	int i, j, tmp;
-	for (i = 0; i < n; i++) sorted[i] = i;
+	int i, j;
+	for (i = 0; i < n; i++)
+		sorted[i] = i;
 	for (i = 0; i < n - 1; i++) {
 		for (j = i + 1; j < n; j++) {
 			int xi = Cvar_VariableIntegerValue(va("r_mmMonX%d", sorted[i]));
 			int xj = Cvar_VariableIntegerValue(va("r_mmMonX%d", sorted[j]));
-			if (xj < xi) { tmp = sorted[i]; sorted[i] = sorted[j]; sorted[j] = tmp; }
+			if (xj < xi) {
+				int tmp = sorted[i];
+				sorted[i] = sorted[j];
+				sorted[j] = tmp;
+			}
 		}
 	}
 }
@@ -62,9 +67,10 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		re.RenderScene(&icon);
 		return;
 	}
-	if (n > 16) n = 16;
+	if (n > 16)
+		n = 16;
 
-	angle  = Cvar_VariableValue("r_monitorAngle");
+	angle = Cvar_VariableValue("r_monitorAngle");
 	center = n / 2; /* middle monitor index in sorted order */
 
 	q3ide_sorted_monitors(n, sorted);
@@ -77,23 +83,22 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		int mon_h = Cvar_VariableIntegerValue(va("r_mmMonH%d", idx));
 		float yaw_offset = (float)(center - i) * angle;
 
-		view.x      = mon_x;
-		view.y      = 0;
-		view.width  = mon_w;
+		view.x = mon_x;
+		view.y = 0;
+		view.width = mon_w;
 		view.height = mon_h;
-		view.fov_x  = 90.0f;
-		view.fov_y  = 2.0f * RAD2DEG( atanf( tanf( DEG2RAD( 45.0f ) )
-		              * (float)mon_h / (float)mon_w ) );
+		view.fov_x = 90.0f;
+		view.fov_y =
+		    2.0f * RAD2DEG(atanf(tanf(DEG2RAD(45.0f)) * (float)mon_h / (float)mon_w));
 
 		/* Rotate view axis around Z by yaw_offset degrees */
 		if (yaw_offset != 0.0f) {
 			float rad = yaw_offset * (float)M_PI / 180.0f;
 			float c = cosf(rad), s = sinf(rad);
-			float ax, ay;
 			int a;
 			for (a = 0; a < 3; a++) {
-				ax = view.viewaxis[a][0];
-				ay = view.viewaxis[a][1];
+				float ax = view.viewaxis[a][0];
+				float ay = view.viewaxis[a][1];
 				view.viewaxis[a][0] = ax * c - ay * s;
 				view.viewaxis[a][1] = ax * s + ay * c;
 			}

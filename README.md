@@ -37,8 +37,8 @@ It's the beggining of something more with an awesome FPS engine behind it.
 | 0 | Vision, architecture, design language | 0 | ✅ Done |
 | 1 | **MVP — terminal on nearest wall at spawn** | 0 | ✅ Done |
 | 2 | **Multiple windows, floating panels** | 0 | ✅ Done |
-| 3 | Multi-window capture fix (unique windowID per SCStream) | 0 | ✅ Done |
-| 4 | Three-monitor support | 0 | 🔧 In Progress |
+| 3 | **Multi-window capture fix (unique windowID per SCStream)** | 0 | ✅ Done |
+| 4 | **Three-monitor support** | 0 | ✅ Done |
 | 5 | Window Entity data model & lifecycle management | 1 | — |
 | 6 | Interaction model — Pointer Mode, Keyboard Passthrough, dwell detection | 2 | — |
 | 7 | IOSurface zero-copy optimization | 3 | — |

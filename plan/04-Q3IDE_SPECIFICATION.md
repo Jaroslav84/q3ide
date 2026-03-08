@@ -123,7 +123,7 @@ mv spatial/focus.h spatial/window/
 
 Progressive implementation batches. Each batch ends with a testing checkpoint. **Order = implementation priority.** Ground-up: performance and stability first, features on top.
 
-### BATCH 0 — Foundation (CURRENT)
+### BATCH 0 — Foundation ✅ Done
 
 The capture pipeline and basic texture rendering. Getting pixels on walls.
 
@@ -135,13 +135,13 @@ The capture pipeline and basic texture rendering. Getting pixels on walls.
 | 0.4 | Wall placement (single window) | ✅ Done | Trace from spawn, place textured quad on nearest wall |
 | 0.5 | Console commands (`/q3ide_list`, `/q3ide_attach`, `/q3ide_detach`) | ✅ Done | Basic window management from Q3 console |
 | 0.6 | Multi-window capture (unique windowID per SCStream) | ✅ Done | Fix frame mixing bug — **cause:** matching windows by app name gives the same window to every SCStream. **Fix:** each SCStream must have its own `SCContentFilter(desktopIndependentWindow:)` created with the unique `CGWindowID` (not app name or bundle ID). Multiple windows of the same app (e.g., 3 iTerm2 windows) each have a distinct `CGWindowID`. Key by that, not by `owningApplication`. |
-| 0.7 | Three-monitor support | 🔧 In Progress | Q3e spans 3 monitors, wall textures render across all |
+| 0.7 | Three-monitor support | ✅ Done | Q3e spans 3 monitors, wall textures render across all |
 
 **🧪 TEST CHECKPOINT 0:** Multiple terminal windows from the same app display independently on walls. No frame mixing. Stable 60fps. No memory leaks. Clean dylib unload.
 
 ---
 
-### BATCH 1 — Window Entity & Multiple Windows
+### BATCH 1 — Window Entity & Multiple Windows (CURRENT)
 
 The Window data model, multiple simultaneous captures, basic lifecycle management.
 
