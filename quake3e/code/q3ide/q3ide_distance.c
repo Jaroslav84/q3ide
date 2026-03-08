@@ -20,6 +20,7 @@ void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz)
 	int i;
 	unsigned long long now_ms;
 	VectorSet(q3ide_player_pos, px, py, pz);
+	VectorSet(q3ide_wm.player_eye, px, py, pz);
 	now_ms = Sys_Milliseconds();
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];

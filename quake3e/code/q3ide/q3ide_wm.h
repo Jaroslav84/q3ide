@@ -57,6 +57,12 @@ void Q3IDE_WM_PollChanges(void);
 /* Called from Q3IDE_Frame with current player eye position */
 void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz);
 
+/* Standalone mirror portal (real Q3 recursive rendering, no capture needed) */
+void     Q3IDE_WM_PlaceMirror(vec3_t origin, vec3_t normal, float ww, float wh);
+void     Q3IDE_WM_ClearMirror(void);
+qboolean Q3IDE_WM_MirrorActive(void);
+void     Q3IDE_WM_GetMirrorOrigin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h);
+
 /* Update hover state for a specific window (called from interaction system) */
 void Q3IDE_WM_SetHover(int idx, float hover_t);
 

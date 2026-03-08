@@ -141,6 +141,7 @@ typedef struct {
 	q3ide_fn_poll_changes cap_poll_changes; /* optional: window open/close events */
 	q3ide_fn_free_changes cap_free_changes; /* optional */
 	Q3ideCapture *cap;
+	vec3_t player_eye;               /* eye position, set each frame by UpdatePlayerPos */
 	qboolean auto_attach;            /* true after "q3ide attach all" — auto-place new windows */
 	unsigned long long last_scan_ms; /* last time we polled for changes */
 	q3ide_win_t wins[Q3IDE_MAX_WIN];
@@ -148,8 +149,15 @@ typedef struct {
 	unsigned int slot_mask; /* bit N = scratch slot N is in use */
 	byte *fbuf;
 	int fbuf_size;
-	qhandle_t border_shader; /* *white for hover border strips */
-	qhandle_t portal_shader; /* teleporter energy glow for first mirror */
+	qhandle_t border_shader;  /* *white for hover border strips */
+	qhandle_t portal_shader;  /* teleporter energy glow for first mirror */
+	/* Standalone Q3 mirror portal (real recursive rendering, no capture) */
+	qboolean  mirror_active;
+	vec3_t    mirror_origin;
+	vec3_t    mirror_normal;
+	float     mirror_w, mirror_h;
+	qhandle_t mirror_shader;        /* q3ide/mirror — sort portal */
+	qhandle_t mirror_energy_shader; /* energy glow overlay */
 } q3ide_wm_t;
 
 extern q3ide_wm_t q3ide_wm;

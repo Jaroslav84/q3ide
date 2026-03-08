@@ -18,6 +18,7 @@
 #include "q3ide_interaction.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
+#include <math.h>
 
 #define Q3IDE_REPOSITION_MS 5000 /* ms to shoot destination after selecting */
 
@@ -36,7 +37,76 @@ static struct {
 	float last_yaw, last_pitch; /* for mouse delta calculation */
 	/* raw button state saved before BUTTON_ATTACK suppression */
 	int raw_buttons;
+	/* portal teleport */
+	int portal_cooldown; /* frames left after teleport, 0 = ready */
 } q3ide_state;
+
+/* ============================================================
+ *  Portal teleport
+ * ============================================================ */
+
+/*
+ * q3ide_portal_frame — proximity teleport for wins[0] when snapped.
+ *
+ * Fires setviewpos when the player steps within 48 units of the portal
+ * plane and is within the portal bounds. Destination set via cvars:
+ *   q3ide_tele_x/y/z/yaw  (defaults put you back in the open map area)
+ * 3-second cooldown prevents instant re-trigger on arrival.
+ */
+static void q3ide_portal_frame(void)
+{
+	vec3_t pos, diff, origin, normal;
+	float dist, lx, ly, hw, hh, nx, ny, len, ww, wh;
+	vec3_t right;
+	cvar_t *tx, *ty, *tz, *tyaw;
+	char cmd[128];
+
+	if (!Q3IDE_WM_MirrorActive() || cls.state != CA_ACTIVE)
+		return;
+
+	if (q3ide_state.portal_cooldown > 0) {
+		q3ide_state.portal_cooldown--;
+		return;
+	}
+
+	Q3IDE_WM_GetMirrorOrigin(origin, normal, &ww, &wh);
+
+	/* Player feet position */
+	VectorCopy(cl.snap.ps.origin, pos);
+	VectorSubtract(pos, origin, diff);
+	dist = DotProduct(diff, normal);
+
+	/* Compute lateral offset in portal plane */
+	nx = normal[0];
+	ny = normal[1];
+	len = sqrtf(nx * nx + ny * ny);
+	if (len > 0.01f) {
+		right[0] = -ny / len;
+		right[1] = nx / len;
+		right[2] = 0.0f;
+	} else {
+		right[0] = 1.0f;
+		right[1] = 0.0f;
+		right[2] = 0.0f;
+	}
+	lx = DotProduct(diff, right);
+	ly = diff[2]; /* up is always Z */
+
+	hw = ww * 0.5f;
+	hh = wh * 0.5f;
+
+	/* Trigger: player within 48 units in front of portal, inside bounds */
+	if (dist >= 0.0f && dist < 48.0f && fabsf(lx) < hw && fabsf(ly) < hh + 24.0f) {
+		tx = Cvar_Get("q3ide_tele_x", "-1152", 0);
+		ty = Cvar_Get("q3ide_tele_y", "800", 0);
+		tz = Cvar_Get("q3ide_tele_z", "16", 0);
+		tyaw = Cvar_Get("q3ide_tele_yaw", "270", 0);
+		Com_sprintf(cmd, sizeof(cmd), "setviewpos %.0f %.0f %.0f %.0f\n", tx->value, ty->value, tz->value, tyaw->value);
+		Cbuf_AddText(cmd);
+		q3ide_state.portal_cooldown = 180; /* 3s at 60fps */
+		Com_Printf("q3ide: portal teleport! dest=(%.0f,%.0f,%.0f)\n", tx->value, ty->value, tz->value);
+	}
+}
 
 /* ============================================================
  *  Console command dispatcher
@@ -207,7 +277,7 @@ void Q3IDE_Frame(void)
 	if (!q3ide_state.initialized)
 		return;
 
-	/* Fire nextdemo after map settles (~60 frames) */
+	/* Fire nextdemo + auto-place mirror after map settles (~60 frames) */
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
 		if (++q3ide_state.autoexec_delay > 60) {
 			cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
@@ -218,6 +288,36 @@ void Q3IDE_Frame(void)
 				Cvar_Set("nextdemo", "");
 			}
 			q3ide_state.autoexec_done = qtrue;
+
+			/* Auto-place mirror 250 units in front of player at spawn */
+			{
+				vec3_t eye, fwd_v, wall_pos, wall_normal;
+				float p, y;
+				VectorCopy(cl.snap.ps.origin, eye);
+				eye[2] += cl.snap.ps.viewheight;
+				p = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
+				y = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+				fwd_v[0] = cosf(p) * cosf(y);
+				fwd_v[1] = cosf(p) * sinf(y);
+				fwd_v[2] = -sinf(p);
+				if (Q3IDE_WM_TraceWall(eye, fwd_v, wall_pos, wall_normal)) {
+					/* Place on nearest wall in front */
+					Q3IDE_WM_PlaceMirror(wall_pos, wall_normal, 160.0f, 220.0f);
+					Com_Printf("q3ide: mirror placed on wall at (%.0f,%.0f,%.0f)\n",
+					           wall_pos[0], wall_pos[1], wall_pos[2]);
+				} else {
+					/* Float it 250 units forward */
+					wall_pos[0] = eye[0] + fwd_v[0] * 250.0f;
+					wall_pos[1] = eye[1] + fwd_v[1] * 250.0f;
+					wall_pos[2] = eye[2];
+					wall_normal[0] = -fwd_v[0];
+					wall_normal[1] = -fwd_v[1];
+					wall_normal[2] = 0.0f;
+					Q3IDE_WM_PlaceMirror(wall_pos, wall_normal, 160.0f, 220.0f);
+					Com_Printf("q3ide: mirror placed floating at (%.0f,%.0f,%.0f)\n",
+					           wall_pos[0], wall_pos[1], wall_pos[2]);
+				}
+			}
 		}
 	}
 
@@ -274,6 +374,8 @@ void Q3IDE_Frame(void)
 		/* Note: BUTTON_ATTACK suppression happens in CL_CreateNewCommands
 		 * (cl_input.c) via Q3IDE_ConsumesInput(), which runs before
 		 * CL_WritePacket. Clearing it here would be too late. */
+
+		q3ide_portal_frame();
 	}
 
 	Q3IDE_WM_PollFrames();

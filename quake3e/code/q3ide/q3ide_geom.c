@@ -93,8 +93,8 @@ void q3ide_add_poly(q3ide_win_t *win)
 		verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
 		verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
 		verts[i].modulate.rgba[0] = 255;
-		verts[i].modulate.rgba[1] = 255;
-		verts[i].modulate.rgba[2] = 255;
+		verts[i].modulate.rgba[1] = (byte) (255 - 80.0f * win->hover_t);
+		verts[i].modulate.rgba[2] = (byte) (255 - 80.0f * win->hover_t);
 		verts[i].modulate.rgba[3] = 255;
 	}
 	re.AddPolyToScene(win->shader, 4, verts, 1);
@@ -107,7 +107,7 @@ void q3ide_add_poly(q3ide_win_t *win)
 		verts[i].xyz[0] = win->origin[0] - right[0] * sx * hw + up[0] * sy * hh - win->normal[0];
 		verts[i].xyz[1] = win->origin[1] - right[1] * sx * hw + up[1] * sy * hh - win->normal[1];
 		verts[i].xyz[2] = win->origin[2] - right[2] * sx * hw + up[2] * sy * hh - win->normal[2];
-		verts[i].st[0] = (sx + 1.0f) * 0.5f;
+		verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
 		verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
 		verts[i].modulate.rgba[0] = 255;
 		verts[i].modulate.rgba[1] = 255;
@@ -115,38 +115,6 @@ void q3ide_add_poly(q3ide_win_t *win)
 		verts[i].modulate.rgba[3] = 255;
 	}
 	re.AddPolyToScene(win->shader, 4, verts, 1);
-
-	/* Hover border strips at same depth as front face */
-	if (win->hover_t > 0.0f && q3ide_wm.border_shader) {
-		float thick = Q3IDE_HOVER_BORDER_THICK;
-		byte br = (byte) (220.0f * win->hover_t);
-		/* (lx_lo, lx_hi, ly_lo, ly_hi) in local window space */
-		float strips[4][4] = {
-		    {-hw, hw, hh, hh + thick},                   /* top    */
-		    {-hw, hw, -hh - thick, -hh},                 /* bottom */
-		    {-hw - thick, -hw, -hh - thick, hh + thick}, /* left   */
-		    {hw, hw + thick, -hh - thick, hh + thick},   /* right  */
-		};
-		int s;
-		for (s = 0; s < 4; s++) {
-			float lx0 = strips[s][0], lx1 = strips[s][1];
-			float ly0 = strips[s][2], ly1 = strips[s][3];
-			const float qx[4] = {lx0, lx1, lx1, lx0};
-			const float qy[4] = {ly0, ly0, ly1, ly1};
-			for (i = 0; i < 4; i++) {
-				verts[i].xyz[0] = win->origin[0] + right[0] * qx[i] + up[0] * qy[i] + win->normal[0] * pop;
-				verts[i].xyz[1] = win->origin[1] + right[1] * qx[i] + up[1] * qy[i] + win->normal[1] * pop;
-				verts[i].xyz[2] = win->origin[2] + right[2] * qx[i] + up[2] * qy[i] + win->normal[2] * pop;
-				verts[i].st[0] = 0.5f;
-				verts[i].st[1] = 0.5f;
-				verts[i].modulate.rgba[0] = br;
-				verts[i].modulate.rgba[1] = 0;
-				verts[i].modulate.rgba[2] = 0;
-				verts[i].modulate.rgba[3] = 255;
-			}
-			re.AddPolyToScene(q3ide_wm.border_shader, 4, verts, 1);
-		}
-	}
 }
 
 /*
@@ -184,6 +152,15 @@ void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
 		verts[i].modulate.rgba[3] = 255;
 	}
 	re.AddPolyToScene(shader, 4, verts, 1);
+	/* Back face: reversed winding so energy is visible from behind the arch */
+	{
+		polyVert_t rv[4];
+		rv[0] = verts[3];
+		rv[1] = verts[2];
+		rv[2] = verts[1];
+		rv[3] = verts[0];
+		re.AddPolyToScene(shader, 4, rv, 1);
+	}
 }
 
 /*
@@ -249,6 +226,97 @@ void q3ide_add_blood_splat(q3ide_win_t *win)
 		drip[2] = win->hit_pos[2] + right[2] * drip_r[i] + up[2] * drip_u[i];
 		q3ide_splat_quad(drip, right, up, win->normal, 5.f, 5.f, 200, 10, 10, q3ide_wm.border_shader);
 	}
+}
+
+/*
+ * q3ide_clamp_window_size -- shrink world_w/world_h to fit within adjacent
+ * walls/ceiling/floor, leaving a 1.5-unit gap on each side.
+ * Aspect ratio is always preserved via uniform scaling.
+ */
+void q3ide_clamp_window_size(q3ide_win_t *win)
+{
+	vec3_t right, up, start, end;
+	trace_t tr;
+	static vec3_t mins = {0, 0, 0}, maxs = {0, 0, 0};
+	float orig_hw, orig_hh, hw, hh, lim, rw, rh, r;
+
+	q3ide_win_basis(win, right, up);
+
+	/* Capture original sizes before any modification */
+	orig_hw = hw = win->world_w * 0.5f;
+	orig_hh = hh = win->world_h * 0.5f;
+
+	/* Nudge start off the placement wall */
+	start[0] = win->origin[0] + win->normal[0] * 2.0f;
+	start[1] = win->origin[1] + win->normal[1] * 2.0f;
+	start[2] = win->origin[2] + win->normal[2] * 2.0f;
+
+	/* +right */
+	end[0] = start[0] + right[0] * hw;
+	end[1] = start[1] + right[1] * hw;
+	end[2] = start[2] + right[2] * hw;
+	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+	if (tr.fraction < 1.0f) {
+		lim = tr.fraction * hw - 1.5f;
+		if (lim < 1.5f)
+			lim = 1.5f;
+		if (lim < hw)
+			hw = lim;
+	}
+
+	/* -right */
+	end[0] = start[0] - right[0] * hw;
+	end[1] = start[1] - right[1] * hw;
+	end[2] = start[2] - right[2] * hw;
+	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+	if (tr.fraction < 1.0f) {
+		lim = tr.fraction * hw - 1.5f;
+		if (lim < 1.5f)
+			lim = 1.5f;
+		if (lim < hw)
+			hw = lim;
+	}
+
+	/* +up */
+	end[0] = start[0] + up[0] * hh;
+	end[1] = start[1] + up[1] * hh;
+	end[2] = start[2] + up[2] * hh;
+	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+	if (tr.fraction < 1.0f) {
+		lim = tr.fraction * hh - 1.5f;
+		if (lim < 1.5f)
+			lim = 1.5f;
+		if (lim < hh)
+			hh = lim;
+	}
+
+	/* -up */
+	end[0] = start[0] - up[0] * hh;
+	end[1] = start[1] - up[1] * hh;
+	end[2] = start[2] - up[2] * hh;
+	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+	if (tr.fraction < 1.0f) {
+		lim = tr.fraction * hh - 1.5f;
+		if (lim < 1.5f)
+			lim = 1.5f;
+		if (lim < hh)
+			hh = lim;
+	}
+
+	/* Uniform scale from original: preserve aspect ratio always */
+	rw = (orig_hw > 0.0f) ? (hw / orig_hw) : 1.0f;
+	rh = (orig_hh > 0.0f) ? (hh / orig_hh) : 1.0f;
+	r = (rw < rh) ? rw : rh;
+	if (r > 1.0f)
+		r = 1.0f;
+
+	win->world_w = orig_hw * 2.0f * r;
+	win->world_h = orig_hh * 2.0f * r;
+
+	if (win->world_w < 32.0f)
+		win->world_w = 32.0f;
+	if (win->world_h < 32.0f)
+		win->world_h = 32.0f;
 }
 
 int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)

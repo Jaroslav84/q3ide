@@ -483,9 +483,24 @@ impl CaptureBackend for SCKBackend {
 
         log::info!("capture: starting display={} {}x{}", display_id, w, h);
 
+        // Exclude Quake3e window so the captured desktop doesn't include the game itself.
+        let all_windows = content.windows();
+        let quake_wins: Vec<&SCWindow> = all_windows
+            .iter()
+            .filter(|win| {
+                win.owning_application()
+                    .map(|app| {
+                        let name = app.application_name().to_lowercase();
+                        name.contains("quake3") || name.contains("quake 3")
+                    })
+                    .unwrap_or(false)
+            })
+            .collect();
+        log::info!("capture: excluding {} quake window(s) from display={}", quake_wins.len(), display_id);
+
         let filter = SCContentFilter::create()
             .with_display(display)
-            .with_excluding_windows(&[])
+            .with_excluding_windows(&quake_wins)
             .build();
 
         let config = SCStreamConfiguration::new()

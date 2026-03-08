@@ -108,6 +108,9 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		/* Tell RE_RenderScene how many passes remain so it preserves entities. */
 		Cvar_Set("r_multiViewRemaining", va("%d", n - i - 1));
 		Q3IDE_WM_AddPolys();
+		/* Left monitor (sorted[0]): draw keybinding cheat sheet overlay */
+		if (i == 0)
+			Q3IDE_DrawLeftOverlay(&view);
 		re.RenderScene(&view);
 	}
 }

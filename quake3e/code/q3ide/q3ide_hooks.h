@@ -46,4 +46,10 @@ void Q3IDE_SaveRawButtons(int buttons);
  */
 void Q3IDE_MultiMonitorRender(const void *refdef_ptr);
 
+/*
+ * Draw keybinding cheat sheet on the left monitor (called internally by
+ * Q3IDE_MultiMonitorRender — not used directly by engine files).
+ */
+void Q3IDE_DrawLeftOverlay(const void *refdef_ptr);
+
 #endif /* Q3IDE_HOOKS_H */
