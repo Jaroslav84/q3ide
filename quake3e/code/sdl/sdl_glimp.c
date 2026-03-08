@@ -307,6 +307,22 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 			SDL_GetDisplayBounds( i, &rect );
 			Cvar_Set( va( "r_mmMonX%d", i ), va( "%d", rect.x - x0 ) );
 		}
+		/* find center monitor (sort by x, pick middle) and expose as r_mmCenter* */
+		{
+			int sorted[32], si, sj, stmp, ci;
+			for ( si = 0; si < n; si++ ) sorted[si] = si;
+			for ( si = 0; si < n - 1; si++ ) {
+				for ( sj = si + 1; sj < n; sj++ ) {
+					int xi = Cvar_VariableIntegerValue( va( "r_mmMonX%d", sorted[si] ) );
+					int xj = Cvar_VariableIntegerValue( va( "r_mmMonX%d", sorted[sj] ) );
+					if ( xj < xi ) { stmp = sorted[si]; sorted[si] = sorted[sj]; sorted[sj] = stmp; }
+				}
+			}
+			ci = sorted[n / 2];
+			Cvar_Set( "r_mmCenterX", va( "%d", Cvar_VariableIntegerValue( va( "r_mmMonX%d", ci ) ) ) );
+			Cvar_Set( "r_mmCenterW", va( "%d", Cvar_VariableIntegerValue( va( "r_mmMonW%d", ci ) ) ) );
+			Cvar_Set( "r_mmCenterH", va( "%d", Cvar_VariableIntegerValue( va( "r_mmMonH%d", ci ) ) ) );
+		}
 		x = x0;
 		y = 0;
 		config->vidWidth  = x1 - x0;

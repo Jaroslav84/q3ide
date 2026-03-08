@@ -174,14 +174,9 @@ if [ -z "$ENGINE_BIN" ] || [ ! -f "$ENGINE_BIN" ]; then
     exit 0
 fi
 
-# If --run not passed, ask
+# If --run not passed, just exit (non-interactive when called from API)
 if [ "$DO_RUN" = "0" ]; then
-    echo ""
-    read -p "Run? [Y/n] " answer
-    case "$answer" in
-        [nN]*) exit 0 ;;
-        *) DO_RUN=1 ;;
-    esac
+    exit 0
 fi
 
 if [ "$DO_RUN" = "1" ]; then

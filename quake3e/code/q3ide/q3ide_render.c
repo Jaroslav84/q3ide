@@ -18,6 +18,7 @@
 
 #include "../qcommon/q_shared.h"
 #include "q3ide_hooks.h"
+#include "q3ide_wm.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -51,6 +52,16 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		re.RenderScene(fd);
 		return;
 	}
+
+	/* HUD icon scenes (health cross, armor, face portrait) use RDF_NOWORLDMODEL
+	 * with a tiny viewport positioned in cgame's 0..centerW space.
+	 * Shift x to center monitor and pass through as a single scene. */
+	if (fd->rdflags & RDF_NOWORLDMODEL) {
+		refdef_t icon = *fd;
+		icon.x += Cvar_VariableIntegerValue("r_mmCenterX");
+		re.RenderScene(&icon);
+		return;
+	}
 	if (n > 16) n = 16;
 
 	angle  = Cvar_VariableValue("r_monitorAngle");
@@ -70,6 +81,9 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		view.y      = 0;
 		view.width  = mon_w;
 		view.height = mon_h;
+		view.fov_x  = 90.0f;
+		view.fov_y  = 2.0f * RAD2DEG( atanf( tanf( DEG2RAD( 45.0f ) )
+		              * (float)mon_h / (float)mon_w ) );
 
 		/* Rotate view axis around Z by yaw_offset degrees */
 		if (yaw_offset != 0.0f) {
@@ -85,6 +99,9 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 			}
 		}
 
+		/* Tell RE_RenderScene how many passes remain so it preserves entities. */
+		Cvar_Set("r_multiViewRemaining", va("%d", n - i - 1));
+		Q3IDE_WM_AddPolys();
 		re.RenderScene(&view);
 	}
 }

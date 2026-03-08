@@ -632,14 +632,25 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 		return 0;
 	case CG_R_RENDERSCENE:
 #ifdef USE_Q3IDE
-		Q3IDE_AddPolysToScene();
-#endif
+		Q3IDE_MultiMonitorRender( VMA(1) );
+#else
 		re.RenderScene( VMA(1) );
+#endif
 		return 0;
 	case CG_R_SETCOLOR:
 		re.SetColor( VMA(1) );
 		return 0;
 	case CG_R_DRAWSTRETCHPIC:
+#ifdef USE_Q3IDE
+		if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+			/* Shift cgame 2D draws to the center monitor.
+			 * cgame sees vidWidth=centerW so its coords are 0..centerW;
+			 * adding centerX maps them onto the correct screen region. */
+			float q3ide_cx = (float)Cvar_VariableIntegerValue( "r_mmCenterX" );
+			re.DrawStretchPic( VMF(1) + q3ide_cx, VMF(2), VMF(3), VMF(4), VMF(5), VMF(6), VMF(7), VMF(8), args[9] );
+			return 0;
+		}
+#endif
 		re.DrawStretchPic( VMF(1), VMF(2), VMF(3), VMF(4), VMF(5), VMF(6), VMF(7), VMF(8), args[9] );
 		return 0;
 	case CG_R_MODELBOUNDS:
@@ -650,6 +661,16 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 	case CG_GETGLCONFIG:
 		VM_CHECKBOUNDS( cgvm, args[1], sizeof( glconfig_t ) );
 		CL_GetGlconfig( VMA(1) );
+#ifdef USE_Q3IDE
+		/* Tell cgame the center monitor width so its screenXBias/screenXScale
+		 * place HUD elements in 0..centerW space (shifted to screen by
+		 * the CG_R_DRAWSTRETCHPIC handler above). */
+		if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+			int q3ide_cw = Cvar_VariableIntegerValue( "r_mmCenterW" );
+			if ( q3ide_cw > 0 )
+				( (glconfig_t *)VMA(1) )->vidWidth = q3ide_cw;
+		}
+#endif
 		return 0;
 	case CG_GETGAMESTATE:
 		VM_CHECKBOUNDS( cgvm, args[1], sizeof( gameState_t ) );

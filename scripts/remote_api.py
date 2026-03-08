@@ -37,10 +37,13 @@ LOG_ALIASES = {
     "engine":  LOG_DIR / "engine.log",
     "multimon": LOG_DIR / "q3ide_multimon.log",
     "capture": LOG_DIR / "q3ide_capture.log",
+    "build":   LOG_DIR / "build.log",
 }
 
 _game_proc = None
 _game_start = None
+_build_proc = None
+_build_start = None
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -318,7 +321,9 @@ class Handler(BaseHTTPRequestHandler):
             _run_ws_session(self.connection, logs)  # blocks until client disconnects
             return
 
-        if path in ('/', '/status'):
+        if path == '/build_status':
+            self._handle_build_status()
+        elif path in ('/', '/status'):
             pid = _game_pid()
             self._send(200, {
                 'ok': True,
@@ -356,26 +361,41 @@ class Handler(BaseHTTPRequestHandler):
             self._send(404, {'error': 'not found'})
 
     def _handle_build(self, body):
+        global _build_proc, _build_start
+        # Kill any in-progress build
+        if _build_proc is not None and _build_proc.poll() is None:
+            _build_proc.terminate()
+            try:
+                _build_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                _build_proc.kill()
         args = body.get('args', [])
         cmd = ['sh', str(BUILD_SCRIPT)] + [str(a) for a in args]
-        try:
-            result = subprocess.run(cmd, capture_output=True, text=True,
-                                    timeout=600, cwd=str(ROOT))
-            self._send(200 if result.returncode == 0 else 500, {
-                'ok': result.returncode == 0,
-                'returncode': result.returncode,
-                'stdout': result.stdout,
-                'stderr': result.stderr,
-            })
-        except subprocess.TimeoutExpired:
-            self._send(504, {'error': 'build timed out (600s)'})
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        build_log = LOG_DIR / 'build.log'
+        log_fh = open(build_log, 'w')
+        _build_proc = subprocess.Popen(cmd, stdout=log_fh, stderr=subprocess.STDOUT,
+                                       cwd=str(ROOT))
+        _build_start = time.time()
+        self._send(200, {'ok': True, 'building': True, 'log': 'build'})
+
+    def _handle_build_status(self):
+        global _build_proc
+        if _build_proc is None:
+            self._send(200, {'building': False, 'returncode': None})
+            return
+        rc = _build_proc.poll()
+        if rc is None:
+            self._send(200, {'building': True, 'elapsed_s': int(time.time() - (_build_start or time.time()))})
+        else:
+            self._send(200, {'building': False, 'ok': rc == 0, 'returncode': rc})
 
     def _handle_run(self, body):
         global _game_proc, _game_start
         if _game_running():
             _kill_game()
             time.sleep(1)
-        args = body.get('args', [])
+        args = body.get('args', ['--level', '0', '--execute', 'q3ide attach all'])
         cmd = ['sh', str(BUILD_SCRIPT), '--run'] + [str(a) for a in args]
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         engine_log = LOG_DIR / 'engine.log'

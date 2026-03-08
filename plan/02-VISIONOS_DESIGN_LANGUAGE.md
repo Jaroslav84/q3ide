@@ -4,7 +4,7 @@
 
 This document defines the visual design system for Q3IDE. All naming, terminology, and design patterns follow Apple VisionOS Human Interface Guidelines, translated to a Quake III Arena FPS context.
 
-**Source of truth:** IDE_VISION.md is the full feature spec. This document covers visual design, interaction design, and design tokens only.
+**Source of truth:** ./plan/04-Q3IDE_SPECIFICATION.md is the full feature spec. This document covers visual design, interaction design, and design tokens only.
 
 ---
 
@@ -20,7 +20,7 @@ The basic 2D container.
 - Can be repositioned freely in the Space by the player
 - Multiple Windows can coexist side by side
 
-**Q3IDE:** Each captured desktop window (terminal, VSCode, browser) is a visionOS-style Window. Q3IDE defines seven presentation styles: Anchored Window, Floating Window, Window Group, Billboard, Ornament, Portal, and Widget. See IDE_VISION.md for full definitions.
+**Q3IDE:** Each captured desktop window (terminal, VSCode, browser) is a visionOS-style Window. Q3IDE defines seven presentation styles: Anchored Window, Floating Window, Window Group, Billboard, Ornament, Portal, and Widget. See ./plan/04-Q3IDE_SPECIFICATION.md for full definitions.
 
 ### Volume
 A bounded 3D container — like a fishbowl you can look at from any angle.
@@ -146,7 +146,7 @@ A Window that shows a live view into another Space — and doubles as a teleport
 
 **Three types:** Space Portal (between Spaces), Player Portal (visit coworker), File Portal (import → destination).
 
-**Not in visionOS:** Portals are a Q3IDE-original concept combining visionOS's "portal to another world" idea with Quake's teleporter pads. See IDE_VISION.md for full Portal spec.
+**Not in visionOS:** Portals are a Q3IDE-original concept combining visionOS's "portal to another world" idea with Quake's teleporter pads. See ./plan/04-Q3IDE_SPECIFICATION.md for full Portal spec.
 
 ### Widget
 A persistent miniature view-only display on the HUD.

@@ -1,4 +1,4 @@
-# Q3IDE — IDE Vision
+# Q3IDE — Q3IDE Specification
 
 ---
 
@@ -20,27 +20,24 @@
 9. **After completing a batch,** verify against its 🧪 TEST CHECKPOINT before moving on.
 10. **Commit after each feature** with a descriptive message. Commit after completing the full batch.
 
-### Agent setup (do this FIRST if `.claude/agents/` doesn't exist):
+### Agent setup (do this FIRST if these agents below doesn't exist):
 
-This project uses **custom agents** to enforce architecture boundaries. Before writing any code, create `.claude/agents/` with five specialist agents. Each agent is scoped to one layer and must NEVER touch files outside its scope.
+This project uses **custom agents** to enforce architecture boundaries. Before writing any code, create `./.agents/agents/` with five specialist agents. Each agent is scoped to one layer and must NEVER touch files outside its scope.
 
-```bash
-mkdir -p .claude/agents
-```
 
 Create these agent files:
 
-**`.claude/agents/engine-adapter.md`** — Only touches `engine/quake3e/`, `engine/adapter.h`, and `quake3e/code/q3ide/`. Keeps the adapter minimal and swappable. Never modifies core Quake3e files outside `quake3e/code/q3ide/`.
+**`./.agents/agents/engine-adapter.md`** — Only touches `engine/quake3e/`, `engine/adapter.h`, and `quake3e/code/q3ide/`. Keeps the adapter minimal and swappable. Never modifies core Quake3e files outside `quake3e/code/q3ide/`.
 
-**`.claude/agents/capture-rust.md`** — Only touches `capture/` and `q3ide_capture.h`. Pure Rust. Exposes only C-ABI functions. Never imports engine or spatial headers.
+**`./.agents/agents/capture-rust.md`** — Only touches `capture/` and `q3ide_capture.h`. Pure Rust. Exposes only C-ABI functions. Never imports engine or spatial headers.
 
-**`.claude/agents/spatial-c.md`** — Only touches `spatial/` (all subdirectories). Engine-agnostic. Talks to engine only through `engine/adapter.h`. Talks to capture only through `q3ide_capture.h`. Uses VisionOS terminology.
+**`./.agents/agents/spatial-c.md`** — Only touches `spatial/` (all subdirectories). Engine-agnostic. Talks to engine only through `engine/adapter.h`. Talks to capture only through `q3ide_capture.h`. Uses VisionOS terminology.
 
-**`.claude/agents/daemon-rust.md`** — Only touches `daemon/`. Separate Rust process. Communicates with Q3IDE through `.q3ide/uml_cache.json` + IPC. Never linked into the engine.
+**`./.agents/agents/daemon-rust.md`** — Only touches `daemon/`. Separate Rust process. Communicates with Q3IDE through `.q3ide/uml_cache.json` + IPC. Never linked into the engine.
 
-**`.claude/agents/reviewer.md`** — Reviews code against architecture rules: boundary violations, file length (200 sweetspot, 400 max), core Quake changes, VisionOS terminology, feature completeness against this spec, test checkpoint readiness.
+**`./.agents/agents/reviewer.md`** — Reviews code against architecture rules: boundary violations, file length (200 sweetspot, 400 max), core Quake changes, VisionOS terminology, feature completeness against this spec, test checkpoint readiness.
 
-Each agent file should contain: the agent's name/description in YAML frontmatter, its exact file scope, its rules, and what it must NOT touch. See `ORCHESTRATION.md` for the full agent file templates.
+Each agent file should contain: the agent's name/description in YAML frontmatter, its exact file scope, its rules, and what it must NOT touch. See `./plan/03-Q3IDE_ORCHESTRATION.md` for the full agent file templates.
 
 ### Delegation rules (how to use agents and subagents):
 
@@ -108,7 +105,7 @@ mv spatial/focus.h spatial/window/
 ### Batch workflow:
 
 ```
-1. Read IDE_VISION.md → identify all features in the assigned batch
+1. Read ./plan/04-Q3IDE_SPECIFICATION.md → identify all features in the assigned batch
 2. Plan implementation order (dependencies first)
 3. Identify which custom agent handles which files
 4. Implement features (parallel subagents where features are independent)
@@ -551,18 +548,18 @@ Full Q3IDE compiled to WebAssembly via Emscripten. Play in the browser.
 q3ide/
 ├── README.md
 ├── LICENSE
-├── VISION.md                          # Original vision / pitch document
-├── IDE_VISION.md                      # This file — full feature spec + tracker
+├── plan/00-VISION.md                  # Original vision / pitch document
+├── plan/04-Q3IDE_SPECIFICATION.md     # This file — full feature spec + tracker
 ├── CLAUDE.md                          # Claude project prompt
-├── ORCHESTRATION.md                   # Agent orchestration setup (custom agents, subagents)
+├── plan/03-Q3IDE_ORCHESTRATION.md     # Agent orchestration setup (custom agents, subagents)
 │
-├── .claude/                           # Claude Code configuration
+├── ./agents/                           # Claude Code configuration
 │   └── agents/                        # Custom agent definitions (architecture-scoped)
 │       ├── engine-adapter.md          # Only touches engine/, quake3e/code/q3ide/
 │       ├── capture-rust.md            # Only touches capture/
 │       ├── spatial-c.md               # Only touches spatial/
 │       ├── daemon-rust.md             # Only touches daemon/
-│       └── reviewer.md               # Code review — reads everything, writes nothing
+│       └── reviewer.md                # Code review — reads everything, writes nothing
 ├── Q3IDE_PROMPT.md                    # LLM coding prompt
 ├── TODO.md
 │

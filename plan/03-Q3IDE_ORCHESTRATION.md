@@ -21,16 +21,16 @@ No more permission prompts. Docker is your sandbox. Git is your rollback.
 
 ### CLAUDE.md
 
-Your project root should have a `CLAUDE.md` that points to `IDE_VISION.md`:
+Your project root should have a `CLAUDE.md` that points to `./plan/04-Q3IDE_SPECIFICATION.md`:
 
 ```markdown
 # Q3IDE
 
-Read IDE_VISION.md for the full feature spec, architecture, and implementation rules.
+Read ./plan/04-Q3IDE_SPECIFICATION.md for the full feature spec, architecture, and implementation rules.
 
 ## Rules
 - 200 lines per file sweetspot. 400 max. Split if exceeded.
-- Never modify core Quake3e engine files unless absolutely necessary.
+- Never modify core Quake3e engine files unless absolutely necessary. Create files around them instead, adapters.
 - All Q3IDE code goes in spatial/, capture/, or daemon/.
 - spatial/ is engine-agnostic. It talks to the engine through engine/adapter.h only.
 - Commit after completing each feature with a descriptive message.
@@ -43,15 +43,12 @@ Read IDE_VISION.md for the full feature spec, architecture, and implementation r
 
 ### What the LLM must do (first task of any session)
 
-Before writing any feature code, the LLM must create the `.claude/agents/` directory and populate it with four specialized agents matching the architecture boundaries. **This is the first task. Do this before touching any code.**
+Before writing any feature code, the LLM must create the `./.agents/agents/` directory and populate it with four specialized agents matching the architecture boundaries. **This is the first task. Do this before touching any code.**
 
-```bash
-mkdir -p .claude/agents
-```
 
 Then create these four files:
 
-### `.claude/agents/engine-adapter.md`
+### `./.agents/agents/engine-adapter.md`
 
 ```markdown
 ---
@@ -73,7 +70,7 @@ You are responsible for the engine adapter layer in Q3IDE.
 - Keep the adapter interface minimal and abstract.
 - The adapter must be swappable — a VR engine or Unreal could replace Quake3e in the future.
 - 200 lines per file. 400 max.
-- Read IDE_VISION.md for the full architecture before making changes.
+- Read ./plan/04-Q3IDE_SPECIFICATION.md for the full architecture before making changes.
 
 ## You do NOT touch
 - `spatial/` — engine-agnostic, not your concern
@@ -81,7 +78,7 @@ You are responsible for the engine adapter layer in Q3IDE.
 - `daemon/` — UML pre-processor, not your concern
 ```
 
-### `.claude/agents/capture-rust.md`
+### `./.agents/agents/capture-rust.md`
 
 ```markdown
 ---
@@ -104,7 +101,7 @@ You are responsible for the Rust capture layer in Q3IDE.
 - NEVER import anything from `spatial/`.
 - Each SCStream must use `SCContentFilter(desktopIndependentWindow:)` with a unique CGWindowID.
 - 200 lines per file. 400 max.
-- Read IDE_VISION.md for the full capture architecture.
+- Read ./plan/04-Q3IDE_SPECIFICATION.md for the full capture architecture.
 
 ## You do NOT touch
 - `spatial/` — C layer, not your concern
@@ -112,7 +109,7 @@ You are responsible for the Rust capture layer in Q3IDE.
 - `daemon/` — UML pre-processor, not your concern
 ```
 
-### `.claude/agents/spatial-c.md`
+### `./.agents/agents/spatial-c.md`
 
 ```markdown
 ---
@@ -133,7 +130,7 @@ You are responsible for the engine-agnostic spatial layer — the core of Q3IDE.
 - Talk to capture ONLY through `q3ide_capture.h`.
 - Use VisionOS terminology: Window, Ornament, Space, Portal, Focus, Hover Effect.
 - 200 lines per file. 400 max.
-- Read IDE_VISION.md for feature specs, edge cases, and design decisions.
+- Read ./plan/04-Q3IDE_SPECIFICATION.md for feature specs, edge cases, and design decisions.
 
 ## You do NOT touch
 - `engine/` — engine adapter, not your concern
@@ -141,7 +138,7 @@ You are responsible for the engine-agnostic spatial layer — the core of Q3IDE.
 - `quake3e/` — engine source, definitely not your concern
 ```
 
-### `.claude/agents/daemon-rust.md`
+### `./.agents/agents/daemon-rust.md`
 
 ```markdown
 ---
@@ -165,7 +162,7 @@ You are responsible for the background daemon that parses code and builds UML da
 - On file change: re-parse only the changed file + files that reference it.
 - Parser plugins: input = file path → output = classes, methods, imports, relationships.
 - 200 lines per file. 400 max.
-- Read the UML Navigator section in IDE_VISION.md.
+- Read the UML Navigator section in ./plan/04-Q3IDE_SPECIFICATION.md.
 
 ## You do NOT touch
 - `spatial/` — the spatial layer reads the cache, that's it
@@ -173,12 +170,12 @@ You are responsible for the background daemon that parses code and builds UML da
 - `capture/` — no connection to capture
 ```
 
-### `.claude/agents/reviewer.md`
+### `./.agents/agents/reviewer.md`
 
 ```markdown
 ---
 name: reviewer
-description: Code reviewer that checks work against IDE_VISION.md rules and architecture boundaries.
+description: Code reviewer that checks work against ./plan/04-Q3IDE_SPECIFICATION.md rules and architecture boundaries.
 ---
 
 # Q3IDE Code Reviewer
@@ -190,7 +187,7 @@ You review code changes against the project's architecture rules.
 2. **File length** — any file over 400 lines? Flag it for splitting.
 3. **Core Quake changes** — were files outside quake3e/code/q3ide/ modified? Why?
 4. **VisionOS terminology** — are variables named correctly? Window not panel, Ornament not toolbar?
-5. **Feature completeness** — does the implementation match the IDE_VISION.md spec for this batch?
+5. **Feature completeness** — does the implementation match the ./plan/04-Q3IDE_SPECIFICATION.md spec for this batch?
 6. **Test checkpoint** — can the batch's test checkpoint pass?
 7. **Performance** — will this degrade FPS? Unnecessary allocations? Hot path concerns?
 
@@ -202,7 +199,7 @@ Read the git diff, check each file against the rules above, and report violation
 
 ### 📋 Manual steps for YOU (Istvan)
 
-1. **Verify agents exist** after the LLM creates them: `ls .claude/agents/`
+1. **Verify agents exist** after the LLM creates them: `ls ./.agents/agents/`
 2. **Customize agents** if you want — add project-specific notes, known gotchas, API patterns
 3. **Add new agents later** as the project grows (e.g., `quakeos-renderer.md` for Batch 15)
 4. **Commit the agents to git** — they're part of the project, not personal config
@@ -225,7 +222,7 @@ export ANTHROPIC_MODEL="claude-sonnet-4-6"
 export CLAUDE_CODE_SUBAGENT_MODEL="claude-haiku-4-5-20251001"
 ```
 
-**Thinking models:** Don't use extended thinking for routine work. It burns tokens for minimal gain on well-scoped tasks. The custom agents in `.claude/agents/` provide the context that thinking would otherwise figure out.
+**Thinking models:** Don't use extended thinking for routine work. It burns tokens for minimal gain on well-scoped tasks. The custom agents in `./.agents/agents/` provide the context that thinking would otherwise figure out.
 
 **When to use Sonnet directly:** For complex architectural decisions, multi-file refactors, or anything where the agent needs to reason about the whole system. When you see Claude Code struggling with Haiku on a subtask, tell it: "Use Sonnet for this one."
 
@@ -246,7 +243,7 @@ Add this to your `CLAUDE.md`:
 ## Delegation Rules
 
 When implementing a batch:
-1. Use the custom agents in .claude/agents/ for work in their scope.
+1. Use the custom agents in ./.agents/agents/ for work in their scope.
 2. Spawn subagents for independent parallel tasks (e.g., "write tests" while "implementing feature").
 3. Subagents should be scoped to a single file or small group of related files.
 4. Never let a subagent modify files outside its agent's scope.
@@ -258,10 +255,10 @@ When implementing a batch:
 You tell Claude Code:
 
 ```
-Implement Batch 5 (Grapple Hook & Spatial Tools) from IDE_VISION.md.
+Implement Batch 5 (Grapple Hook & Spatial Tools) from ./plan/04-Q3IDE_SPECIFICATION.md.
 ```
 
-Claude Code (main session) reads IDE_VISION.md, plans the batch, then:
+Claude Code (main session) reads ./plan/04-Q3IDE_SPECIFICATION.md, plans the batch, then:
 
 1. Delegates `spatial/nav/grapple.h` + `grapple.c` to the **spatial-c** agent
 2. Spawns a subagent to implement `spatial/ui/minimap.h` + `minimap.c` in parallel
@@ -308,9 +305,9 @@ Here's the full orchestrated workflow for implementing a batch:
 1. Start Claude Code in Docker
    └── bypassPermissions mode (no interruptions)
 
-2. Tell it: "Implement Batch N from IDE_VISION.md"
+2. Tell it: "Implement Batch N from ./plan/04-Q3IDE_SPECIFICATION.md"
 
-3. Claude Code reads IDE_VISION.md
+3. Claude Code reads ./plan/04-Q3IDE_SPECIFICATION.md
    ├── Identifies all features in the batch
    ├── Plans implementation order (dependencies first)
    └── Identifies which custom agent handles which files
@@ -327,7 +324,7 @@ Here's the full orchestrated workflow for implementing a batch:
    └── Fixes any issues
 
 6. Test checkpoint
-   ├── Verify against IDE_VISION.md test checkpoint
+   ├── Verify against ./plan/04-Q3IDE_SPECIFICATION.md test checkpoint
    └── Run performance check (if this is a perf checkpoint batch)
 
 7. Commit
@@ -343,7 +340,7 @@ Here's the full orchestrated workflow for implementing a batch:
 
 - **One batch per session.** Don't try to do multiple batches in one Claude Code session. Context fills up. Start fresh for each batch.
 - **Commit before starting.** Always have a clean git state before telling Claude Code to start a batch. Easy rollback with `git reset --hard HEAD` if things go sideways.
-- **IDE_VISION.md is the source of truth.** If Claude Code asks a question that's answered in the vision doc, tell it to re-read the doc.
+- **./plan/04-Q3IDE_SPECIFICATION.md is the source of truth.** If Claude Code asks a question that's answered in the vision doc, tell it to re-read the doc.
 - **Logs matter.** Your Docker container is sandboxed — logs in `.q3ide/` are your only debugging window. Make sure Claude Code writes to them.
 - **Watch for scope creep.** If Claude Code starts "improving" things outside the current batch, stop it. Batch discipline is everything.
 

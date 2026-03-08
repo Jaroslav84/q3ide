@@ -1,6 +1,6 @@
 # Q3IDE — Rendering Optimization Ideas
 
-Ideas and techniques for future performance improvements. These are NOT yet in IDE_VISION.md and are NOT part of any batch. This is a brainstorm doc — pick from it when performance becomes a bottleneck.
+Ideas and techniques for future performance improvements. These are NOT yet in ./plan/04-Q3IDE_SPECIFICATION.md and are NOT part of any batch. This is a brainstorm doc — pick from it when performance becomes a bottleneck.
 
 ---
 

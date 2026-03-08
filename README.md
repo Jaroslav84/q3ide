@@ -64,7 +64,7 @@ It's the beggining of something more with an awesome FPS engine behind it.
 | 27 | Browser-ready WASM port via Emscripten | 22 | — |
 | VR | Swap engine adapter to VR Quake 3 fork | VR | — |
 
-See `/.VISION_IDE.md` for full roadmap.
+See [`plan/00-VISION.md`](./plan/00-VISION.md) for full roadmap.
 
 ---
 
@@ -187,10 +187,15 @@ q3ide/
 │
 ├── spatial/                # Engine-agnostic game logic
 │
-├── docs/
-│   ├── VISION.md           # Full project vision
-│   ├── ARCHITECTURE.md     # Technical architecture
-│   └── DESIGN_LANGUAGE.md  # VisionOS design reference
+├── plan/
+│   ├── 00-VISION.md                       # Full project vision
+│   ├── 01-Q3IDE_INITAL_PROMPT.md          # Initial project prompt / architecture
+│   ├── 02-VISIONOS_DESIGN_LANGUAGE.md     # VisionOS design reference
+│   ├── 03-Q3IDE_ORCHESTRATION.md          # Agent orchestration setup
+│   ├── 04-Q3IDE_SPECIFICATION.md          # Full feature spec + tracker
+│   ├── 05-Q3IDE_PERFORMANCE_OPTIMALIZATION.md  # Perf brainstorm
+│   ├── 06-Q3_CONF.md                      # Quake 3 config presets
+│   └── 07-Q3_HD_UPGRADE_PROCEDURE.md      # HD texture upgrade guide
 │
 └── README.md
 ```
