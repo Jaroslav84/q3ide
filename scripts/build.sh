@@ -15,6 +15,7 @@ DO_RUN=0
 DO_CLEAN=0
 DO_API=0
 DO_ENGINE_ONLY=0
+MUSIC_ON=false
 LEVEL=""
 EXECUTE=""
 BOTS=""
@@ -25,10 +26,17 @@ while [[ $# -gt 0 ]]; do
         --clean)        DO_CLEAN=1; shift ;;
         --api)          DO_API=1; shift ;;
         --engine-only)  DO_ENGINE_ONLY=1; shift ;;
+        --music)
+            if [[ "${2:-}" =~ ^(0|1|true|false)$ ]]; then
+                [[ "$2" == "1" || "$2" == "true" ]] && MUSIC_ON=true || MUSIC_ON=false
+                shift 2
+            else
+                MUSIC_ON=true; shift
+            fi ;;
         --level)        LEVEL="$2"; shift 2 ;;
         --execute)      EXECUTE="$2"; shift 2 ;;
         --bots)         BOTS="$2"; shift 2 ;;
-        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--run] [--api] [--engine-only] [--level <map>] [--execute '<cmd>'] [--bots <n>]"; exit 1 ;;
+        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--run] [--api] [--engine-only] [--music] [--level <map>] [--execute '<cmd>'] [--bots <n>]"; exit 1 ;;
     esac
 done
 
@@ -226,8 +234,8 @@ if [ "$DO_RUN" = "1" ]; then
         ENGINE_ARGS="$ENGINE_ARGS +set bot_minplayers $BOT_MIN"
     fi
 
-    # Music: random track on q3dm0 only, picked fresh each launch
-    if [ "$LEVEL" = "q3dm0" ]; then
+    # Music: random track on q3dm0 only, picked fresh each launch (requires --music)
+    if [ "$MUSIC_ON" = "true" ] && [ "$LEVEL" = "q3dm0" ]; then
         q3_tracks=(
             "music/fla22k_01_intro.wav music/fla22k_01_loop.wav"
             "music/fla22k_02.wav"
@@ -243,7 +251,7 @@ if [ "$DO_RUN" = "1" ]; then
             "music/sonic6.wav"
         )
         q3_track="${q3_tracks[$RANDOM % ${#q3_tracks[@]}]}"
-        Q3_MUSIC_CMD="music $q3_track"
+        Q3_MUSIC_CMD="s_musicvolume 0.5; music $q3_track"
         if [ -n "$EXECUTE" ]; then
             EXECUTE="$EXECUTE; $Q3_MUSIC_CMD"
         else

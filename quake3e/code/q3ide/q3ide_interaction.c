@@ -34,15 +34,6 @@ static void q3ide_do_click(unsigned int wid, float uv_x, float uv_y)
 		Com_Printf("q3ide: click wid=%u uv=(%.2f,%.2f) — inject unavailable\n", wid, uv_x, uv_y);
 }
 
-static void q3ide_cosmetic_fire(void)
-{
-	/* Fire weapon animation without consuming ammo */
-	Cbuf_AddText("give ammo\n");
-	/* The actual weapon will fire via the attack button being pressed,
-	 * but Q3IDE_Interaction_ConsumesInput() should suppress damage.
-	 * For now: just refill ammo so weapon never dry-fires. */
-}
-
 /* Compute UV coords, distance, and 3D hit position for a window hit by crosshair ray */
 static int q3ide_crosshair_window(float *out_uv, float *out_dist, vec3_t out_hit_pos)
 {
@@ -137,11 +128,9 @@ void Q3IDE_Interaction_Init(void)
 	q3ide_interaction.pain_sfx[2] = S_RegisterSound("sound/player/Sarge/pain75_1.wav", qfalse);
 }
 
-void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean escape, float mouse_dx, float mouse_dy)
+void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean escape, qboolean lock_key, float mouse_dx,
+                             float mouse_dy)
 {
-	qboolean attack_start = attacking && !q3ide_interaction.prev_attacking;
-	q3ide_interaction.prev_attacking = attacking;
-
 	if (q3ide_interaction.mode == Q3IDE_MODE_FPS) {
 		int prev_win = q3ide_interaction.focused_win;
 		float uv[2], dist;
@@ -153,19 +142,6 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 			q3ide_interaction.focused_uv[1] = uv[1];
 			q3ide_interaction.focused_dist = dist;
 
-			/* Shot landed on a window — blood splat + pain sound */
-		/* DISABLED temporarily
-		if (attack_start) {
-			q3ide_win_t *win = &q3ide_wm.wins[q3ide_interaction.focused_win];
-			sfxHandle_t sfx = q3ide_interaction.pain_sfx[rand() % 3];
-			win->hit_time_ms = (unsigned long long) Sys_Milliseconds();
-			VectorCopy(q3ide_interaction.focused_hit_pos, win->hit_pos);
-			if (sfx)
-				S_StartSound(win->hit_pos, 0, CHAN_VOICE, sfx);
-		}
-		*/
-		(void) attack_start;
-
 			/* Continue dwell if same window; otherwise restart */
 			if (q3ide_interaction.focused_win != prev_win) {
 				q3ide_interaction.dwell_start_ms = (float) Sys_Milliseconds();
@@ -175,23 +151,23 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 				Com_DPrintf("q3ide: crosshair → win=%d dist=%.0f\n", q3ide_interaction.focused_win, dist);
 			}
 
-			/* Accumulate dwell time and update hover */
+			/* Accumulate dwell time -- hover highlight only, movement NOT blocked */
 			if (q3ide_interaction.dwell_start_ms >= 0.0f) {
 				float dwell_elapsed = (float) Sys_Milliseconds() - q3ide_interaction.dwell_start_ms;
 				q3ide_interaction.hover_t = dwell_elapsed / Q3IDE_DWELL_MS;
 				if (q3ide_interaction.hover_t > 1.0f)
 					q3ide_interaction.hover_t = 1.0f;
 				Q3IDE_WM_SetHover(q3ide_interaction.focused_win, q3ide_interaction.hover_t);
+			}
 
-				/* Auto-enter Pointer Mode: dwell complete + within 10m */
-				if (q3ide_interaction.hover_t >= 1.0f && q3ide_interaction.focused_dist <= Q3IDE_POINTER_MAX_DIST) {
-					q3ide_interaction.mode = Q3IDE_MODE_POINTER;
-					q3ide_interaction.pointer_uv[0] = q3ide_interaction.focused_uv[0];
-					q3ide_interaction.pointer_uv[1] = q3ide_interaction.focused_uv[1];
-					q3ide_interaction.dwell_start_ms = -1.0f; /* disarm dwell so ESC re-entry needs fresh dwell */
-					Com_Printf("q3ide: entered Pointer Mode win=%d\n", q3ide_interaction.focused_win);
-					return; /* skip FPS shoot-frame processing this frame */
-				}
+			/* L-key + fully highlighted window within range -> enter Pointer Mode */
+			if (lock_key && q3ide_interaction.focused_win >= 0 && q3ide_interaction.hover_t >= 1.0f &&
+			    q3ide_interaction.focused_dist <= Q3IDE_POINTER_MAX_DIST) {
+				q3ide_interaction.mode = Q3IDE_MODE_POINTER;
+				q3ide_interaction.pointer_uv[0] = q3ide_interaction.focused_uv[0];
+				q3ide_interaction.pointer_uv[1] = q3ide_interaction.focused_uv[1];
+				Com_Printf("q3ide: entered Pointer Mode win=%d (L-key)\n", q3ide_interaction.focused_win);
+				return;
 			}
 		} else {
 			/* No window under crosshair */
@@ -255,7 +231,6 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 		if (attacking) {
 			q3ide_do_click((unsigned int) q3ide_wm.wins[win_idx].capture_id, q3ide_interaction.pointer_uv[0],
 			               q3ide_interaction.pointer_uv[1]);
-			q3ide_cosmetic_fire();
 		}
 		if (use_key) {
 			q3ide_interaction.mode = Q3IDE_MODE_KEYBOARD;
@@ -272,8 +247,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 		}
 	} else if (q3ide_interaction.mode == Q3IDE_MODE_KEYBOARD) {
 		/* Key forwarding is handled per-event by Q3IDE_Interaction_OnKeyEvent. */
-		if (attacking)
-			q3ide_cosmetic_fire(); /* weapon fires normally; refill ammo */
+		(void) attacking;
 		if (escape) {
 			q3ide_interaction.mode = Q3IDE_MODE_FPS;
 			Com_Printf("q3ide: exited Keyboard Mode (ESC)\n");

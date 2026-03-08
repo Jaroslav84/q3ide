@@ -75,46 +75,50 @@ void q3ide_add_poly(q3ide_win_t *win)
 	vec3_t right, up;
 	float hw = win->world_w * 0.5f, hh = win->world_h * 0.5f;
 	int i;
-	float hover_lift = 0.0f;
+	/* Forward pop: 1 unit base + up to 4 units on full hover (toward player) */
+	float pop = 1.0f + win->hover_t * 4.0f;
 
 	if (!win->shader || !re.AddPolyToScene)
 		return;
 
 	q3ide_win_basis(win, right, up);
 
-	if (win->hover_t > 0.0f)
-		hover_lift = win->hover_t * 18.0f; /* pop window toward viewer */
-
-	/* Double-sided: Q3 backface-culls polys by winding order, so submit both faces.
-	 * Push 1 unit toward viewer so texture beats depth prepass under GL_LESS. */
-	{
-		int face;
-		for (face = 0; face < 2; face++) {
-			float sign = face ? -1.0f : 1.0f;
-			float fwd = hover_lift + 1.0f;
-			for (i = 0; i < 4; i++) {
-				float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
-				float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
-				verts[i].xyz[0] = win->origin[0] + sign * right[0] * sx * hw + up[0] * sy * hh + win->normal[0] * fwd;
-				verts[i].xyz[1] = win->origin[1] + sign * right[1] * sx * hw + up[1] * sy * hh + win->normal[1] * fwd;
-				verts[i].xyz[2] = win->origin[2] + sign * right[2] * sx * hw + up[2] * sy * hh + win->normal[2] * fwd;
-				verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
-				verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
-				verts[i].modulate.rgba[0] = 255;
-				verts[i].modulate.rgba[1] = 255;
-				verts[i].modulate.rgba[2] = 255;
-				verts[i].modulate.rgba[3] = 255;
-			}
-			re.AddPolyToScene(win->shader, 4, verts, 1);
-		}
+	/* Front face */
+	for (i = 0; i < 4; i++) {
+		float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
+		float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
+		verts[i].xyz[0] = win->origin[0] + right[0] * sx * hw + up[0] * sy * hh + win->normal[0] * pop;
+		verts[i].xyz[1] = win->origin[1] + right[1] * sx * hw + up[1] * sy * hh + win->normal[1] * pop;
+		verts[i].xyz[2] = win->origin[2] + right[2] * sx * hw + up[2] * sy * hh + win->normal[2] * pop;
+		verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
+		verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
+		verts[i].modulate.rgba[0] = 255;
+		verts[i].modulate.rgba[1] = 255;
+		verts[i].modulate.rgba[2] = 255;
+		verts[i].modulate.rgba[3] = 255;
 	}
+	re.AddPolyToScene(win->shader, 4, verts, 1);
 
-	/* 2-unit red border on the front face when hovering.
-	 * Push 1 unit forward past hover_lift so borders beat the depth prepass
-	 * (which wrote depth at hover_lift) under GL_LESS from the front. */
+	/* Back face: fixed 1 unit behind origin, reversed x-axis for correct winding,
+	 * mirrored UV x so content reads correctly when viewed from behind. */
+	for (i = 0; i < 4; i++) {
+		float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
+		float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
+		verts[i].xyz[0] = win->origin[0] - right[0] * sx * hw + up[0] * sy * hh - win->normal[0];
+		verts[i].xyz[1] = win->origin[1] - right[1] * sx * hw + up[1] * sy * hh - win->normal[1];
+		verts[i].xyz[2] = win->origin[2] - right[2] * sx * hw + up[2] * sy * hh - win->normal[2];
+		verts[i].st[0] = (sx + 1.0f) * 0.5f;
+		verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
+		verts[i].modulate.rgba[0] = 255;
+		verts[i].modulate.rgba[1] = 255;
+		verts[i].modulate.rgba[2] = 255;
+		verts[i].modulate.rgba[3] = 255;
+	}
+	re.AddPolyToScene(win->shader, 4, verts, 1);
+
+	/* Hover border strips at same depth as front face */
 	if (win->hover_t > 0.0f && q3ide_wm.border_shader) {
-		float thick = 2.0f;
-		float border_lift = hover_lift + 1.0f;
+		float thick = Q3IDE_HOVER_BORDER_THICK;
 		byte br = (byte) (220.0f * win->hover_t);
 		/* (lx_lo, lx_hi, ly_lo, ly_hi) in local window space */
 		float strips[4][4] = {
@@ -130,9 +134,9 @@ void q3ide_add_poly(q3ide_win_t *win)
 			const float qx[4] = {lx0, lx1, lx1, lx0};
 			const float qy[4] = {ly0, ly0, ly1, ly1};
 			for (i = 0; i < 4; i++) {
-				verts[i].xyz[0] = win->origin[0] + right[0] * qx[i] + up[0] * qy[i] + win->normal[0] * border_lift;
-				verts[i].xyz[1] = win->origin[1] + right[1] * qx[i] + up[1] * qy[i] + win->normal[1] * border_lift;
-				verts[i].xyz[2] = win->origin[2] + right[2] * qx[i] + up[2] * qy[i] + win->normal[2] * border_lift;
+				verts[i].xyz[0] = win->origin[0] + right[0] * qx[i] + up[0] * qy[i] + win->normal[0] * pop;
+				verts[i].xyz[1] = win->origin[1] + right[1] * qx[i] + up[1] * qy[i] + win->normal[1] * pop;
+				verts[i].xyz[2] = win->origin[2] + right[2] * qx[i] + up[2] * qy[i] + win->normal[2] * pop;
 				verts[i].st[0] = 0.5f;
 				verts[i].st[1] = 0.5f;
 				verts[i].modulate.rgba[0] = br;
@@ -146,12 +150,11 @@ void q3ide_add_poly(q3ide_win_t *win)
 }
 
 /*
- * q3ide_add_portal_frame — floating teleporter energy portal.
+ * q3ide_add_portal_frame — teleporter energy overlay.
  *
- * Placed 100 units out from the mirror wall INTO the room (win->normal
- * points toward the player, so +100 * normal puts it in open air in front
- * of the mirror). Portal faces back toward the wall so the player sees it
- * from the room side. No z-fighting — it's floating in free space.
+ * Placed 2 units in front of the window (along win->normal) to sit just
+ * above the texture quad without z-fighting. When wins[0] is snapped into
+ * the real q3dm0 teleporter arch the energy glow covers it exactly.
  */
 void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
 {
@@ -159,8 +162,7 @@ void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
 	vec3_t right, up;
 	float hw = win->world_w * 0.5f;
 	float hh = win->world_h * 0.5f;
-	/* Float 100 units out from wall into the room */
-	float out = 100.0f;
+	float fwd = 2.0f; /* in front of window — no z-fight */
 	int i;
 
 	if (!shader || !re.AddPolyToScene)
@@ -171,9 +173,9 @@ void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
 	for (i = 0; i < 4; i++) {
 		float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
 		float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
-		verts[i].xyz[0] = win->origin[0] + win->normal[0] * out + right[0] * sx * hw + up[0] * sy * hh;
-		verts[i].xyz[1] = win->origin[1] + win->normal[1] * out + right[1] * sx * hw + up[1] * sy * hh;
-		verts[i].xyz[2] = win->origin[2] + win->normal[2] * out + right[2] * sx * hw + up[2] * sy * hh;
+		verts[i].xyz[0] = win->origin[0] + win->normal[0] * fwd + right[0] * sx * hw + up[0] * sy * hh;
+		verts[i].xyz[1] = win->origin[1] + win->normal[1] * fwd + right[1] * sx * hw + up[1] * sy * hh;
+		verts[i].xyz[2] = win->origin[2] + win->normal[2] * fwd + right[2] * sx * hw + up[2] * sy * hh;
 		verts[i].st[0] = (sx + 1.0f) * 0.5f;
 		verts[i].st[1] = (sy + 1.0f) * 0.5f;
 		verts[i].modulate.rgba[0] = 255;

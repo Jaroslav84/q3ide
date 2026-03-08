@@ -30,7 +30,6 @@ typedef struct {
 	float dwell_start_ms;    /* when dwell began (-1 = not dwelling) */
 	float hover_t;           /* 0..1 eased hover progress */
 	float pointer_uv[2];     /* current pointer position in UV [0..1] */
-	qboolean prev_attacking; /* last frame's attack state (rising-edge detection) */
 	sfxHandle_t pain_sfx[3]; /* Sarge pain sounds for window hits */
 } q3ide_interaction_state_t;
 
@@ -43,14 +42,16 @@ void Q3IDE_Interaction_Init(void);
 
 /* Called each frame from Q3IDE_Frame.
  * attacking:   1 if BUTTON_ATTACK pressed this frame (leading edge).
- * use_key:     1 if USE key pressed (Enter → Keyboard mode).
+ * use_key:     1 if USE key pressed (Enter → Keyboard mode from Pointer).
  * escape:      1 if Escape pressed.
+ * lock_key:    1 if L key pressed — enters Pointer Mode when crosshair is on a highlighted window.
  * mouse_dx/dy: raw mouse delta this frame (used in Pointer Mode).
  *
- * Pointer Mode is entered automatically after dwelling on a window for
- * Q3IDE_DWELL_MS ms while within Q3IDE_POINTER_MAX_DIST units.
+ * Pointer Mode is entered by pressing lock_key while crosshair is on a window.
+ * Dwell (Q3IDE_DWELL_MS) only shows the hover highlight — does NOT block movement.
  */
-void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean escape, float mouse_dx, float mouse_dy);
+void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean escape, qboolean lock_key, float mouse_dx,
+                             float mouse_dy);
 
 /* Get current mode */
 q3ide_interaction_mode_t Q3IDE_Interaction_GetMode(void);

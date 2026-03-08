@@ -12,6 +12,7 @@
  */
 
 #include "q3ide_hooks.h"
+#include "q3ide_log.h"
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
 #include "q3ide_interaction.h"
@@ -178,17 +179,20 @@ void Q3IDE_Init(void)
 	memset(&q3ide_state, 0, sizeof(q3ide_state));
 	q3ide_state.selected_win = -1;
 
+	Q3IDE_Log_Init();
+
 	if (Q3IDE_WM_Init())
-		Com_Printf("q3ide: capture ready\n");
+		Q3IDE_LOGI("capture ready");
 	else
-		Com_Printf("q3ide: running without capture\n");
+		Q3IDE_LOGW("running without capture");
 
 	Q3IDE_Interaction_Init();
 
 	Cmd_AddCommand("q3ide", Q3IDE_Cmd_f);
 	q3ide_state.initialized = qtrue;
-	Com_Printf("q3ide: Interaction: dwell 150ms on window (<10m) → Pointer Mode (auto)\n");
+	Com_Printf("q3ide: Interaction: dwell 150ms on window → hover highlight (no movement lock)\n");
 	Com_Printf("q3ide: Key bindings:\n");
+	Com_Printf("  bind L \"set q3ide_lock 1\"            (lock into Pointer Mode on highlighted window)\n");
 	Com_Printf("  bind <key> \"set q3ide_use_key 1\"     (enter Keyboard mode from Pointer)\n");
 	Com_Printf("  bind <key> \"set q3ide_escape 1\"      (exit Pointer/Keyboard modes)\n");
 }
@@ -221,7 +225,7 @@ void Q3IDE_Frame(void)
 		vec3_t eye;
 		int buttons;
 		float cur_yaw, cur_pitch, mouse_dx, mouse_dy;
-		qboolean attacking, use_key, escape;
+		qboolean attacking, use_key, escape, lock_key;
 
 		/* Update player position for distance-based rendering */
 		VectorCopy(cl.snap.ps.origin, eye);
@@ -253,9 +257,12 @@ void Q3IDE_Frame(void)
 		escape = (Cvar_VariableIntegerValue("q3ide_escape") == 1);
 		if (escape)
 			Cvar_Set("q3ide_escape", "0");
+		lock_key = (Cvar_VariableIntegerValue("q3ide_lock") == 1);
+		if (lock_key)
+			Cvar_Set("q3ide_lock", "0");
 
 		/* Update interaction state */
-		Q3IDE_Interaction_Frame(attacking, use_key, escape, mouse_dx, mouse_dy);
+		Q3IDE_Interaction_Frame(attacking, use_key, escape, lock_key, mouse_dx, mouse_dy);
 
 		/* Only call shoot_frame if interaction doesn't consume input.
 		 * shoot_frame() manages last_attack internally.
@@ -305,5 +312,6 @@ void Q3IDE_Shutdown(void)
 	Q3IDE_WM_Shutdown();
 	Cmd_RemoveCommand("q3ide");
 	q3ide_state.initialized = qfalse;
-	Com_Printf("q3ide: shutdown\n");
+	Q3IDE_LOGI("shutdown");
+	Q3IDE_Log_Shutdown();
 }

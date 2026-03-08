@@ -8,6 +8,7 @@
  */
 
 #include "q3ide_wm.h"
+#include "q3ide_log.h"
 #include "q3ide_wm_internal.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -32,8 +33,6 @@ static qboolean q3ide_match(const char *app, const char **list)
 	return qfalse;
 }
 
-/* ── DetachById ─────────────────────────────────────────────────── */
-
 qboolean Q3IDE_WM_DetachById(unsigned int cid)
 {
 	int i;
@@ -53,24 +52,24 @@ qboolean Q3IDE_WM_DetachById(unsigned int cid)
 	return qfalse;
 }
 
-/* ── CmdAttach ──────────────────────────────────────────────────── */
+#define Q3IDE_SCAN_DIRS 12 /* directions to scan for walls (every 30°) */
 
-/* Number of directions to scan for unique walls (every 30 degrees) */
-#define Q3IDE_SCAN_DIRS 12
+typedef struct {
+	unsigned int id;
+	float aspect;
+	qboolean is_display;
+} q3ide_attach_item_t;
 
 void Q3IDE_WM_CmdAttach(void)
 {
-	Q3ideWindowList wlist;
-	unsigned int win_ids[Q3IDE_MAX_WIN];
-	float win_asp[Q3IDE_MAX_WIN];
-	int win_n = 0;
+	q3ide_attach_item_t items[Q3IDE_MAX_WIN];
+	int item_n = 0;
 	int i, j, attached = 0;
 	vec3_t eye, dir;
 	float yaw;
 
-	/* Wall discovery state */
 	vec3_t wall_pos[Q3IDE_SCAN_DIRS], wall_norm[Q3IDE_SCAN_DIRS];
-	int wall_win[Q3IDE_SCAN_DIRS][Q3IDE_MAX_WIN]; /* window indices per wall */
+	int wall_win[Q3IDE_SCAN_DIRS][Q3IDE_MAX_WIN];
 	int wall_wcnt[Q3IDE_SCAN_DIRS];
 	int n_walls = 0;
 
@@ -81,37 +80,57 @@ void Q3IDE_WM_CmdAttach(void)
 
 	Q3IDE_WM_CmdDetachAll();
 
-	wlist = q3ide_wm.cap_list_wins(q3ide_wm.cap);
-	if (!wlist.windows || !wlist.count) {
-		Com_Printf("q3ide: no windows found\n");
-		return;
-	}
-
-	/* Collect all terminal + browser windows */
-	for (i = 0; i < (int) wlist.count && win_n < Q3IDE_MAX_WIN; i++) {
-		const Q3ideWindowInfo *w = &wlist.windows[i];
-		qboolean dupe = qfalse;
-		if ((int) w->width < Q3IDE_MIN_WIN_W || (int) w->height < Q3IDE_MIN_WIN_H)
-			continue;
-		if (!q3ide_match(w->app_name, q3ide_terminal_apps) && !q3ide_match(w->app_name, q3ide_browser_apps))
-			continue;
-		for (j = 0; j < win_n; j++)
-			if (win_ids[j] == w->window_id) {
-				dupe = qtrue;
-				break;
+	/* Collect app windows (terminal + browser) */
+	{
+		Q3ideWindowList wlist = q3ide_wm.cap_list_wins(q3ide_wm.cap);
+		if (wlist.windows && wlist.count) {
+			for (i = 0; i < (int) wlist.count && item_n < Q3IDE_MAX_WIN; i++) {
+				const Q3ideWindowInfo *w = &wlist.windows[i];
+				qboolean dupe = qfalse;
+				if ((int) w->width < Q3IDE_MIN_WIN_W || (int) w->height < Q3IDE_MIN_WIN_H)
+					continue;
+				if (!q3ide_match(w->app_name, q3ide_terminal_apps) && !q3ide_match(w->app_name, q3ide_browser_apps))
+					continue;
+				for (j = 0; j < item_n; j++)
+					if (items[j].id == w->window_id) {
+						dupe = qtrue;
+						break;
+					}
+				if (dupe)
+					continue;
+				items[item_n].id = w->window_id;
+				items[item_n].aspect = w->height ? (float) w->width / w->height : 16.0f / 9.0f;
+				items[item_n].is_display = qfalse;
+				Com_Printf("q3ide: app [%d] wid=%u \"%s\" %ux%u\n", item_n, w->window_id, w->app_name, w->width,
+				           w->height);
+				Q3IDE_Eventf("window_found", "\"wid\":%u,\"w\":%u,\"h\":%u", w->window_id, w->width, w->height);
+				item_n++;
 			}
-		if (dupe)
-			continue;
-		win_asp[win_n] = w->height ? (float) w->width / w->height : 16.0f / 9.0f;
-		win_ids[win_n++] = w->window_id;
-		Com_Printf("q3ide: found [%d] wid=%u \"%s\" %ux%u\n", win_n - 1, w->window_id, w->app_name, w->width,
-		           w->height);
+		}
+		if (q3ide_wm.cap_free_wlist)
+			q3ide_wm.cap_free_wlist(wlist);
 	}
-	if (q3ide_wm.cap_free_wlist)
-		q3ide_wm.cap_free_wlist(wlist);
 
-	if (!win_n) {
-		Com_Printf("q3ide: no iTerm2/Terminal/browser windows found\n");
+	/* Collect displays */
+	if (q3ide_wm.cap_list_disp && q3ide_wm.cap_start_disp) {
+		Q3ideDisplayList dlist = q3ide_wm.cap_list_disp(q3ide_wm.cap);
+		if (dlist.displays && dlist.count) {
+			for (i = 0; i < (int) dlist.count && item_n < Q3IDE_MAX_WIN; i++) {
+				const Q3ideDisplayInfo *d = &dlist.displays[i];
+				items[item_n].id = d->display_id;
+				items[item_n].aspect = d->height ? (float) d->width / d->height : 16.0f / 9.0f;
+				items[item_n].is_display = qtrue;
+				Com_Printf("q3ide: disp [%d] id=%u %ux%u\n", item_n, d->display_id, d->width, d->height);
+				Q3IDE_Eventf("display_found", "\"id\":%u,\"w\":%u,\"h\":%u", d->display_id, d->width, d->height);
+				item_n++;
+			}
+		}
+		if (q3ide_wm.cap_free_dlist)
+			q3ide_wm.cap_free_dlist(dlist);
+	}
+
+	if (!item_n) {
+		Com_Printf("q3ide: no windows or displays found\n");
 		return;
 	}
 
@@ -119,7 +138,7 @@ void Q3IDE_WM_CmdAttach(void)
 	eye[2] += cl.snap.ps.viewheight;
 	yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
 
-	/* Scan Q3IDE_SCAN_DIRS evenly-spaced horizontal directions for unique walls */
+	/* Scan for unique walls */
 	memset(wall_wcnt, 0, sizeof(wall_wcnt));
 	for (i = 0; i < Q3IDE_SCAN_DIRS; i++) {
 		vec3_t wp, wn;
@@ -130,7 +149,6 @@ void Q3IDE_WM_CmdAttach(void)
 		dir[2] = 0.0f;
 		if (!Q3IDE_WM_TraceWall(eye, dir, wp, wn))
 			continue;
-		/* Deduplicate by wall normal: skip if we already have a wall facing the same way */
 		for (j = 0; j < n_walls; j++) {
 			if (DotProduct(wn, wall_norm[j]) > 0.85f) {
 				dup = qtrue;
@@ -150,14 +168,12 @@ void Q3IDE_WM_CmdAttach(void)
 	}
 	Com_Printf("q3ide: found %d unique wall(s)\n", n_walls);
 
-	/* Assign windows round-robin to walls */
+	/* Assign items round-robin to walls, then place side-by-side centered */
 	memset(wall_win, 0, sizeof(wall_win));
-	for (i = 0; i < win_n; i++) {
+	for (i = 0; i < item_n; i++) {
 		int wi = i % n_walls;
 		wall_win[wi][wall_wcnt[wi]++] = i;
 	}
-
-	/* Place each wall's windows side-by-side, horizontally centered */
 	for (i = 0; i < n_walls; i++) {
 		vec3_t right;
 		float nx, ny, horiz_len, total_w, gap, x_cursor;
@@ -166,7 +182,6 @@ void Q3IDE_WM_CmdAttach(void)
 		if (!cnt)
 			continue;
 
-		/* Compute right vector for this wall (same basis as q3ide_add_poly) */
 		nx = wall_norm[i][0];
 		ny = wall_norm[i][1];
 		horiz_len = sqrtf(nx * nx + ny * ny);
@@ -180,41 +195,54 @@ void Q3IDE_WM_CmdAttach(void)
 			right[2] = 0.0f;
 		}
 
-		/* Compute total span = sum of widths + gaps between */
 		gap = 16.0f;
 		total_w = 0.0f;
 		for (j = 0; j < cnt; j++) {
 			float oh = Q3IDE_WIN_INCHES;
-			total_w += oh * win_asp[wall_win[i][j]];
+			total_w += oh * items[wall_win[i][j]].aspect;
 		}
 		total_w += gap * (float) (cnt - 1);
 
-		/* Place windows centered on the wall hit point */
 		x_cursor = -total_w * 0.5f;
 		for (j = 0; j < cnt; j++) {
-			int wi = wall_win[i][j];
+			int ii = wall_win[i][j];
+			q3ide_attach_item_t *it = &items[ii];
 			float oh = Q3IDE_WIN_INCHES;
-			float ow = oh * win_asp[wi];
+			float ow = oh * it->aspect;
 			float cx = x_cursor + ow * 0.5f;
 			vec3_t pos;
 			pos[0] = wall_pos[i][0] + right[0] * cx;
 			pos[1] = wall_pos[i][1] + right[1] * cx;
-			pos[2] = eye[2]; /* eye height */
-			if (Q3IDE_WM_Attach(win_ids[wi], pos, wall_norm[i], ow, oh, qtrue)) {
-				attached++;
-				Com_Printf("q3ide: win [%d] wall %d x=%.0f\n", wi, i, cx);
+			pos[2] = eye[2];
+			if (it->is_display) {
+				/* Start display stream first, then attach without re-starting */
+				if (q3ide_wm.cap_start_disp(q3ide_wm.cap, it->id, Q3IDE_CAPTURE_FPS) != 0) {
+					Q3IDE_LOGE("disp [%d] start failed", ii);
+					x_cursor += ow + gap;
+					continue;
+				}
+				if (Q3IDE_WM_Attach(it->id, pos, wall_norm[i], ow, oh, qfalse)) {
+					attached++;
+					Q3IDE_Eventf("display_attached", "\"id\":%u,\"wall\":%d,\"x\":%.0f", it->id, i, cx);
+				} else {
+					Q3IDE_LOGE("disp [%d] attach failed", ii);
+				}
 			} else {
-				Com_Printf("q3ide: win [%d] attach failed\n", wi);
+				if (Q3IDE_WM_Attach(it->id, pos, wall_norm[i], ow, oh, qtrue)) {
+					attached++;
+					Q3IDE_Eventf("window_attached", "\"wid\":%u,\"wall\":%d,\"x\":%.0f", it->id, i, cx);
+				} else {
+					Q3IDE_LOGE("win [%d] attach failed", ii);
+				}
 			}
 			x_cursor += ow + gap;
 		}
 	}
 
-	q3ide_wm.auto_attach = qtrue; /* live-track new windows from here on */
-	Com_Printf("q3ide: attached %d/%d windows\n", attached, win_n);
+	q3ide_wm.auto_attach = qtrue;
+	Q3IDE_LOGI("attached %d/%d items (windows+displays)", attached, item_n);
+	Q3IDE_Eventf("attach_done", "\"attached\":%d,\"total\":%d", attached, item_n);
 }
-
-/* ── Auto-place a newly opened window on the nearest free wall ───── */
 
 static void q3ide_auto_attach_new(unsigned int id, float aspect)
 {
@@ -354,13 +382,7 @@ void Q3IDE_WM_CmdDesktop(void)
 	Com_Printf("q3ide: desktop: %d display(s)\n", attached);
 }
 
-/* ── CmdSnap — snap wins[0] into the q3dm0 first-room teleporter ──
- *
- * BSP model *9 (trigger_teleport) center: (-1152, -1876, 66).
- * Thin in Y (8 units). Energy plane sits at the front face (y≈-1868),
- * normal (0,1,0) facing the player who approaches from positive Y.
- * Size 128×128 matches the standard Q3 teleporter arch opening.
- */
+/* ── CmdSnap — snap wins[0] into the q3dm0 teleporter ── */
 void Q3IDE_WM_CmdSnap(void)
 {
 	vec3_t pos = {-1152.0f, -1868.0f, 84.0f};

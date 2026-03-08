@@ -50,6 +50,8 @@
 #define Q3IDE_HOVER_LIFT_Z          4.0f
 #define Q3IDE_HOVER_FADE_IN_SEC     0.15f
 #define Q3IDE_MIN_TAP_TARGET        60.0f
+/* [MVP] Hover border thickness in world units (~2px at 400u viewing distance) */
+#define Q3IDE_HOVER_BORDER_THICK    1.0f
 
 /* ─── Animation (Post-MVP) ────────────────────────────────────────────── */
 

@@ -1145,7 +1145,8 @@ Q3OBJ += \
   $(B)/client/q3ide_render.o \
   $(B)/client/q3ide_interaction.o \
   $(B)/client/q3ide_distance.o \
-  $(B)/client/q3ide_geom.o
+  $(B)/client/q3ide_geom.o \
+  $(B)/client/q3ide_log.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1464,6 +1465,9 @@ $(B)/client/q3ide_distance.o: $(Q3IDEDIR)/q3ide_distance.c
 	$(DO_CC)
 
 $(B)/client/q3ide_geom.o: $(Q3IDEDIR)/q3ide_geom.c
+	$(DO_CC)
+
+$(B)/client/q3ide_log.o: $(Q3IDEDIR)/q3ide_log.c
 	$(DO_CC)
 
 $(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c

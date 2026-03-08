@@ -641,16 +641,8 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 		re.SetColor( VMA(1) );
 		return 0;
 	case CG_R_DRAWSTRETCHPIC:
-#ifdef USE_Q3IDE
-		if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
-			/* Shift cgame 2D draws to the center monitor.
-			 * cgame sees vidWidth=centerW so its coords are 0..centerW;
-			 * adding centerX maps them onto the correct screen region. */
-			float q3ide_cx = (float)Cvar_VariableIntegerValue( "r_mmCenterX" );
-			re.DrawStretchPic( VMF(1) + q3ide_cx, VMF(2), VMF(3), VMF(4), VMF(5), VMF(6), VMF(7), VMF(8), args[9] );
-			return 0;
-		}
-#endif
+		/* RB_SetGL2D viewport(cx,0,cw,ch) + ortho(0,cw,ch,0) already positions
+		 * 2D draws on the center monitor — no coordinate shift needed here. */
 		re.DrawStretchPic( VMF(1), VMF(2), VMF(3), VMF(4), VMF(5), VMF(6), VMF(7), VMF(8), args[9] );
 		return 0;
 	case CG_R_MODELBOUNDS:

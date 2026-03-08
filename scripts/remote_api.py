@@ -29,6 +29,19 @@ ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "logs"
 BUILD_SCRIPT = ROOT / "scripts" / "build.sh"
 PID_FILE = Path("/tmp/q3ide_game.pid")
+LOG_MAX_LINES = 400
+
+def _trim_log(path, max_lines=LOG_MAX_LINES):
+    """Keep only the last max_lines lines of a log file."""
+    try:
+        p = Path(path)
+        if not p.exists():
+            return
+        lines = p.read_text(errors='replace').splitlines(keepends=True)
+        if len(lines) > max_lines:
+            p.write_text(''.join(lines[-max_lines:]))
+    except OSError:
+        pass
 
 def _q3_binary():
     """Return (binary_path, build_dir) or (None, None)."""
@@ -42,9 +55,28 @@ def _q3_binary():
         return binary, build_dir
     return None, None
 
+_Q3_MUSIC_TRACKS = [
+    'music/fla22k_01_intro.wav music/fla22k_01_loop.wav',
+    'music/fla22k_02.wav',
+    'music/fla22k_03.wav',
+    'music/fla22k_04_intro.wav music/fla22k_04_loop.wav',
+    'music/fla22k_05.wav',
+    'music/fla22k_06.wav',
+    'music/sonic1.wav',
+    'music/sonic2.wav',
+    'music/sonic3.wav',
+    'music/sonic4.wav',
+    'music/sonic5.wav',
+    'music/sonic6.wav',
+]
+
 def _build_engine_args(args):
-    """Convert API args list (['--level','0','--execute','q3ide attach all']) to engine args."""
+    """Convert API args list (['--level','0','--music','--execute','q3ide attach all']) to engine args."""
+    import random
     engine_args = []
+    level = None
+    execute = None
+    music_on = False
     i = 0
     while i < len(args):
         a = str(args[i])
@@ -59,11 +91,22 @@ def _build_engine_args(args):
             engine_args += ['+set', 'bot_minplayers', str(bots + 1)]
             i += 2
         elif a == '--execute' and i + 1 < len(args):
-            engine_args += ['+set', 'nextdemo', str(args[i + 1])]
+            execute = str(args[i + 1])
             i += 2
+        elif a == '--music':
+            music_on = True
+            i += 1
         else:
             engine_args.append(a)
             i += 1
+    # Random music on q3dm0 only (opt-in via --music flag)
+    if music_on and level == 'q3dm0':
+        track = random.choice(_Q3_MUSIC_TRACKS)
+        music_cmd = f's_musicvolume 0.5; music {track}'
+        print(f'[game] Music: {track}', flush=True)
+        execute = f'{execute}; {music_cmd}' if execute else music_cmd
+    if execute is not None:
+        engine_args += ['+set', 'nextdemo', execute]
     return engine_args
 
 PORT = int(os.environ.get("Q3IDE_API_PORT", 6666))
@@ -77,7 +120,9 @@ LOG_ALIASES = {
     "multimon": LOG_DIR / "q3ide_multimon.log",
     "capture": LOG_DIR / "q3ide_capture.log",
     "build":   LOG_DIR / "build.log",
+    "q3ide":   LOG_DIR / "q3ide.log",
 }
+EVENTS_LOG = LOG_DIR / "q3ide_events.jsonl"
 
 _game_proc = None
 _game_start = None
@@ -161,18 +206,63 @@ def _kill_game():
     return killed
 
 
+def _kill_build():
+    """Kill the running build process and mark the queue entry as cancelled."""
+    global _build_proc, _build_start, _queue_current
+    killed = False
+    with _queue_lock:
+        current = _queue_current
+    if _build_proc is not None and _build_proc.poll() is None:
+        try:
+            _build_proc.kill()
+            _build_proc.wait(timeout=3)
+        except Exception:
+            pass
+        killed = True
+    _build_proc = None
+    _build_start = None
+    if current is not None:
+        with _queue_lock:
+            current['status'] = 'cancelled'
+            current['finished_at'] = time.time()
+            current['returncode'] = -1
+            _queue_current = None
+            _queue_history.append(current)
+            if len(_queue_history) > 20:
+                _queue_history.pop(0)
+    return killed
+
+
+def _clear_queue():
+    """Drain pending queue entries, cancel the running build, return counts."""
+    with _queue_lock:
+        n_pending = len(_queue)
+        _queue.clear()
+    killed_build = _kill_build()
+    return {'cleared_pending': n_pending, 'killed_build': killed_build}
+
+
 def _send_rcon(cmd):
     msg = b'\xff\xff\xff\xff' + f'rcon {RCON_PASSWORD} {cmd}\n'.encode()
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.settimeout(2.0)
     try:
         sock.sendto(msg, (RCON_HOST, RCON_PORT))
-        data = sock.recv(4096)
-        text = data[4:].decode(errors='replace').strip()
-        if text.startswith('print\n'):
-            text = text[6:]
-        return text
-    except socket.timeout:
+        parts = []
+        # First packet: wait up to 2s for game to respond
+        sock.settimeout(2.0)
+        try:
+            while True:
+                data = sock.recv(65535)
+                text = data[4:].decode(errors='replace')
+                if text.startswith('print\n'):
+                    text = text[6:]
+                parts.append(text.rstrip('\n'))
+                # Subsequent packets: short gap between UDP datagrams
+                sock.settimeout(0.15)
+        except socket.timeout:
+            pass
+        return '\n'.join(parts).strip() if parts else None
+    except OSError:
         return None
     finally:
         sock.close()
@@ -196,6 +286,7 @@ def _do_run(args=None, agent_id=''):
     cmd = [str(binary)] + engine_args
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     engine_log = LOG_DIR / 'engine.log'
+    _trim_log(engine_log)
     log_fh = open(engine_log, 'a')
     separator = '═' * 60
     log_fh.write(f'\n{separator}\n'
@@ -300,6 +391,7 @@ def _queue_worker():
             cmd = ['bash', str(BUILD_SCRIPT)] + entry['args']
             LOG_DIR.mkdir(parents=True, exist_ok=True)
             build_log = LOG_DIR / 'build.log'
+            _trim_log(build_log)
             log_fh = open(build_log, 'a')
             separator = '═' * 60
             log_fh.write(f'\n{separator}\n'
@@ -575,17 +667,30 @@ class Handler(BaseHTTPRequestHandler):
         if path == '/lint':
             self._handle_lint(fix=False)
         elif path in ('/build/status', '/build_status'):
-            self._handle_build_status(queue_id=(qs.get('queue_id') or qs.get('id', [None]))[0])
+            qid = (qs.get('queue_id') or qs.get('id', [None]))[0]
+            wait_s = int((qs.get('wait') or ['0'])[0])
+            self._handle_build_status(queue_id=qid, wait_s=wait_s)
         elif path == '/queue':
             self._handle_queue_list()
         elif path in ('/', '/status'):
             pid = _game_pid()
+            with _queue_lock:
+                cur = _queue_current
+                pending = len(_queue)
             self._send(200, {
                 'ok': True,
                 'running': pid is not None,
                 'pid': pid,
                 'uptime_s': int(time.time() - _game_start) if pid and _game_start else None,
+                'build': {
+                    'active': cur is not None,
+                    'queue_id': cur['id'] if cur else None,
+                    'status': cur['status'] if cur else None,
+                    'pending': pending,
+                },
             })
+        elif path == '/events':
+            self._handle_events(qs)
         elif path == '/logs':
             alias = qs.get('file', ['engine'])[0]
             n = int((qs.get('n') or qs.get('tail') or ['400'])[0])
@@ -593,6 +698,7 @@ class Handler(BaseHTTPRequestHandler):
             if log_path is None:
                 self._send(404, {'error': f'unknown: {alias}', 'available': list(LOG_ALIASES)})
                 return
+            _trim_log(log_path)
             content = _tail_log(log_path, n)
             if content is None:
                 self._send(404, {'error': f'log not found: {log_path}'})
@@ -636,6 +742,16 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_run(body)
         elif path == '/stop':
             self._handle_stop()
+        elif path == '/queue/clear':
+            result = _clear_queue()
+            print(f'[api] queue/clear: {result}', flush=True)
+            self._send(200, {'ok': True, **result})
+        elif path == '/kill':
+            # Kill everything: game + build + clear queue
+            game_killed = _kill_game()
+            queue_result = _clear_queue()
+            print(f'[api] kill: game={game_killed} {queue_result}', flush=True)
+            self._send(200, {'ok': True, 'game_killed': game_killed, **queue_result})
         elif path == '/console':
             self._handle_console(body)
         elif path == '/applescript':
@@ -661,21 +777,54 @@ class Handler(BaseHTTPRequestHandler):
             'log': 'build',
         })
 
-    def _handle_build_status(self, queue_id=None):
+    def _handle_build_status(self, queue_id=None, wait_s=0):
+        def _find_entry(qid):
+            with _queue_lock:
+                cur = _queue_current
+                pending = list(_queue)
+                history = list(_queue_history)
+            if cur and cur['id'] == qid:
+                return cur
+            for e in pending + history:
+                if e['id'] == qid:
+                    return e
+            return None
+
+        # Long-poll: block until build completes or wait_s expires.
+        # Agents use ?wait=30 to avoid sleep loops — no Docker timeout risk.
+        if queue_id and wait_s > 0:
+            deadline = time.time() + wait_s
+            while time.time() < deadline:
+                entry = _find_entry(queue_id)
+                if entry is None:
+                    self._send(200, {'ok': True, 'done': True, 'gone': True,
+                                     'status': 'gone', 'returncode': None, 'timed_out': False,
+                                     'error': f'queue_id {queue_id!r} not found — stale (api restarted)'})
+                    return
+                if entry['status'] in ('done', 'failed', 'cancelled'):
+                    result = self._fmt_entry(entry)
+                    result['timed_out'] = False
+                    result['log_tail'] = _tail_log(LOG_DIR / 'build.log', 40) or ''
+                    self._send(200, result)
+                    return
+                time.sleep(0.5)
+            # Timed out — return current status; agent should retry immediately
+            entry = _find_entry(queue_id)
+            if entry:
+                result = self._fmt_entry(entry)
+                result['timed_out'] = True
+            else:
+                result = {'status': 'unknown', 'timed_out': True}
+            self._send(200, result)
+            return
+
         with _queue_lock:
             current = _queue_current
             pending = list(_queue)
             history = list(_queue_history)
         # Look up specific id
         if queue_id:
-            entry = None
-            if current and current['id'] == queue_id:
-                entry = current
-            else:
-                for e in pending + history:
-                    if e['id'] == queue_id:
-                        entry = e
-                        break
+            entry = _find_entry(queue_id)
             if entry is None:
                 # Return 200 with done+gone so polling loops exit normally.
                 # 410 works correctly but agents that catch HTTPError keep retrying.
@@ -783,6 +932,44 @@ class Handler(BaseHTTPRequestHandler):
             'history': [self._fmt_entry(e) for e in reversed(history)],
         })
 
+    def _handle_events(self, qs):
+        """GET /events?type=attach_done&since=1709938642&n=200&pid=<pid>"""
+        type_filter = (qs.get('type') or [None])[0]
+        since = float((qs.get('since') or ['0'])[0])
+        n = int((qs.get('n') or ['200'])[0])
+        pid_filter = (qs.get('pid') or [None])[0]
+        if pid_filter:
+            try:
+                pid_filter = int(pid_filter)
+            except ValueError:
+                pid_filter = None
+        if not EVENTS_LOG.exists():
+            self._send(200, {'events': [], 'count': 0})
+            return
+        events = []
+        try:
+            with open(EVENTS_LOG, errors='replace') as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        evt = json.loads(line)
+                        if type_filter and evt.get('type') != type_filter:
+                            continue
+                        if since and evt.get('ts', 0) < since:
+                            continue
+                        if pid_filter and evt.get('pid') != pid_filter:
+                            continue
+                        events.append(evt)
+                    except json.JSONDecodeError:
+                        pass
+        except OSError as e:
+            self._send(500, {'error': str(e)})
+            return
+        tail = events[-n:]
+        self._send(200, {'events': tail, 'count': len(tail), 'total': len(events)})
+
     def _handle_console(self, body):
         cmd = body.get('cmd', '').strip()
         if not cmd:
@@ -793,9 +980,9 @@ class Handler(BaseHTTPRequestHandler):
             return
         resp = _send_rcon(cmd)
         if resp is None:
-            self._send(504, {'error': 'RCON timeout'})
+            self._send(504, {'ok': False, 'cmd': cmd, 'error': 'RCON timeout — game not responding'})
             return
-        self._send(200, {'ok': True, 'cmd': cmd, 'response': resp})
+        self._send(200, {'ok': True, 'cmd': cmd, 'response': resp or '(empty)'})
 
 
 # ── main ──────────────────────────────────────────────────────────────────────

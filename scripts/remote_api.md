@@ -19,40 +19,60 @@ sh ./scripts/build.sh --api
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/` | Health check + game running? |
-| GET | `/status` | PID, uptime, running bool |
+| GET | `/status` | PID, uptime, running bool, build state |
 | POST | `/build` | **Enqueue** a build — returns `queue_id` immediately |
-| GET | `/build_status?id=<id>` | Status of a specific build by `queue_id` |
+| GET | `/build_status?id=<id>&wait=<s>` | Status of a build — **long-poll** with `wait` param |
 | GET | `/queue` | Full queue: `current`, `pending[]`, `history[]` |
 | DELETE | `/queue/<id>` | Cancel a pending (not yet started) build |
 | POST | `/run` | Launch game in background |
 | POST | `/stop` | Kill game process |
-| GET | `/logs` | Tail a log file |
+| GET | `/logs?file=<alias>&n=<lines>` | Tail a log file |
+| GET | `/events?type=<t>&since=<ts>&n=<n>&pid=<pid>` | Query structured JSON events |
 | POST | `/console` | Send RCON command, return response |
 | GET | `/ws` | **WebSocket** — live log stream + RCON |
 
 ## Build Queue
 
-`POST /build` now enqueues rather than blocking. Multiple agents can submit builds simultaneously — they run one at a time, FIFO. When a new build starts, any in-progress build is killed first.
+`POST /build` enqueues rather than blocking. Multiple agents can submit simultaneously — they run one at a time, FIFO.
 
 ```python
-# Enqueue a build (agent_id is optional label for tracking)
+# Enqueue a build
 r = api('POST', '/build', {
     'args': ['--clean', '--engine-only'],
-    'agent_id': 'my-agent',   # optional tag
+    'agent_id': 'my-agent',   # optional label for tracking
     'auto_run': True,         # launch game after successful build
 })
 qid = r['queue_id']
-print(f"Queued as {qid}, position {r['position']}, at {r['queued_at_iso']}")
+```
 
-# Poll until done
-import time
+## Robust Build Wait (preferred — no sleep loop)
+
+Use `?wait=30` to long-poll. The server blocks until the build completes OR 30s elapses, then returns. If `timed_out: true`, retry immediately. **No sleep loop needed. No Docker timeout risk.**
+
+```python
+# Robust build wait — blocks up to 30s per call, retries if needed
+qid = api('POST', '/build', {'args': ['--clean', '--engine-only'],
+                              'agent_id': AGENT_NAME})['queue_id']
 while True:
-    s = api('GET', f'/build_status?id={qid}')
-    print(s['status'], s.get('elapsed_s'), s.get('returncode'))
-    if s['status'] in ('done', 'failed', 'cancelled'):
+    s = api('GET', f'/build_status?id={qid}&wait=30')  # blocks up to 30s
+    if s.get('timed_out'):
+        continue  # timed out — server retries immediately, no sleep needed
+    if s['status'] in ('done', 'failed', 'cancelled', 'gone'):
         break
-    time.sleep(3)
 
+if s['status'] != 'done':
+    print('BUILD FAILED:')
+    print(s.get('log_tail', ''))  # last 40 lines of build.log — included automatically
+    raise RuntimeError(f"Build {s['status']}: rc={s.get('returncode')}")
+```
+
+`log_tail` is included in the response when the build is finished (done/failed/cancelled). It contains the last 40 lines of `build.log` — no separate log call needed to see errors.
+
+Build entry fields: `id`, `agent_id`, `args`, `status`, `returncode`, `queued_at_iso`, `started_at_iso`, `finished_at_iso`, `elapsed_s`, `log_tail` (on completion), `timed_out`
+
+Statuses: `queued` → `building` → `done` | `failed` | `cancelled` | `gone` (stale — api restarted)
+
+```python
 # Inspect full queue
 q = api('GET', '/queue')
 print('current:', q['current'])
@@ -61,11 +81,77 @@ print('history:', q['history'])   # last 20 completed/cancelled
 
 # Cancel a pending build
 api('DELETE', f'/queue/{qid}')
+
+# Kill everything (game + build + clear queue)
+api('POST', '/kill')
 ```
 
-Entry fields: `id`, `agent_id`, `args`, `status`, `returncode`, `queued_at_iso`, `started_at_iso`, `finished_at_iso`, `elapsed_s`
+## Structured Events (`/events`) — preferred for log checking
 
-Statuses: `queued` → `building` → `done` | `failed` | `cancelled`
+The engine writes structured JSON events to `logs/q3ide_events.jsonl`. Query them here instead of grepping raw logs.
+
+```python
+# All recent events (last 200)
+events = api('GET', '/events?n=200')['events']
+
+# Filter by type
+attached = api('GET', '/events?type=attach_done')['events']
+
+# Events since a Unix timestamp (e.g. since session start)
+recent = api('GET', f'/events?since={session_ts}')['events']
+
+# Events for specific PID (current game session)
+pid = api('GET', '/')['pid']
+evts = api('GET', f'/events?pid={pid}&since={session_ts}')['events']
+```
+
+Response: `{"events": [...], "count": N, "total": M}` (total = unfiltered count in file)
+
+**Known event types:**
+
+| Type | Emitter | Key fields |
+|------|---------|------------|
+| `session_start` | Q3IDE_Init | — |
+| `session_end` | Q3IDE_Shutdown | — |
+| `dylib_loaded` | q3ide_wm | — |
+| `dylib_failed` | q3ide_wm | `reason` |
+| `window_found` | q3ide_cmd | `wid`, `w`, `h` |
+| `display_found` | q3ide_cmd | `id`, `w`, `h` |
+| `window_attached` | q3ide_cmd | `wid`, `wall`, `x` |
+| `display_attached` | q3ide_cmd | `id`, `wall`, `x` |
+| `attach_done` | q3ide_cmd | `attached`, `total` |
+
+**Confirm successful attach:**
+```python
+evts = api('GET', f'/events?type=attach_done&pid={pid}')['events']
+if not evts:
+    raise RuntimeError("No attach_done event — attach may have failed")
+e = evts[-1]
+print(f"Attached {e['attached']}/{e['total']} windows")
+```
+
+## Log Files (`/logs`)
+
+```python
+# Tail last N lines of a log
+api('GET', '/logs?file=q3ide&n=50')   # q3ide structured log (levelled, timestamped)
+api('GET', '/logs?file=engine&n=100') # raw engine log
+api('GET', '/logs?file=build&n=40')   # build output
+api('GET', '/logs?file=capture&n=50') # Rust capture dylib log
+```
+
+Log file aliases: `engine`, `multimon`, `capture`, `build`, `q3ide`
+
+**`q3ide` log** (`logs/q3ide.log`) — Q3IDE-only output, no Quake3e engine noise. Format:
+```
+=== SESSION pid=12345 2026-03-08T12:00:00 ===
+[I]    1.234 dylib loaded ok
+[W]    2.345 capture start failed id=42
+[E]   12.678 out of window slots
+=== END pid=12345 2026-03-08T12:01:30 ===
+```
+
+Levels: `[I]` info | `[W]` warning | `[E]` error. Timestamp is seconds since process start.
 
 ## WebSocket (`/ws`) — preferred debug interface
 
@@ -83,10 +169,10 @@ with Q3Debug() as dbg:
         filter_fn=lambda f, l: f == 'multimon')  # watch multimon only
 ```
 
-Query params: `?logs=engine,multimon,capture` (default: `engine,multimon`)
+Query params: `?logs=engine,multimon,q3ide,capture` (default: `engine,multimon`)
 
 Messages received (JSON):
-- `{"type":"log", "file":"engine"|"multimon"|"capture", "line":"..."}`
+- `{"type":"log", "file":"engine"|"multimon"|"capture"|"q3ide", "line":"..."}`
 - `{"type":"rcon", "cmd":"...", "response":"...", "ok":true}`
 - `{"type":"status", "running":bool, "pid":int, "uptime_s":int}`
 - `{"type":"hello", "logs":[...], "rcon_port":27960}`
@@ -101,10 +187,12 @@ HOST=host.docker.internal  # or localhost if running curl on macOS directly
 # Health
 curl http://$HOST:6666/
 
-# Build
+# Build (enqueue) + wait for completion
 curl -s -X POST http://$HOST:6666/build \
   -H 'Content-Type: application/json' \
   -d '{"args":["--clean"]}'
+# → {"queue_id": "a1b2c3d4", ...}
+curl -s "http://$HOST:6666/build_status?id=a1b2c3d4&wait=30"
 
 # Launch (level 0)
 curl -s -X POST http://$HOST:6666/run \
@@ -120,11 +208,13 @@ curl -s -X POST http://$HOST:6666/console \
   -d '{"cmd":"q3ide status"}'
 
 # Tail log (last 50 lines)
+curl -s 'http://$HOST:6666/logs?file=q3ide&n=50'
 curl -s 'http://$HOST:6666/logs?file=engine&n=50'
-curl -s 'http://$HOST:6666/logs?file=multimon&n=100'
-```
 
-Log file aliases: `engine`, `multimon`, `capture`
+# Recent events
+curl -s 'http://$HOST:6666/events?n=50'
+curl -s 'http://$HOST:6666/events?type=attach_done'
+```
 
 ## Python HTTP helper (from Docker)
 
