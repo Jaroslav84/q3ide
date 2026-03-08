@@ -1,0 +1,27 @@
+# clang-format config for q3ide/ only.
+# Placed here so Quake3e files (which search upward) never pick this up.
+BasedOnStyle: LLVM
+Language: C
+
+# Tabs, K&R style — matches Quake3e convention
+UseTab: ForIndentation
+TabWidth: 4
+IndentWidth: 4
+ColumnLimit: 120
+
+# K&R braces: function defs get newline, control flow stays same-line
+BreakBeforeBraces: Linux
+
+# Don't collapse short functions — keep them readable
+AllowShortFunctionsOnASingleLine: None
+AllowShortBlocksOnASingleLine: Never
+AllowShortIfStatementsOnASingleLine: Never
+
+# Pointer alignment: int *ptr (right-aligned like Quake3e)
+PointerAlignment: Right
+
+# Space after cast: (float) x
+SpaceAfterCStyleCast: true
+
+# Keep include order as-is (don't reorder Quake3e headers)
+SortIncludes: false

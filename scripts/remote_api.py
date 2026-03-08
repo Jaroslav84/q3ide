@@ -401,7 +401,9 @@ class Handler(BaseHTTPRequestHandler):
             _run_ws_session(self.connection, logs)  # blocks until client disconnects
             return
 
-        if path == '/build_status':
+        if path == '/lint':
+            self._handle_lint(fix=False)
+        elif path == '/build_status':
             self._handle_build_status()
         elif path in ('/', '/status'):
             pid = _game_pid()
@@ -429,7 +431,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         path = urlparse(self.path).path
         body = self._read_body()
-        if path == '/build':
+        if path == '/lint':
+            self._handle_lint(fix=body.get('fix', False))
+        elif path == '/build':
             self._handle_build(body)
         elif path == '/run':
             self._handle_run(body)
@@ -531,6 +535,35 @@ class Handler(BaseHTTPRequestHandler):
             self._send(503, {'error': 'osascript not found (not macOS?)'})
         except subprocess.TimeoutExpired:
             self._send(504, {'error': 'AppleScript timeout'})
+        except Exception as e:
+            self._send(500, {'error': str(e)})
+
+    def _handle_lint(self, fix=False):
+        lint_script = ROOT / 'scripts' / 'lint.sh'
+        try:
+            if fix:
+                import glob as _glob
+                q3ide_dir = ROOT / 'quake3e' / 'code' / 'q3ide'
+                files = _glob.glob(str(q3ide_dir / '*.c')) + _glob.glob(str(q3ide_dir / '*.h'))
+                fix_result = subprocess.run(
+                    ['clang-format', '-i'] + files,
+                    capture_output=True, text=True, timeout=60, cwd=str(ROOT)
+                )
+                if fix_result.returncode != 0:
+                    self._send(500, {'error': 'clang-format -i failed', 'stderr': fix_result.stderr})
+                    return
+            result = subprocess.run(
+                ['sh', str(lint_script)],
+                capture_output=True, text=True, timeout=300, cwd=str(ROOT)
+            )
+            output = result.stdout + result.stderr
+            ok = result.returncode == 0
+            print(output, flush=True)
+            self._send(200, {'ok': ok, 'fixed': fix, 'returncode': result.returncode, 'output': output})
+        except FileNotFoundError:
+            self._send(503, {'error': 'lint.sh not found'})
+        except subprocess.TimeoutExpired:
+            self._send(504, {'error': 'lint timeout'})
         except Exception as e:
             self._send(500, {'error': str(e)})
 

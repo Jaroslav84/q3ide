@@ -80,8 +80,8 @@ qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out
 
 static void q3ide_upload_frame(q3ide_win_t *win, const Q3ideFrame *frame)
 {
-	int needed = (int)(frame->width * frame->height * 4);
-	int row = (int)frame->width * 4;
+	int needed = (int) (frame->width * frame->height * 4);
+	int row = (int) frame->width * 4;
 	unsigned int r, c;
 
 	if (!re.UploadCinematic)
@@ -105,18 +105,17 @@ static void q3ide_upload_frame(q3ide_win_t *win, const Q3ideFrame *frame)
 		}
 	}
 
-	re.UploadCinematic((int)frame->width, (int)frame->height, (int)frame->width,
-	                   (int)frame->height, q3ide_wm.fbuf, win->scratch_slot, qtrue);
-	win->tex_w = (int)frame->width;
-	win->tex_h = (int)frame->height;
+	re.UploadCinematic((int) frame->width, (int) frame->height, (int) frame->width, (int) frame->height, q3ide_wm.fbuf,
+	                   win->scratch_slot, qtrue);
+	win->tex_w = (int) frame->width;
+	win->tex_h = (int) frame->height;
 
 	if (win->frames == 0) {
 		char name[32];
 		Com_sprintf(name, sizeof(name), "*scratch%d", win->scratch_slot);
 		win->shader = re.RegisterShader(name);
-		Com_Printf("q3ide: win[%d] id=%u slot=%d shader=%d %dx%d\n",
-		           (int)(win - q3ide_wm.wins), win->capture_id, win->scratch_slot,
-		           win->shader, frame->width, frame->height);
+		Com_Printf("q3ide: win[%d] id=%u slot=%d shader=%d %dx%d\n", (int) (win - q3ide_wm.wins), win->capture_id,
+		           win->scratch_slot, win->shader, frame->width, frame->height);
 	}
 }
 
@@ -130,16 +129,24 @@ static void q3ide_add_poly(q3ide_win_t *win)
 	if (!win->shader || !re.AddPolyToScene)
 		return;
 
-	if (fabsf(win->normal[2]) > 0.99f) {
-		vec3_t fwd = {1, 0, 0};
-		CrossProduct(win->normal, fwd, right);
-	} else {
-		vec3_t wup = {0, 0, 1};
-		CrossProduct(win->normal, wup, right);
+	/* Windows are always upright: project normal onto XY plane so up = world-Z.
+	 * For floor/ceiling normals the window still faces a sensible direction. */
+	{
+		float nx = win->normal[0], ny = win->normal[1];
+		float horiz_len = sqrtf(nx * nx + ny * ny);
+		if (horiz_len > 0.01f) {
+			right[0] = -ny / horiz_len;
+			right[1] = nx / horiz_len;
+			right[2] = 0.0f;
+		} else {
+			right[0] = 1.0f;
+			right[1] = 0.0f;
+			right[2] = 0.0f;
+		}
+		up[0] = 0.0f;
+		up[1] = 0.0f;
+		up[2] = 1.0f;
 	}
-	VectorNormalize(right);
-	CrossProduct(right, win->normal, up);
-	VectorNormalize(up);
 
 	for (face = 0; face < 2; face++) {
 		float sign = face ? -1.0f : 1.0f;
@@ -160,8 +167,7 @@ static void q3ide_add_poly(q3ide_win_t *win)
 	}
 }
 
-qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh,
-                         qboolean do_start)
+qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start)
 {
 	int i, slot;
 	q3ide_win_t *win;
@@ -178,19 +184,21 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		return qfalse;
 	}
 
-	slot = q3ide_wm.next_slot;
+	for (slot = 0; slot < 16; slot++) {
+		if (!(q3ide_wm.slot_mask & (1u << slot)))
+			break;
+	}
 	if (slot >= 16) {
 		Com_Printf("q3ide: no scratch slots\n");
 		return qfalse;
 	}
 
-	if (do_start && q3ide_wm.cap_start &&
-	    q3ide_wm.cap_start(q3ide_wm.cap, id, Q3IDE_CAPTURE_FPS) != 0) {
+	if (do_start && q3ide_wm.cap_start && q3ide_wm.cap_start(q3ide_wm.cap, id, Q3IDE_CAPTURE_FPS) != 0) {
 		Com_Printf("q3ide: capture start failed id=%u\n", id);
 		return qfalse;
 	}
 
-	q3ide_wm.next_slot++;
+	q3ide_wm.slot_mask |= (1u << slot);
 	win = &q3ide_wm.wins[i];
 	memset(win, 0, sizeof(*win));
 	win->active = qtrue;
@@ -309,9 +317,13 @@ void Q3IDE_WM_PollFrames(void)
 			continue;
 		if (frame.source_wid != win->capture_id) {
 			if (win->frames < 5)
-				Com_Printf("q3ide: MISMATCH [%d] want=%u got=%u\n", i, win->capture_id,
-				           frame.source_wid);
+				Com_Printf("q3ide: MISMATCH [%d] want=%u got=%u\n", i, win->capture_id, frame.source_wid);
 			continue;
+		}
+		if (win->tex_w > 0 && ((int) frame.width != win->tex_w || (int) frame.height != win->tex_h)) {
+			win->world_h = win->world_w * ((float) frame.height / (float) frame.width);
+			Com_Printf("q3ide: win %u resized to %dx%d (world %.0fx%.0f)\n", win->capture_id, (int) frame.width,
+			           (int) frame.height, win->world_w, win->world_h);
 		}
 		q3ide_upload_frame(win, &frame);
 		win->frames++;
@@ -361,7 +373,7 @@ void Q3IDE_WM_CmdDetachAll(void)
 		n++;
 	}
 	q3ide_wm.num_active = 0;
-	q3ide_wm.next_slot = 0;
+	q3ide_wm.slot_mask = 0;
 	if (n)
 		Com_Printf("q3ide: detached %d window(s)\n", n);
 }
@@ -369,13 +381,12 @@ void Q3IDE_WM_CmdDetachAll(void)
 void Q3IDE_WM_CmdStatus(void)
 {
 	int i;
-	Com_Printf("q3ide: %d active  dylib=%s\n", q3ide_wm.num_active,
-	           q3ide_wm.cap ? "ok" : "not loaded");
+	Com_Printf("q3ide: %d active  dylib=%s\n", q3ide_wm.num_active, q3ide_wm.cap ? "ok" : "not loaded");
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active)
 			continue;
-		Com_Printf("  [%d] id=%u slot=%d shader=%d %dx%d frames=%llu\n", i, w->capture_id,
-		           w->scratch_slot, w->shader, w->tex_w, w->tex_h, w->frames);
+		Com_Printf("  [%d] wid=%u slot=%d shader=%d %dx%d frames=%llu\n", i, w->capture_id, w->scratch_slot, w->shader,
+		           w->tex_w, w->tex_h, w->frames);
 	}
 }

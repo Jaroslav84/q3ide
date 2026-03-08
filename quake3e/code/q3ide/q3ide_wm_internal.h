@@ -91,7 +91,7 @@ typedef struct {
 	Q3ideCapture *cap;
 	q3ide_win_t wins[Q3IDE_MAX_WIN];
 	int num_active;
-	int next_slot;
+	unsigned int slot_mask; /* bit N = scratch slot N is in use */
 	byte *fbuf;
 	int fbuf_size;
 } q3ide_wm_t;

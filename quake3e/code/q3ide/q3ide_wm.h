@@ -27,8 +27,7 @@ void Q3IDE_WM_AddPolys(void);
 
 /* Primitives used by command handlers in q3ide_hooks.c */
 qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out_normal);
-qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh,
-                         qboolean do_start);
+qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start);
 
 /*
  * Ray-test all active windows; returns index of closest hit or -1.
@@ -43,6 +42,9 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal);
 void Q3IDE_WM_CmdList(void);
 void Q3IDE_WM_CmdDetachAll(void);
 void Q3IDE_WM_CmdStatus(void);
+
+/* Detach exactly one window by capture id; prints result. (in q3ide_cmd.c) */
+qboolean Q3IDE_WM_DetachById(unsigned int capture_id);
 
 /* Complex commands (in q3ide_cmd.c) */
 void Q3IDE_WM_CmdAttach(void);
