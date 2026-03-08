@@ -10,6 +10,7 @@ import base64
 import hashlib
 import json
 import os
+import platform
 import signal
 import socket
 import struct
@@ -26,6 +27,40 @@ ROOT = Path(__file__).resolve().parent.parent
 LOG_DIR = ROOT / "logs"
 BUILD_SCRIPT = ROOT / "scripts" / "build.sh"
 PID_FILE = Path("/tmp/q3ide_game.pid")
+
+def _q3_binary():
+    """Return (binary_path, build_dir) or (None, None)."""
+    arch = platform.machine()
+    q3e_arch = 'arm64' if arch == 'arm64' else 'x86_64'
+    build_dir = ROOT / 'quake3e' / 'build' / f'release-darwin-{q3e_arch}'
+    binary = build_dir / f'quake3e.{q3e_arch}'
+    if binary.exists():
+        return binary, build_dir
+    return None, None
+
+def _build_engine_args(args):
+    """Convert API args list (['--level','0','--execute','q3ide attach all']) to engine args."""
+    engine_args = []
+    i = 0
+    while i < len(args):
+        a = str(args[i])
+        if a == '--level' and i + 1 < len(args):
+            level = str(args[i + 1])
+            if level.isdigit() or (len(level) <= 2 and level.lstrip('-').isdigit()):
+                level = f'q3dm{level}'
+            engine_args += ['+map', level]
+            i += 2
+        elif a == '--bots' and i + 1 < len(args):
+            bots = int(args[i + 1])
+            engine_args += ['+set', 'bot_minplayers', str(bots + 1)]
+            i += 2
+        elif a == '--execute' and i + 1 < len(args):
+            engine_args += ['+set', 'nextdemo', str(args[i + 1])]
+            i += 2
+        else:
+            engine_args.append(a)
+            i += 1
+    return engine_args
 
 PORT = int(os.environ.get("Q3IDE_API_PORT", 6666))
 RCON_PASSWORD = os.environ.get("Q3IDE_RCON_PASSWORD", "q3idedev666")
@@ -44,6 +79,7 @@ _game_proc = None
 _game_start = None
 _build_proc = None
 _build_start = None
+_build_timeout = 120  # seconds; set per-build based on --clean
 
 WS_GUID = b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
 
@@ -126,6 +162,50 @@ def _send_rcon(cmd):
         return None
     finally:
         sock.close()
+
+
+def _do_run(args=None):
+    """Launch the game binary. Returns dict with ok/pid/error."""
+    global _game_proc, _game_start
+    if args is None:
+        args = ['--level', '0', '--execute', 'q3ide attach all']
+    if _game_running():
+        _kill_game()
+        time.sleep(1)
+    binary, build_dir = _q3_binary()
+    if binary is None:
+        return {'ok': False, 'error': 'quake3e binary not found — build first'}
+    engine_args = _build_engine_args(args)
+    cmd = [str(binary)] + engine_args
+    LOG_DIR.mkdir(parents=True, exist_ok=True)
+    engine_log = LOG_DIR / 'engine.log'
+    log_fh = open(engine_log, 'w')
+    print(f'[game] Launching: {" ".join(cmd)}', flush=True)
+    try:
+        _game_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                      cwd=str(build_dir))
+        _game_start = time.time()
+        PID_FILE.write_text(str(_game_proc.pid))
+        threading.Thread(target=_tee_output, args=(_game_proc, log_fh, '[game] '),
+                         daemon=True).start()
+        return {'ok': True, 'pid': _game_proc.pid, 'log': str(engine_log)}
+    except Exception as e:
+        return {'ok': False, 'error': str(e)}
+
+
+def _tee_output(proc, log_fh, prefix=''):
+    """Read proc stdout/stderr and write to both log_fh and sys.stdout."""
+    try:
+        for line in proc.stdout:
+            text = line.decode(errors='replace')
+            log_fh.write(text)
+            log_fh.flush()
+            sys.stdout.write(prefix + text)
+            sys.stdout.flush()
+    except Exception:
+        pass
+    finally:
+        log_fh.close()
 
 
 def _tail_log(path, n=100):
@@ -284,7 +364,7 @@ def _run_ws_session(sock, log_names):
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
-        pass
+        print(f'[api] {self.command} {self.path}', flush=True)
 
     def _send(self, code, body):
         data = json.dumps(body, indent=2).encode()
@@ -357,11 +437,13 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_stop()
         elif path == '/console':
             self._handle_console(body)
+        elif path == '/applescript':
+            self._handle_applescript(body)
         else:
             self._send(404, {'error': 'not found'})
 
     def _handle_build(self, body):
-        global _build_proc, _build_start
+        global _build_proc, _build_start, _build_timeout
         # Kill any in-progress build
         if _build_proc is not None and _build_proc.poll() is None:
             _build_proc.terminate()
@@ -370,14 +452,39 @@ class Handler(BaseHTTPRequestHandler):
             except subprocess.TimeoutExpired:
                 _build_proc.kill()
         args = body.get('args', [])
+        run_args = body.get('run_args', ['--level', '0', '--execute', 'q3ide attach all'])
+        auto_run = body.get('auto_run', True)
+        is_clean = '--clean' in [str(a) for a in args]
+        _build_timeout = 120 if is_clean else 20
         cmd = ['sh', str(BUILD_SCRIPT)] + [str(a) for a in args]
         LOG_DIR.mkdir(parents=True, exist_ok=True)
         build_log = LOG_DIR / 'build.log'
         log_fh = open(build_log, 'w')
-        _build_proc = subprocess.Popen(cmd, stdout=log_fh, stderr=subprocess.STDOUT,
+        _build_proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                                        cwd=str(ROOT))
         _build_start = time.time()
-        self._send(200, {'ok': True, 'building': True, 'log': 'build'})
+        threading.Thread(target=_tee_output, args=(_build_proc, log_fh, '[build] '),
+                         daemon=True).start()
+        def _watchdog(proc, timeout, should_run, run_args_):
+            start = time.time()
+            while time.time() - start < timeout:
+                if proc.poll() is not None:
+                    break
+                time.sleep(0.5)
+            if proc.poll() is None:
+                print(f'[build] TIMEOUT ({timeout}s), killing build.', flush=True)
+                proc.kill()
+                return
+            if proc.returncode == 0 and should_run:
+                print('[build] Build OK — launching game…', flush=True)
+                _do_run(run_args_)
+            elif proc.returncode != 0:
+                print(f'[build] Build FAILED (rc={proc.returncode})', flush=True)
+        threading.Thread(target=_watchdog,
+                         args=(_build_proc, _build_timeout, auto_run, run_args),
+                         daemon=True).start()
+        self._send(200, {'ok': True, 'building': True, 'auto_run': auto_run,
+                         'timeout_s': _build_timeout, 'log': 'build'})
 
     def _handle_build_status(self):
         global _build_proc
@@ -391,29 +498,41 @@ class Handler(BaseHTTPRequestHandler):
             self._send(200, {'building': False, 'ok': rc == 0, 'returncode': rc})
 
     def _handle_run(self, body):
-        global _game_proc, _game_start
-        if _game_running():
-            _kill_game()
-            time.sleep(1)
         args = body.get('args', ['--level', '0', '--execute', 'q3ide attach all'])
-        cmd = ['sh', str(BUILD_SCRIPT), '--run'] + [str(a) for a in args]
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        engine_log = LOG_DIR / 'engine.log'
-        log_fh = open(engine_log, 'w')
-        try:
-            _game_proc = subprocess.Popen(cmd, stdout=log_fh, stderr=subprocess.STDOUT,
-                                          cwd=str(ROOT), start_new_session=True)
-            _game_start = time.time()
-            PID_FILE.write_text(str(_game_proc.pid))
-            self._send(200, {'ok': True, 'pid': _game_proc.pid, 'log': str(engine_log)})
-        except Exception as e:
-            self._send(500, {'error': str(e)})
+        result = _do_run(args)
+        if result.get('ok'):
+            self._send(200, result)
+        else:
+            self._send(500, result)
 
     def _handle_stop(self):
         if not _game_running():
             self._send(200, {'ok': True, 'msg': 'not running'})
             return
         self._send(200, {'ok': _kill_game(), 'msg': 'stopped'})
+
+    def _handle_applescript(self, body):
+        script = body.get('script', '').strip()
+        if not script:
+            self._send(400, {'error': 'missing script'})
+            return
+        try:
+            result = subprocess.run(
+                ['osascript', '-e', script],
+                capture_output=True, text=True, timeout=30
+            )
+            self._send(200, {
+                'ok': result.returncode == 0,
+                'stdout': result.stdout.strip(),
+                'stderr': result.stderr.strip(),
+                'returncode': result.returncode,
+            })
+        except FileNotFoundError:
+            self._send(503, {'error': 'osascript not found (not macOS?)'})
+        except subprocess.TimeoutExpired:
+            self._send(504, {'error': 'AppleScript timeout'})
+        except Exception as e:
+            self._send(500, {'error': str(e)})
 
     def _handle_console(self, body):
         cmd = body.get('cmd', '').strip()

@@ -22,20 +22,20 @@
 
 ### Agent setup (do this FIRST if these agents below doesn't exist):
 
-This project uses **custom agents** to enforce architecture boundaries. Before writing any code, create `./.agents/agents/` with five specialist agents. Each agent is scoped to one layer and must NEVER touch files outside its scope.
+This project uses **custom agents** to enforce architecture boundaries. Before writing any code, create `.agents/agents/q3agents/` with five specialist agents. Each agent is scoped to one layer and must NEVER touch files outside its scope.
 
 
 Create these agent files:
 
-**`./.agents/agents/engine-adapter.md`** — Only touches `engine/quake3e/`, `engine/adapter.h`, and `quake3e/code/q3ide/`. Keeps the adapter minimal and swappable. Never modifies core Quake3e files outside `quake3e/code/q3ide/`.
+**`.agents/agents/q3agents/engine-adapter.md`** — Only touches `engine/quake3e/`, `engine/adapter.h`, and `quake3e/code/q3ide/`. Keeps the adapter minimal and swappable. Never modifies core Quake3e files outside `quake3e/code/q3ide/`.
 
-**`./.agents/agents/capture-rust.md`** — Only touches `capture/` and `q3ide_capture.h`. Pure Rust. Exposes only C-ABI functions. Never imports engine or spatial headers.
+**`.agents/agents/q3agents/capture-rust.md`** — Only touches `capture/` and `q3ide_capture.h`. Pure Rust. Exposes only C-ABI functions. Never imports engine or spatial headers.
 
-**`./.agents/agents/spatial-c.md`** — Only touches `spatial/` (all subdirectories). Engine-agnostic. Talks to engine only through `engine/adapter.h`. Talks to capture only through `q3ide_capture.h`. Uses VisionOS terminology.
+**`.agents/agents/q3agents/spatial-c.md`** — Only touches `spatial/` (all subdirectories). Engine-agnostic. Talks to engine only through `engine/adapter.h`. Talks to capture only through `q3ide_capture.h`. Uses VisionOS terminology.
 
-**`./.agents/agents/daemon-rust.md`** — Only touches `daemon/`. Separate Rust process. Communicates with Q3IDE through `.q3ide/uml_cache.json` + IPC. Never linked into the engine.
+**`.agents/agents/q3agents/daemon-rust.md`** — Only touches `daemon/`. Separate Rust process. Communicates with Q3IDE through `.q3ide/uml_cache.json` + IPC. Never linked into the engine.
 
-**`./.agents/agents/reviewer.md`** — Reviews code against architecture rules: boundary violations, file length (200 sweetspot, 400 max), core Quake changes, VisionOS terminology, feature completeness against this spec, test checkpoint readiness.
+**`.agents/agents/q3agents/reviewer.md`** — Reviews code against architecture rules: boundary violations, file length (200 sweetspot, 400 max), core Quake changes, VisionOS terminology, feature completeness against this spec, test checkpoint readiness.
 
 Each agent file should contain: the agent's name/description in YAML frontmatter, its exact file scope, its rules, and what it must NOT touch. See `./plan/03-Q3IDE_ORCHESTRATION.md` for the full agent file templates.
 
@@ -553,13 +553,15 @@ q3ide/
 ├── CLAUDE.md                          # Claude project prompt
 ├── plan/03-Q3IDE_ORCHESTRATION.md     # Agent orchestration setup (custom agents, subagents)
 │
-├── ./agents/                           # Claude Code configuration
-│   └── agents/                        # Custom agent definitions (architecture-scoped)
-│       ├── engine-adapter.md          # Only touches engine/, quake3e/code/q3ide/
-│       ├── capture-rust.md            # Only touches capture/
-│       ├── spatial-c.md               # Only touches spatial/
-│       ├── daemon-rust.md             # Only touches daemon/
-│       └── reviewer.md                # Code review — reads everything, writes nothing
+├── .agents/                            # Cross-IDE agent infrastructure
+│   ├── agents/q3agents/               # Custom agent definitions (architecture-scoped)
+│   │   ├── engine-adapter.md          # Only touches engine/, quake3e/code/q3ide/
+│   │   ├── capture-rust.md            # Only touches capture/
+│   │   ├── spatial-c.md               # Only touches spatial/
+│   │   ├── daemon-rust.md             # Only touches daemon/
+│   │   └── reviewer.md                # Code review — reads everything, writes nothing
+│   ├── commands/                      # Slash commands
+│   └── PROJECT_LOOP.md                # Build/log/verify manifest
 ├── Q3IDE_PROMPT.md                    # LLM coding prompt
 ├── TODO.md
 │

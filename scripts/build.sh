@@ -217,6 +217,25 @@ if [ "$DO_RUN" = "1" ]; then
         # We'll trigger it from the engine side instead
     fi
 
+    # Auto-detect primary screen resolution (macOS only, Retina-safe logical coords)
+    if command -v osascript > /dev/null 2>&1; then
+        SCREEN_RES=$(osascript -e 'tell application "Finder" to get bounds of window of desktop' 2>/dev/null)
+        if [ -n "$SCREEN_RES" ]; then
+            SCREEN_W=$(echo "$SCREEN_RES" | awk -F'[, ]+' '{print $3}')
+            SCREEN_H=$(echo "$SCREEN_RES" | awk -F'[, ]+' '{print $4}')
+            # Sanity check — must be integers
+            if echo "$SCREEN_W" | grep -qE '^[0-9]+$' && echo "$SCREEN_H" | grep -qE '^[0-9]+$'; then
+                # Cap at 4K — some Macs report wild physical pixel counts
+                [ "$SCREEN_W" -gt 3840 ] && SCREEN_W=3840
+                [ "$SCREEN_H" -gt 2160 ] && SCREEN_H=2160
+                ENGINE_ARGS="$ENGINE_ARGS +set r_mode -1 +set r_width $SCREEN_W +set r_height $SCREEN_H"
+                echo "  Screen resolution: ${SCREEN_W}x${SCREEN_H}"
+            else
+                echo "  WARNING: Could not parse screen bounds ('$SCREEN_RES') — using engine default"
+            fi
+        fi
+    fi
+
     ENGINE_LOG="$LOG_DIR/engine.log"
     echo ""
     echo "  Launching: ./$ENGINE_NAME $ENGINE_ARGS"

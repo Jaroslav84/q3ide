@@ -58,7 +58,26 @@ cvar_t *in_nograb;
 
 #ifdef USE_Q3IDE
 static cvar_t *r_multiMonitor;
-#endif
+#ifdef MACOS_X
+#include <objc/objc.h>
+#include <objc/message.h>
+/* Hide macOS menu bar and dock for the spanning window so they don't
+ * intrude on the center monitor.
+ * NSApplicationPresentationHideDock=2 (1<<1),
+ * NSApplicationPresentationHideMenuBar=8 (1<<3). */
+static void Q3IDE_HideMenuBarAndDock( void )
+{
+	id nsApp = ((id (*)(Class, SEL))objc_msgSend)(
+		objc_getClass("NSApplication"),
+		sel_registerName("sharedApplication"));
+	if ( nsApp )
+		((void (*)(id, SEL, unsigned long))objc_msgSend)(
+			nsApp,
+			sel_registerName("setPresentationOptions:"),
+			(1 << 1) | (1 << 3)); /* HideDock | HideMenuBar */
+}
+#endif /* MACOS_X */
+#endif /* USE_Q3IDE */
 
 /*
 ===============
@@ -472,6 +491,13 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 			Com_DPrintf( "SDL_CreateWindow failed: %s\n", SDL_GetError() );
 			continue;
 		}
+
+#ifdef USE_Q3IDE
+#ifdef MACOS_X
+		if ( r_multiMonitor && r_multiMonitor->integer )
+			Q3IDE_HideMenuBarAndDock();
+#endif
+#endif
 
 		if ( fullscreen )
 		{

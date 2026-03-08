@@ -498,7 +498,7 @@ ifeq ($(COMPILE_PLATFORM),darwin)
 
   ARCHEXT = .$(ARCH)
 
-  LDFLAGS +=
+  LDFLAGS += -lobjc
 
   ifeq ($(ARCH),x86_64)
     BASE_CFLAGS += -arch x86_64
