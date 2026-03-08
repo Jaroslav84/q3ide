@@ -26,4 +26,10 @@ void Q3IDE_AddPolysToScene( void );
 /* Called after renderer re-init (vid_restart or first init). */
 void Q3IDE_OnVidRestart( void );
 
+/*
+ * Called from CG_R_RENDERSCENE in cl_cgame.c instead of re.RenderScene()
+ * when r_multiMonitor is enabled. Renders one viewport per monitor.
+ */
+void Q3IDE_MultiMonitorRender( const void *refdef_ptr );
+
 #endif /* Q3IDE_HOOKS_H */

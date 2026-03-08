@@ -1,0 +1,90 @@
+/*
+ * q3ide_render.c — Multi-monitor viewport rendering.
+ *
+ * Q3IDE_MultiMonitorRender() replaces the single re.RenderScene() call
+ * in cl_cgame.c when r_multiMonitor is enabled.
+ *
+ * For each display detected by sdl_glimp.c, it renders a sub-viewport
+ * of the spanning window with a yaw angle offset matching the physical
+ * angle between monitors.
+ *
+ * Monitor layout cvars (set by sdl_glimp.c):
+ *   r_mmNumMon     — number of monitors
+ *   r_mmMonX<i>    — window-relative x of monitor i (pixels)
+ *   r_mmMonW<i>    — width of monitor i (pixels)
+ *   r_mmMonH<i>    — height of monitor i (pixels)
+ *   r_monitorAngle — physical angle (degrees) between adjacent monitors
+ */
+
+#include "../qcommon/q_shared.h"
+#include "q3ide_hooks.h"
+#include "../qcommon/qcommon.h"
+#include "../client/client.h"
+#include <math.h>
+
+/*
+ * Sort monitors left-to-right by window-relative x so we can assign
+ * yaw offsets correctly (leftmost = most positive yaw, rightmost = most negative).
+ */
+static void q3ide_sorted_monitors(int n, int *sorted)
+{
+	int i, j, tmp;
+	for (i = 0; i < n; i++) sorted[i] = i;
+	for (i = 0; i < n - 1; i++) {
+		for (j = i + 1; j < n; j++) {
+			int xi = Cvar_VariableIntegerValue(va("r_mmMonX%d", sorted[i]));
+			int xj = Cvar_VariableIntegerValue(va("r_mmMonX%d", sorted[j]));
+			if (xj < xi) { tmp = sorted[i]; sorted[i] = sorted[j]; sorted[j] = tmp; }
+		}
+	}
+}
+
+void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
+{
+	const refdef_t *fd = (const refdef_t *)refdef_ptr;
+	int n, i, sorted[16];
+	float angle;
+	int center;
+
+	n = Cvar_VariableIntegerValue("r_mmNumMon");
+	if (n <= 1) {
+		re.RenderScene(fd);
+		return;
+	}
+	if (n > 16) n = 16;
+
+	angle  = Cvar_VariableValue("r_monitorAngle");
+	center = n / 2; /* middle monitor index in sorted order */
+
+	q3ide_sorted_monitors(n, sorted);
+
+	for (i = 0; i < n; i++) {
+		refdef_t view = *fd;
+		int idx = sorted[i];
+		int mon_x = Cvar_VariableIntegerValue(va("r_mmMonX%d", idx));
+		int mon_w = Cvar_VariableIntegerValue(va("r_mmMonW%d", idx));
+		int mon_h = Cvar_VariableIntegerValue(va("r_mmMonH%d", idx));
+		float yaw_offset = (float)(center - i) * angle;
+
+		view.x      = mon_x;
+		view.y      = 0;
+		view.width  = mon_w;
+		view.height = mon_h;
+
+		/* Rotate view axis around Z by yaw_offset degrees */
+		if (yaw_offset != 0.0f) {
+			float rad = yaw_offset * (float)M_PI / 180.0f;
+			float c = cosf(rad), s = sinf(rad);
+			float ax, ay;
+			int a;
+			for (a = 0; a < 3; a++) {
+				ax = view.viewaxis[a][0];
+				ay = view.viewaxis[a][1];
+				view.viewaxis[a][0] = ax * c - ay * s;
+				view.viewaxis[a][1] = ax * s + ay * c;
+			}
+		}
+
+		re.RenderScene(&view);
+	}
+}

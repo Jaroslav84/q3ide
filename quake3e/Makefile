@@ -1138,7 +1138,8 @@ ifdef USE_Q3IDE
 Q3OBJ += \
   $(B)/client/q3ide_hooks.o \
   $(B)/client/q3ide_wm.o \
-  $(B)/client/q3ide_cmd.o
+  $(B)/client/q3ide_cmd.o \
+  $(B)/client/q3ide_render.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1450,6 +1451,9 @@ $(B)/client/q3ide_wm.o: $(Q3IDEDIR)/q3ide_wm.c
 $(B)/client/q3ide_cmd.o: $(Q3IDEDIR)/q3ide_cmd.c
 	$(DO_CC)
 
+
+$(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c
+	$(DO_CC)
 $(B)/rend1/%.o: $(R1DIR)/%.c
 	$(DO_REND_CC)
 
@@ -1559,3 +1563,4 @@ endif
 .PHONY: all clean clean2 clean-debug clean-release copyfiles \
 	debug default dist distclean makedirs release \
 	targets tools toolsclean
+

@@ -56,6 +56,10 @@ static PFN_vkGetInstanceProcAddr qvkGetInstanceProcAddr;
 cvar_t *r_stereoEnabled;
 cvar_t *in_nograb;
 
+#ifdef USE_Q3IDE
+static cvar_t *r_multiMonitor;
+#endif
+
 /*
 ===============
 GLimp_Shutdown
@@ -279,6 +283,40 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 	gw_active = qfalse;
 	gw_minimized = qtrue;
 
+#ifdef USE_Q3IDE
+	/* Multi-monitor spanning: build a borderless window across all displays */
+	if ( r_multiMonitor && r_multiMonitor->integer ) {
+		int n, i, x0, x1, mon_h;
+		SDL_Rect rect;
+		n = SDL_GetNumVideoDisplays();
+		x0 = 0; x1 = 0; mon_h = 0;
+		for ( i = 0; i < n; i++ ) {
+			SDL_GetDisplayBounds( i, &rect );
+			if ( i == 0 || rect.x < x0 ) x0 = rect.x;
+			if ( i == 0 || (rect.x + rect.w) > x1 ) x1 = rect.x + rect.w;
+			if ( rect.h > mon_h ) mon_h = rect.h;
+			/* store per-monitor layout for renderer */
+			Cvar_Set( va( "r_mmMonX%d", i ), va( "%d", rect.x ) );
+			Cvar_Set( va( "r_mmMonW%d", i ), va( "%d", rect.w ) );
+			Cvar_Set( va( "r_mmMonH%d", i ), va( "%d", rect.h ) );
+			Com_Printf( "q3ide: display %d: x=%d w=%d h=%d\n", i, rect.x, rect.w, rect.h );
+		}
+		Cvar_Set( "r_mmNumMon", va( "%d", n ) );
+		/* re-store x as window-relative (offset from leftmost edge) */
+		for ( i = 0; i < n; i++ ) {
+			SDL_GetDisplayBounds( i, &rect );
+			Cvar_Set( va( "r_mmMonX%d", i ), va( "%d", rect.x - x0 ) );
+		}
+		x = x0;
+		y = 0;
+		config->vidWidth  = x1 - x0;
+		config->vidHeight = mon_h;
+		flags &= ~(SDL_WINDOW_FULLSCREEN | SDL_WINDOW_FULLSCREEN_DESKTOP);
+		flags |= SDL_WINDOW_BORDERLESS;
+		Com_Printf( "q3ide: spanning %d monitors, %dx%d at x=%d\n",
+			n, config->vidWidth, config->vidHeight, x );
+	} else
+#endif
 	if ( fullscreen )
 	{
 #ifdef MACOS_X
@@ -610,6 +648,10 @@ void GLimp_Init( glconfig_t *config )
 
 	in_nograb = Cvar_Get( "in_nograb", "0", 0 );
 	Cvar_SetDescription( in_nograb, "Do not capture mouse in game, may be useful during online streaming." );
+
+#ifdef USE_Q3IDE
+	r_multiMonitor = Cvar_Get( "r_multiMonitor", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
+#endif
 
 	r_allowSoftwareGL = Cvar_Get( "r_allowSoftwareGL", "0", CVAR_LATCH );
 
