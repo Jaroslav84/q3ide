@@ -161,6 +161,11 @@ typedef struct {
 	float mirror_w, mirror_h;
 	qhandle_t mirror_shader;        /* q3ide/mirror — sort portal */
 	qhandle_t mirror_energy_shader; /* energy glow overlay */
+	/* Second standalone portal (return trip) */
+	qboolean mirror2_active;
+	vec3_t mirror2_origin;
+	vec3_t mirror2_normal;
+	float mirror2_w, mirror2_h;
 } q3ide_wm_t;
 
 extern q3ide_wm_t q3ide_wm;

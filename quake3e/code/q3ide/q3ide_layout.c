@@ -1,11 +1,13 @@
 /*
  * q3ide_layout.c — Room layout engine.
  *
- * Scans room walls, measures real width/height via ray traces, then sizes
- * and distributes windows as TV-mounted displays (66% of wall height).
+ * Uses AAS nav-mesh area geometry (q3ide_aas.c) for exact wall positions —
+ * no raycasting approximation. Only remaining trace is the object probe:
+ * a short outward sweep to clear decorations/trim mounted on wall faces.
  */
 
 #include "q3ide_layout.h"
+#include "q3ide_aas.h"
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
 #include "q3ide_log.h"
@@ -14,9 +16,74 @@
 #include <math.h>
 #include <string.h>
 
-#define Q3IDE_LAYOUT_SCAN_DIRS 24 /* every 15° */
-#define Q3IDE_WALL_OFFSET 10.0f
+/* Minimum clearance from wall surface (after object probe). */
+#define Q3IDE_WALL_OFFSET 4.0f
 
+/* ── Placement queue — filled by q3ide_room_layout, drained 1/frame ── */
+typedef struct {
+	unsigned int id;
+	vec3_t pos;
+	vec3_t normal;
+	float world_w, world_h;
+	qboolean is_display;
+} q3ide_pending_t;
+
+#define Q3IDE_QUEUE_MAX 32
+static q3ide_pending_t g_queue[Q3IDE_QUEUE_MAX];
+static int g_queue_head = 0; /* next slot to drain */
+static int g_queue_tail = 0; /* next slot to fill */
+
+static void q3ide_queue_push(unsigned int id, const vec3_t pos, const vec3_t normal, float ww, float wh,
+                             qboolean is_display)
+{
+	int next = (g_queue_tail + 1) % Q3IDE_QUEUE_MAX;
+	if (next == g_queue_head)
+		return; /* full — drop */
+	g_queue[g_queue_tail].id = id;
+	VectorCopy(pos, g_queue[g_queue_tail].pos);
+	VectorCopy(normal, g_queue[g_queue_tail].normal);
+	g_queue[g_queue_tail].world_w = ww;
+	g_queue[g_queue_tail].world_h = wh;
+	g_queue[g_queue_tail].is_display = is_display;
+	g_queue_tail = next;
+}
+
+void q3ide_layout_queue_reset(void)
+{
+	g_queue_head = g_queue_tail = 0;
+}
+
+qboolean q3ide_layout_tick(void)
+{
+	q3ide_pending_t *p;
+	int existing;
+	if (g_queue_head == g_queue_tail)
+		return qfalse; /* empty */
+	p = &g_queue[g_queue_head];
+	g_queue_head = (g_queue_head + 1) % Q3IDE_QUEUE_MAX;
+
+	/* Reuse: if already attached, just move — zero stream cost. */
+	existing = Q3IDE_WM_FindById(p->id);
+	if (existing >= 0) {
+		q3ide_wm.wins[existing].world_w = p->world_w;
+		q3ide_wm.wins[existing].world_h = p->world_h;
+		Q3IDE_WM_MoveWindow(existing, p->pos, p->normal);
+		Q3IDE_LOGI("layout tick: moved id=%u pos=(%.0f,%.0f,%.0f)", p->id, p->pos[0], p->pos[1], p->pos[2]);
+		return qtrue;
+	}
+
+	/* New window — full attach (expensive, staggered 1/frame). */
+	if (p->is_display) {
+		if (!q3ide_wm.cap_start_disp ||
+		    q3ide_wm.cap_start_disp(q3ide_wm.cap, p->id, Q3IDE_CAPTURE_FPS) != 0)
+			return qtrue; /* skip, still consumed */
+		Q3IDE_WM_Attach(p->id, p->pos, p->normal, p->world_w, p->world_h, qfalse, qtrue);
+	} else {
+		Q3IDE_WM_Attach(p->id, p->pos, p->normal, p->world_w, p->world_h, qtrue, qtrue);
+	}
+	Q3IDE_LOGI("layout tick: attached id=%u pos=(%.0f,%.0f,%.0f)", p->id, p->pos[0], p->pos[1], p->pos[2]);
+	return qtrue;
+}
 /* Compute horizontal right vector from a wall normal (inline from q3ide_geom.c) */
 static void q3ide_layout_right(const vec3_t normal, vec3_t right)
 {
@@ -38,7 +105,6 @@ static void q3ide_layout_right(const vec3_t normal, vec3_t right)
  * floor_z/ceil_z are used only for TV size calculation. */
 static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_wall_t *wall, const vec3_t eye)
 {
-	trace_t tr;
 	vec3_t start, end;
 	static vec3_t mins = {0, 0, 0}, maxs = {0, 0, 0};
 	/* Small box for LOS: passes over very thin protrusions (< 4u) */
@@ -145,47 +211,69 @@ static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_
 
 void q3ide_room_scan(vec3_t eye, q3ide_room_t *out)
 {
-	int i, j;
-	float yaw;
+	q3ide_aas_wall_t aas_walls[Q3IDE_LAYOUT_MAX_WALLS];
+	int n, i;
 
 	out->n = 0;
-	yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
 
-	for (i = 0; i < Q3IDE_LAYOUT_SCAN_DIRS && out->n < Q3IDE_LAYOUT_MAX_WALLS; i++) {
-		vec3_t dir, wp, wn;
-		float yt = yaw + (float) i * (2.0f * (float) M_PI / (float) Q3IDE_LAYOUT_SCAN_DIRS);
-		qboolean dup = qfalse;
-
-		dir[0] = cosf(yt);
-		dir[1] = sinf(yt);
-		dir[2] = 0.0f;
-
-		if (!Q3IDE_WM_TraceWall(eye, dir, wp, wn))
-			continue;
-
-		/* Skip non-vertical surfaces (ramps, slopes, ceilings) */
-		if (fabsf(wn[2]) > 0.4f)
-			continue;
-
-		/* Dedup: same wall normal within 0.85 cosine threshold */
-		for (j = 0; j < out->n; j++) {
-			if (DotProduct(wn, out->walls[j].normal) > 0.85f) {
-				dup = qtrue;
-				break;
+	/* Primary path: AAS-derived exact wall geometry. */
+	n = Q3IDE_AAS_GetAreaWalls(eye, aas_walls, Q3IDE_LAYOUT_MAX_WALLS);
+	if (n > 0) {
+		float radius = Cvar_VariableValue("q3ide_placement_radius");
+		if (radius < 64.0f)
+			radius = 1200.0f; /* default ~30m */
+		for (i = 0; i < n && out->n < Q3IDE_LAYOUT_MAX_WALLS; i++) {
+			q3ide_wall_t *w = &out->walls[out->n];
+			/* Skip walls outside the placement radius */
+			{
+				vec3_t _d;
+				VectorSubtract(eye, aas_walls[i].centroid, _d);
+				if (VectorLength(_d) > radius)
+					continue;
 			}
+			VectorCopy(aas_walls[i].centroid, w->contact);
+			VectorCopy(aas_walls[i].normal, w->normal);
+			VectorCopy(aas_walls[i].right, w->right);
+			w->width = aas_walls[i].width;
+			w->left_dist = aas_walls[i].left_dist;
+			w->floor_z = aas_walls[i].floor_z;
+			w->ceil_z = aas_walls[i].ceil_z;
+			Q3IDE_LOGI("wall[%d] w=%.0f(L=%.0f R=%.0f) floor=%.0f ceil=%.0f n=(%.2f,%.2f,%.2f)", out->n, w->width,
+			           w->left_dist, w->width - w->left_dist, w->floor_z, w->ceil_z, w->normal[0], w->normal[1],
+			           w->normal[2]);
+			out->n++;
 		}
-		if (dup)
-			continue;
-
-		q3ide_measure_wall(wp, wn, &out->walls[out->n], eye);
-		Q3IDE_LOGI("wall[%d] w=%.0f(L=%.0f R=%.0f) floor=%.0f ceil=%.0f n=(%.2f,%.2f,%.2f)", out->n,
-		           out->walls[out->n].width, out->walls[out->n].left_dist,
-		           out->walls[out->n].width - out->walls[out->n].left_dist, out->walls[out->n].floor_z,
-		           out->walls[out->n].ceil_z, out->walls[out->n].normal[0], out->walls[out->n].normal[1],
-		           out->walls[out->n].normal[2]);
-		out->n++;
+		Com_Printf("q3ide: room scan (AAS) found %d wall(s)\n", out->n);
+		return;
 	}
-	Com_Printf("q3ide: room scan found %d wall(s)\n", out->n);
+
+	/* Fallback: raycast scan if AAS not loaded or area not found. */
+	{
+		int j;
+		float yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+		for (i = 0; i < Q3IDE_LAYOUT_SCAN_DIRS && out->n < Q3IDE_LAYOUT_MAX_WALLS; i++) {
+			vec3_t dir, wp, wn;
+			qboolean dup = qfalse;
+			float yt = yaw + (float) i * (2.0f * (float) M_PI / Q3IDE_LAYOUT_SCAN_DIRS);
+			dir[0] = cosf(yt);
+			dir[1] = sinf(yt);
+			dir[2] = 0.0f;
+			if (!Q3IDE_WM_TraceWall(eye, dir, wp, wn))
+				continue;
+			if (fabsf(wn[2]) > 0.4f)
+				continue;
+			for (j = 0; j < out->n; j++)
+				if (DotProduct(wn, out->walls[j].normal) > 0.85f) {
+					dup = qtrue;
+					break;
+				}
+			if (dup)
+				continue;
+			q3ide_measure_wall(wp, wn, &out->walls[out->n], eye);
+			out->n++;
+		}
+		Com_Printf("q3ide: room scan (raycast fallback) found %d wall(s)\n", out->n);
+	}
 }
 
 /* Sort walls by how directly they face the player.
@@ -337,88 +425,44 @@ int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspect
 
 		for (j = 0; j < cnt; j++) {
 			int ii = assigned[wi][j];
-			float x_off, tv_w, tv_hj;
-			vec3_t pos, vend, wnorm;
-			trace_t vtr;
-			qboolean ok;
-			static vec3_t vmins = {0, 0, 0}, vmaxs = {0, 0, 0};
-			VectorCopy(wall->normal, wnorm); /* non-const copy for Attach API */
+			float x_off, tv_w, tv_hj, clear;
+			vec3_t pos, wall_surf, probe_end, wnorm;
+			trace_t ptr;
+			static vec3_t pmins = {-4, -4, -4}, pmaxs = {4, 4, 4};
+			VectorCopy(wall->normal, wnorm);
 
 			x_off = -wall->left_dist + margin + ((float) j + 0.5f) * step;
 			tv_w = tv_ws[j];
 			tv_hj = tv_hs[j];
 
-			pos[0] = wall->contact[0] + wall->right[0] * x_off;
-			pos[1] = wall->contact[1] + wall->right[1] * x_off;
-			pos[2] = wall->contact[2]; /* actual wall hit height — guaranteed on surface */
+			/* AAS face centroid + right offset gives exact on-plane position. */
+			wall_surf[0] = wall->contact[0] + wall->right[0] * x_off;
+			wall_surf[1] = wall->contact[1] + wall->right[1] * x_off;
+			wall_surf[2] = center_z;
 
-			/* Validate: trace back into wall to confirm geometry exists at this position.
-			 * Width was measured at center_z but corners/doorways can still cause gaps. */
-			vend[0] = pos[0] - wall->normal[0] * 24.0f;
-			vend[1] = pos[1] - wall->normal[1] * 24.0f;
-			vend[2] = pos[2] - wall->normal[2] * 24.0f;
-			CM_BoxTrace(&vtr, pos, vend, vmins, vmaxs, 0, CONTENTS_SOLID, qfalse);
-			if (vtr.fraction >= 1.0f) {
-				Q3IDE_LOGE("layout: no wall at x_off=%.0f for id=%u — skipping", x_off, ids[ii]);
-				continue;
-			}
-			/* Probe outward from wall surface to detect mounted objects (shelves, trim, etc.).
-			 * Trace a small box 48u into the room; if it hits something, clear it by 4u. */
-			{
-				vec3_t wall_surf, probe_end;
-				trace_t ptr;
-				static vec3_t pmins = {-4, -4, -4}, pmaxs = {4, 4, 4};
-				float clear;
-				wall_surf[0] = vtr.endpos[0];
-				wall_surf[1] = vtr.endpos[1];
-				wall_surf[2] = center_z;
-				probe_end[0] = wall_surf[0] + wall->normal[0] * 48.0f;
-				probe_end[1] = wall_surf[1] + wall->normal[1] * 48.0f;
-				probe_end[2] = wall_surf[2];
-				CM_BoxTrace(&ptr, wall_surf, probe_end, pmins, pmaxs, 0, CONTENTS_SOLID, qfalse);
-				clear = ptr.fraction * 48.0f + 4.0f; /* 4u past the obstruction */
-				if (clear < Q3IDE_WALL_OFFSET)
-					clear = Q3IDE_WALL_OFFSET;
-				pos[0] = vtr.endpos[0] + wall->normal[0] * clear;
-				pos[1] = vtr.endpos[1] + wall->normal[1] * clear;
-				pos[2] = (fabsf(wall->normal[2]) < 0.7f) ? center_z : vtr.endpos[2] + wall->normal[2] * clear;
-			}
+			/* Object probe: sweep outward 48u from wall plane; clear any
+			 * mounted decoration (trim, ledges, torches, signs) by 4u.
+			 * This is the ONLY trace needed — AAS gives exact wall position. */
+			probe_end[0] = wall_surf[0] + wall->normal[0] * 48.0f;
+			probe_end[1] = wall_surf[1] + wall->normal[1] * 48.0f;
+			probe_end[2] = wall_surf[2];
+			CM_BoxTrace(&ptr, wall_surf, probe_end, pmins, pmaxs, 0, CONTENTS_SOLID, qfalse);
+			clear = ptr.fraction * 48.0f + 4.0f;
+			if (clear < Q3IDE_WALL_OFFSET)
+				clear = Q3IDE_WALL_OFFSET;
+			/* Stagger each window 0.5u further than the previous to prevent
+			 * Z-fighting between coplanar quads on the same wall. */
+			clear += (float) j * 0.5f;
 
-			/* LOS from player eye to window: skip if blocked (window is around a corner / outside room). */
-			{
-				vec3_t eye, los_tgt;
-				trace_t los_tr;
-				VectorCopy(cl.snap.ps.origin, eye);
-				eye[2] += cl.snap.ps.viewheight;
-				los_tgt[0] = pos[0] + wall->normal[0] * 4.0f;
-				los_tgt[1] = pos[1] + wall->normal[1] * 4.0f;
-				los_tgt[2] = pos[2];
-				CM_BoxTrace(&los_tr, eye, los_tgt, vmins, vmaxs, 0, CONTENTS_SOLID, qfalse);
-				if (!los_tr.startsolid && los_tr.fraction < 0.9f) {
-					Q3IDE_LOGE("layout: pos (%.0f,%.0f,%.0f) not visible from player — outside room", pos[0], pos[1],
-					           pos[2]);
-					continue;
-				}
-			}
+			pos[0] = wall_surf[0] + wall->normal[0] * clear;
+			pos[1] = wall_surf[1] + wall->normal[1] * clear;
+			pos[2] = center_z;
 
-			if (is_display && is_display[ii]) {
-				if (!q3ide_wm.cap_start_disp ||
-				    q3ide_wm.cap_start_disp(q3ide_wm.cap, ids[ii], Q3IDE_CAPTURE_FPS) != 0) {
-					Q3IDE_LOGE("layout: disp start failed id=%u", ids[ii]);
-					continue;
-				}
-				ok = Q3IDE_WM_Attach(ids[ii], pos, wnorm, tv_w, tv_hj, qfalse, qtrue);
-			} else {
-				ok = Q3IDE_WM_Attach(ids[ii], pos, wnorm, tv_w, tv_hj, qtrue, qtrue);
-			}
-
-			if (ok) {
-				placed++;
-				Q3IDE_LOGI("layout: placed id=%u wall=%d x_off=%.0f size=%.0fx%.0f pos=(%.0f,%.0f,%.0f)", ids[ii], wi,
-				           x_off, tv_w, tv_hj, pos[0], pos[1], pos[2]);
-			} else {
-				Q3IDE_LOGE("layout: attach failed id=%u", ids[ii]);
-			}
+			/* Push to queue — drained one per frame by q3ide_layout_tick(). */
+			q3ide_queue_push(ids[ii], pos, wnorm, tv_w, tv_hj, is_display && is_display[ii]);
+			Q3IDE_LOGI("layout: queued id=%u wall=%d x_off=%.0f size=%.0fx%.0f pos=(%.0f,%.0f,%.0f)", ids[ii], wi,
+			           x_off, tv_w, tv_hj, pos[0], pos[1], pos[2]);
+			placed++;
 		}
 	}
 	return placed;

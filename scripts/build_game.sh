@@ -77,15 +77,48 @@ if [ ! -f "$BUILD_OUT" ]; then
     exit 1
 fi
 
-# ── 4. Copy to baseq3 ─────────────────────────────────────────────────────────
+# ── 4. Copy qagame to baseq3 ──────────────────────────────────────────────────
 cp "$BUILD_OUT" "$OUT_DIR/qagame${ARCH}.dylib"
-# Also update the plain qagame.dylib the engine tries first
 cp "$BUILD_OUT" "$OUT_DIR/qagame.dylib"
+
+# ── 5. Build ui dylib (accent color #FF34DD) ──────────────────────────────────
+echo "--- Compiling ui with clang..."
+UI_SRC="$IOQ3_DIR/code/q3_ui"
+UI_BUILD_DIR="$IOQ3_DIR/build_ui_q3ide"
+mkdir -p "$UI_BUILD_DIR"
+
+UI_SRCS="
+    ui_main.c ui_atoms.c ui_connect.c ui_controls2.c ui_demo2.c
+    ui_cdkey.c ui_ingame.c ui_loadconfig.c ui_menu.c ui_mfield.c
+    ui_mods.c ui_network.c ui_options.c ui_playermodel.c ui_players.c
+    ui_qmenu.c ui_saveconfig.c ui_serverinfo.c ui_servers2.c
+    ui_setup.c ui_sound.c ui_sparena.c ui_specifyleader.c ui_specifyteam.c
+    ui_splevel.c ui_sppostgame.c ui_spreset.c ui_spskill.c ui_startserver.c
+    ui_team.c ui_teamorders.c ui_video.c ui_syscalls.c
+    ui_addbots.c ui_removebots.c ui_cinematics.c
+    ../game/bg_misc.c ../game/bg_lib.c
+"
+
+UI_CFLAGS="-O2 -arch ${ARCH} -I${UI_SRC} -I${IOQ3_DIR}/code/game -DUI -DQ3_VM_LINKED"
+UI_OBJS=""
+for f in $UI_SRCS; do
+    src_path="$UI_SRC/$f"
+    obj="$UI_BUILD_DIR/$(basename ${f%.c}.o)"
+    clang $UI_CFLAGS -c "$src_path" -o "$obj" 2>&1 || { echo "WARN: ui compile failed: $f (skipping)"; continue; }
+    UI_OBJS="$UI_OBJS $obj"
+done
+
+UI_OUT="$UI_BUILD_DIR/ui${ARCH}.dylib"
+clang -dynamiclib -arch ${ARCH} -undefined suppress -flat_namespace \
+    $UI_OBJS -o "$UI_OUT" 2>&1 && {
+    cp "$UI_OUT" "$OUT_DIR/ui${ARCH}.dylib"
+    cp "$UI_OUT" "$OUT_DIR/ui.dylib"
+    echo "    $OUT_DIR/ui${ARCH}.dylib (accent #FF34DD)"
+} || echo "WARN: ui link failed — keeping existing ui.dylib"
 
 echo ""
 echo "=== Done ==="
 echo "    $OUT_DIR/qagame${ARCH}.dylib"
 echo ""
-echo "Grapple hook is now enabled by default."
-echo "Players spawn with it automatically (WP_GRAPPLING_HOOK baked in)."
+echo "Grapple hook + accent color #FF34DD applied."
 echo "Restart the game to apply."

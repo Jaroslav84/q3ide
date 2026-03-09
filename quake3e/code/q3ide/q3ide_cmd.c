@@ -64,7 +64,7 @@ void Q3IDE_WM_CmdAttach(void)
 		return;
 	}
 
-	Q3IDE_WM_CmdDetachAll();
+	q3ide_layout_queue_reset(); /* discard stale pending positions */
 
 	/* Collect app windows (terminal + browser) */
 	{
@@ -121,6 +121,24 @@ void Q3IDE_WM_CmdAttach(void)
 	if (!item_n) {
 		Com_Printf("q3ide: no windows or displays found\n");
 		return;
+	}
+
+	/* Detach windows whose ID is not in the new target set.
+	 * Windows that survive keep their streams — they'll be moved in-place. */
+	{
+		int si, ki;
+		for (si = 0; si < Q3IDE_MAX_WIN; si++) {
+			qboolean keep = qfalse;
+			if (!q3ide_wm.wins[si].active)
+				continue;
+			for (ki = 0; ki < item_n; ki++)
+				if (items[ki].id == q3ide_wm.wins[si].capture_id) {
+					keep = qtrue;
+					break;
+				}
+			if (!keep)
+				Q3IDE_WM_DetachById(q3ide_wm.wins[si].capture_id);
+		}
 	}
 
 	VectorCopy(cl.snap.ps.origin, eye);

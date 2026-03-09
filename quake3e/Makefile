@@ -304,7 +304,7 @@ ifeq ($(ARCH),ppc64)
   HAVE_VM_COMPILED = true
 endif
 
-BASE_CFLAGS =
+BASE_CFLAGS = -DSTANDALONE
 
 ifeq ($(USE_SYSTEM_JPEG),1)
   BASE_CFLAGS += -DUSE_SYSTEM_JPEG
@@ -1148,6 +1148,7 @@ Q3OBJ += \
   $(B)/client/q3ide_geom.o \
   $(B)/client/q3ide_log.o \
   $(B)/client/q3ide_overlay.o \
+  $(B)/client/q3ide_aas.o \
   $(B)/client/q3ide_layout.o \
   $(B)/client/q3ide_entity.o \
   $(B)/client/q3ide_laser.o
@@ -1478,6 +1479,9 @@ $(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c
 	$(DO_CC)
 
 $(B)/client/q3ide_overlay.o: $(Q3IDEDIR)/q3ide_overlay.c
+	$(DO_CC)
+
+$(B)/client/q3ide_aas.o: $(Q3IDEDIR)/q3ide_aas.c
 	$(DO_CC)
 
 $(B)/client/q3ide_layout.o: $(Q3IDEDIR)/q3ide_layout.c

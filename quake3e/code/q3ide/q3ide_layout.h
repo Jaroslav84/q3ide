@@ -7,6 +7,7 @@
 #include "../qcommon/q_shared.h"
 
 #define Q3IDE_LAYOUT_MAX_WALLS 12
+#define Q3IDE_LAYOUT_SCAN_DIRS 24 /* every 15° — used by raycast fallback */
 
 /* Measured wall descriptor */
 typedef struct {
@@ -28,9 +29,15 @@ typedef struct {
 /* Scan room walls from eye position */
 void q3ide_room_scan(vec3_t eye, q3ide_room_t *out);
 
-/* Place N windows (by capture id + pixel aspect) on room walls.
- * ids[i] is a window/display capture id; is_display[i] flags display streams.
- * aspects[i] = (float)tex_w / tex_h  (pass 16.0f/9.0f if unknown) */
+/* Compute layout and enqueue placements — does NOT call Attach yet.
+ * Returns number of windows queued. */
 int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspects, int *is_display, int n);
+
+/* Flush all pending placements (call before re-layout to discard stale positions). */
+void q3ide_layout_queue_reset(void);
+
+/* Process one pending placement per call. Call from Q3IDE_Frame.
+ * Returns qtrue if a window was placed, qfalse if queue empty. */
+qboolean q3ide_layout_tick(void);
 
 #endif /* Q3IDE_LAYOUT_H */

@@ -16,6 +16,8 @@
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
 #include "q3ide_interaction.h"
+#include "q3ide_aas.h"
+#include "q3ide_layout.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -43,9 +45,15 @@ static struct {
 	int raw_buttons;
 	int last_health; /* detect respawn (health 0 → >0) */
 	/* portal teleport */
-	int portal_cooldown; /* frames left after teleport, 0 = ready */
+	int portal_cooldown;  /* frames left after portal1 fires */
+	int portal2_cooldown; /* frames left after portal2 fires */
 	/* grapple-to-window teleport */
 	int grapple_tele_cooldown; /* frames left after teleport, 0 = ready */
+	/* streaming placement — re-layout on room change */
+	vec3_t stream_origin; /* player pos at last layout (fallback for no-AAS) */
+	qboolean stream_armed; /* qtrue once first layout has fired */
+	int stream_last_area; /* AAS area at last layout */
+	int stream_cooldown; /* frames to wait before re-layout (debounce doorways) */
 } q3ide_state;
 
 /* ============================================================
@@ -61,61 +69,81 @@ static struct {
  * EF_TELEPORT_BIT toggle signals cgame to skip position interpolation.
  * Destination overrideable via cvars: q3ide_tele_x/y/z/yaw.
  */
+/*
+ * Two-portal straight-line loop: both portals face north (normal=(0,1,0)).
+ * Player faces south (yaw=270) and runs through both in sequence:
+ *   ... → portal_A → portal_B → portal_A → portal_B → ...
+ * Separate cooldown per portal so each can fire independently.
+ *
+ * Layout (Y axis, player runs south = decreasing Y):
+ *   spawn (-974) → portal_A (-1100) → arrive (-1200) → portal_B (-1280) → arrive (-900) → repeat
+ */
+static void q3ide_portal_tele(playerState_t *sps, float x, float y, float z, float yaw, const char *tag)
+{
+	Q3IDE_LOGI("%s -> (%.0f,%.0f,%.0f) yaw=%.0f", tag, x, y, z, yaw);
+	sps->origin[0] = x;
+	sps->origin[1] = y;
+	sps->origin[2] = z;
+	sps->velocity[0] = sps->velocity[1] = sps->velocity[2] = 0.0f;
+	sps->eFlags ^= EF_TELEPORT_BIT;
+	sps->viewangles[YAW] = yaw;
+	sps->viewangles[PITCH] = 0.0f;
+	VectorCopy(sps->origin, cl.snap.ps.origin);
+	VectorClear(cl.snap.ps.velocity);
+	cl.snap.ps.eFlags = sps->eFlags;
+}
+
 static void q3ide_portal_frame(void)
 {
-	vec3_t pos, diff, origin, normal, right;
-	float dist, lx, ly, hw, hh, nx, ny, len, ww, wh;
-	int in_bounds;
-	cvar_t *tx, *ty, *tz, *tyaw;
+	vec3_t pos, origin1, normal1, origin2, normal2, diff, right;
+	float ww1, wh1, ww2, wh2, dist, lx, ly, nx, ny, len;
+	playerState_t *sps;
 
-	if (!Q3IDE_WM_MirrorActive() || cls.state != CA_ACTIVE)
+	if (cls.state != CA_ACTIVE)
 		return;
 
-	if (q3ide_state.portal_cooldown > 0) {
+	/* Tick cooldowns */
+	if (q3ide_state.portal_cooldown > 0)
 		q3ide_state.portal_cooldown--;
-		return;
-	}
-
-	Q3IDE_WM_GetMirrorOrigin(origin, normal, &ww, &wh);
+	if (q3ide_state.portal2_cooldown > 0)
+		q3ide_state.portal2_cooldown--;
 
 	VectorCopy(cl.snap.ps.origin, pos);
-	VectorSubtract(pos, origin, diff);
-	dist = DotProduct(diff, normal);
 
-	/* Build right vector perpendicular to normal in XY plane */
-	nx = normal[0];
-	ny = normal[1];
-	len = sqrtf(nx * nx + ny * ny);
-	if (len > 0.01f) {
-		right[0] = -ny / len;
-		right[1] = nx / len;
-		right[2] = 0.0f;
-	} else {
-		right[0] = 1.0f;
-		right[1] = 0.0f;
-		right[2] = 0.0f;
+	/* Helper: test player against a portal face */
+#define PORTAL_HIT(orig, norm, ww, wh)                                                                                 \
+	((nx = (norm)[0], ny = (norm)[1], len = sqrtf(nx * nx + ny * ny),                                                  \
+	  len > 0.01f ? (right[0] = -ny / len, right[1] = nx / len, right[2] = 0.0f)                                       \
+	              : (right[0] = 1.0f, right[1] = 0.0f, right[2] = 0.0f),                                               \
+	  0),                                                                                                              \
+	 VectorSubtract(pos, orig, diff), dist = DotProduct(diff, (norm)), lx = DotProduct(diff, right), ly = diff[2],     \
+	 fabsf(dist) < 24.0f && fabsf(lx) < (ww) * 0.5f && fabsf(ly) < (wh) * 0.5f + 24.0f)
+
+	/* Portal 1 */
+	if (Q3IDE_WM_MirrorActive() && q3ide_state.portal_cooldown == 0) {
+		Q3IDE_WM_GetMirrorOrigin(origin1, normal1, &ww1, &wh1);
+		if (PORTAL_HIT(origin1, normal1, ww1, wh1)) {
+			sps = SV_GameClientNum(0);
+			if (sps)
+				q3ide_portal_tele(sps, -1152.0f, -1200.0f, 21.0f, 270.0f, "portal1");
+			q3ide_state.portal_cooldown = 30; /* 0.5s grace */
+			q3ide_state.portal2_cooldown = 30;
+		}
 	}
 
-	lx = DotProduct(diff, right);
-	ly = diff[2];
-	hw = ww * 0.5f;
-	hh = wh * 0.5f;
-	/* Fire when player's body intersects the portal face (dist < 24 = player half-width).
-	 * in_bounds uses portal face dimensions so only the energy visual triggers, not the air around it. */
-	in_bounds = (fabsf(lx) < hw && fabsf(ly) < hh + 24.0f);
-
-	if (fabsf(dist) < 24.0f && in_bounds) {
-		char cmd[128];
-		tx   = Cvar_Get("q3ide_tele_x",   "188",  0);
-		ty   = Cvar_Get("q3ide_tele_y",   "-360", 0);
-		tz   = Cvar_Get("q3ide_tele_z",   "20",   0);
-		tyaw = Cvar_Get("q3ide_tele_yaw", "90",   0);
-		Com_sprintf(cmd, sizeof(cmd), "setviewpos %.0f %.0f %.0f %.0f",
-		            tx->value, ty->value, tz->value, tyaw->value);
-		Q3IDE_LOGI("portal FIRE dist=%.1f cmd=[%s]", dist, cmd);
-		CL_AddReliableCommand(cmd, qfalse);
-		q3ide_state.portal_cooldown = 180; /* 3s at 60fps */
+	/* Portal 2 */
+	if (Q3IDE_WM_Mirror2Active() && q3ide_state.portal2_cooldown == 0) {
+		Q3IDE_WM_GetMirror2Origin(origin2, normal2, &ww2, &wh2);
+		if (PORTAL_HIT(origin2, normal2, ww2, wh2)) {
+			sps = SV_GameClientNum(0);
+			if (sps)
+				q3ide_portal_tele(sps, -1152.0f, -900.0f, 21.0f, 270.0f, "portal2");
+			q3ide_state.portal_cooldown = 30;
+			q3ide_state.portal2_cooldown = 30;
+		}
 	}
+
+#undef PORTAL_HIT
 }
 
 /* ============================================================
@@ -195,7 +223,7 @@ static void Q3IDE_Cmd_f(void)
 					dz = oz - ppos[2];
 					d = sqrtf(dx * dx + dy * dy + dz * dz);
 					if (d < 640.0f) {
-						Com_Printf("  [%.0fu] %-32s (%.0f,%.0f,%.0f)%s%s\n", (int) d, classname, ox, oy, oz,
+						Com_Printf("  [%du] %-32s (%.0f,%.0f,%.0f)%s%s\n", (int) d, classname, ox, oy, oz,
 						           model[0] ? " " : "", model[0] ? model : "");
 						found++;
 					}
@@ -297,7 +325,7 @@ static void q3ide_grapple_window_frame(void)
 
 	/* Find the closest window whose surface contains grapplePoint */
 	best_dist = 48.0f; /* max tolerated distance from window plane */
-	best_win  = -1;
+	best_win = -1;
 
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		win = &q3ide_wm.wins[i];
@@ -311,14 +339,14 @@ static void q3ide_grapple_window_frame(void)
 			continue;
 
 		/* Build right vector perpendicular to normal in XY plane */
-		nx  = win->normal[0];
-		ny  = win->normal[1];
+		nx = win->normal[0];
+		ny = win->normal[1];
 		len = sqrtf(nx * nx + ny * ny);
 		if (len < 0.01f)
 			continue;
 		right[0] = -ny / len;
-		right[1]  = nx / len;
-		right[2]  = 0.0f;
+		right[1] = nx / len;
+		right[2] = 0.0f;
 
 		/* Check if grapplePoint projects inside window bounds */
 		lx = DotProduct(diff, right);
@@ -328,7 +356,7 @@ static void q3ide_grapple_window_frame(void)
 
 		if (fabsf(lx) < hw && fabsf(ly) < hh) {
 			best_dist = dist_to_plane;
-			best_win  = i;
+			best_win = i;
 		}
 	}
 
@@ -339,14 +367,16 @@ static void q3ide_grapple_window_frame(void)
 
 	/* Optimal viewing distance: fit the whole window in typical ~90° FOV */
 	view_dist = (win->world_w > win->world_h ? win->world_w : win->world_h) * 0.9f;
-	if (view_dist < 120.0f) view_dist = 120.0f;
-	if (view_dist > 350.0f) view_dist = 350.0f;
+	if (view_dist < 120.0f)
+		view_dist = 120.0f;
+	if (view_dist > 350.0f)
+		view_dist = 350.0f;
 
 	/* Destination: stand in front of window.  Z: window center - viewheight so
 	 * the window center lands at eye level. */
-	float tx  = win->origin[0] + win->normal[0] * view_dist;
-	float ty  = win->origin[1] + win->normal[1] * view_dist;
-	float tz  = win->origin[2] - 26.0f; /* window center at eye level */
+	float tx = win->origin[0] + win->normal[0] * view_dist;
+	float ty = win->origin[1] + win->normal[1] * view_dist;
+	float tz = win->origin[2] - 26.0f; /* window center at eye level */
 	float yaw = atan2f(-win->normal[1], -win->normal[0]) * 180.0f / (float) M_PI;
 
 	Com_sprintf(cmd, sizeof(cmd), "setviewpos %.0f %.0f %.0f %.0f", tx, ty, tz, yaw);
@@ -466,10 +496,15 @@ void Q3IDE_Init(void)
 
 void Q3IDE_OnVidRestart(void)
 {
+	const char *mapname;
 	Q3IDE_WM_InvalidateShaders();
 	/* Re-arm autoexec so the post-map sequence fires on every level load */
 	q3ide_state.autoexec_done = qfalse;
 	q3ide_state.autoexec_delay = 0;
+	/* Load AAS for this map so the layout engine has exact wall geometry. */
+	mapname = Cvar_VariableString("mapname");
+	if (mapname && mapname[0])
+		Q3IDE_AAS_Load(mapname);
 }
 
 void Q3IDE_Frame(void)
@@ -481,7 +516,11 @@ void Q3IDE_Frame(void)
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
 		if (++q3ide_state.autoexec_delay > 60) {
 			/* Always give grapple hook on every map load */
-			Cbuf_AddText("give grappling hook\nweapon 10\n");
+			Cbuf_AddText("give grappling hook\nweapon 10\nq3ide attach all\n");
+			VectorCopy(cl.snap.ps.origin, q3ide_state.stream_origin);
+			q3ide_state.stream_last_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
+			q3ide_state.stream_cooldown = 60;
+			q3ide_state.stream_armed = qtrue;
 			cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
 			if (cmd && cmd->string[0]) {
 				Com_Printf("q3ide: auto: %s\n", cmd->string);
@@ -491,39 +530,63 @@ void Q3IDE_Frame(void)
 			}
 			q3ide_state.autoexec_done = qtrue;
 
-			/* Place portal on the wall the player is facing — walk into the glow to teleport */
+			/* Two-portal straight-line loop — both face north (0,1,0), player runs south.
+			 *   Portal_A at Y=-1100: player hits it → arrive at Y=-1200, run south.
+			 *   Portal_B at Y=-1280: player hits it → arrive at Y=-900, run south → portal_A again.
+			 *   Cooldown=30 per portal (0.5s), separate counters → other portal always ready. */
 			{
-				vec3_t eye, fwd_v, right_v, wall_pos, wall_normal;
-				float p, y;
-				VectorCopy(cl.snap.ps.origin, eye);
-				eye[2] += cl.snap.ps.viewheight;
-				p = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
-				y = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
-				fwd_v[0] = cosf(p) * cosf(y);
-				fwd_v[1] = cosf(p) * sinf(y);
-				fwd_v[2] = -sinf(p);
-				/* Right vector (player's right, XY-plane) */
-				right_v[0] = sinf(y);
-				right_v[1] = -cosf(y);
-				right_v[2] = 0.0f;
-				/* Trace to the wall; if no wall found, float 120u ahead */
-				if (!Q3IDE_WM_TraceWall(eye, fwd_v, wall_pos, wall_normal)) {
-					wall_pos[0] = eye[0] + fwd_v[0] * 120.0f;
-					wall_pos[1] = eye[1] + fwd_v[1] * 120.0f;
-					wall_pos[2] = eye[2];
-					wall_normal[0] = -fwd_v[0];
-					wall_normal[1] = -fwd_v[1];
-					wall_normal[2] = 0.0f;
+				float ez;
+				vec3_t pa, pb, n;
+				VectorCopy(cl.snap.ps.origin, pa); /* reuse pa temporarily for eye */
+				ez = pa[2] + cl.snap.ps.viewheight;
+				n[0] = 0.0f;
+				n[1] = 1.0f;
+				n[2] = 0.0f; /* facing north */
+				/* Portal A */
+				pa[0] = -1152.0f;
+				pa[1] = -1100.0f;
+				pa[2] = ez;
+				Q3IDE_WM_PlaceMirror(pa, n, 72.0f, 131.0f);
+				/* Portal B */
+				pb[0] = -1152.0f;
+				pb[1] = -1280.0f;
+				pb[2] = ez;
+				Q3IDE_WM_PlaceMirror2(pb, n, 72.0f, 131.0f);
+				q3ide_state.portal_cooldown = 90; /* 1.5s spawn grace */
+				q3ide_state.portal2_cooldown = 90;
+				Q3IDE_LOGI("portals placed: A=(%.0f,%.0f,%.0f) B=(%.0f,%.0f,%.0f)", pa[0], pa[1], pa[2], pb[0], pb[1],
+				           pb[2]);
+			}
+		}
+	}
+
+	/* Streaming placement: re-layout whenever the player enters a new AAS area.
+	 * Falls back to distance check when AAS is not loaded. */
+	if (q3ide_state.stream_armed && cls.state == CA_ACTIVE) {
+		if (q3ide_state.stream_cooldown > 0) {
+			q3ide_state.stream_cooldown--;
+		} else {
+			qboolean do_layout = qfalse;
+			if (Q3IDE_AAS_IsLoaded()) {
+				int cur_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
+				if (cur_area > 0 && cur_area != q3ide_state.stream_last_area) {
+					q3ide_state.stream_last_area = cur_area;
+					do_layout = qtrue;
 				}
-				/* Eye height + 4u right + 48u off wall toward player */
-				wall_pos[2] = eye[2];
-				wall_pos[0] += right_v[0] * 4.0f + wall_normal[0] * 48.0f;
-				wall_pos[1] += right_v[1] * 4.0f + wall_normal[1] * 48.0f;
-				/* 72 wide x 131 tall (40cm/16u shorter) */
-				Q3IDE_WM_PlaceMirror(wall_pos, wall_normal, 72.0f, 131.0f);
-				q3ide_state.portal_cooldown = 90; /* 1.5s grace — don't fire at spawn */
-				Q3IDE_LOGI("portal placed on wall at (%.0f,%.0f,%.0f) n=(%.2f,%.2f) size=72x131", wall_pos[0],
-				           wall_pos[1], wall_pos[2], wall_normal[0], wall_normal[1]);
+			} else {
+				/* No AAS — fall back to distance threshold */
+				vec3_t delta;
+				float radius = Cvar_VariableValue("q3ide_placement_radius");
+				if (radius < 64.0f)
+					radius = 1200.0f;
+				VectorSubtract(cl.snap.ps.origin, q3ide_state.stream_origin, delta);
+				if (VectorLength(delta) > radius * 0.5f)
+					do_layout = qtrue;
+			}
+			if (do_layout) {
+				Cbuf_AddText("q3ide attach all\n");
+				VectorCopy(cl.snap.ps.origin, q3ide_state.stream_origin);
+				q3ide_state.stream_cooldown = 30; /* 0.5s debounce — no thrash in doorways */
 			}
 		}
 	}
@@ -595,6 +658,8 @@ void Q3IDE_Frame(void)
 		q3ide_grapple_window_frame();
 	}
 
+	/* Drain one pending window placement per frame (staggered attach). */
+	q3ide_layout_tick();
 	Q3IDE_WM_PollFrames();
 }
 
@@ -631,10 +696,32 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 	return Q3IDE_Interaction_OnKeyEvent(key, down);
 }
 
+static void q3ide_render_bye(void)
+{
+	static const float white[4] = {1.0f, 1.0f, 1.0f, 1.0f};
+	int cx, cy;
+
+	if (!re.BeginFrame || !re.EndFrame || !re.SetColor)
+		return;
+
+	re.BeginFrame(STEREO_CENTER);
+	re.SetColor(NULL); /* black clear — engine clears to black by default */
+
+	cx = cls.glconfig.vidWidth / 2 - 4 * BIGCHAR_WIDTH;
+	cy = cls.glconfig.vidHeight / 2 - BIGCHAR_HEIGHT / 2;
+	SCR_DrawBigString(cx, cy, "bye", 1.0f, qfalse);
+
+	re.SetColor(white);
+	re.EndFrame(NULL, NULL);
+
+	Sys_Sleep(800);
+}
+
 void Q3IDE_Shutdown(void)
 {
 	if (!q3ide_state.initialized)
 		return;
+	q3ide_render_bye();
 	Q3IDE_WM_Shutdown();
 	Cmd_RemoveCommand("q3ide");
 	q3ide_state.initialized = qfalse;

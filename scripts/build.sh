@@ -51,13 +51,78 @@ esac
 
 echo "=== Detected arch: $Q3E_ARCH ==="
 
-# 1. Build qagame with grapple — once, if not already built from source
-# Runs automatically the first time (ioq3/ not cloned yet). Skipped on --engine-only.
-if [ "$DO_ENGINE_ONLY" -eq 0 ] && [ ! -d "$ROOT/ioq3" ]; then
-    echo "=== Building qagame with grapple (first time, ~60s) ==="
-    sh "$ROOT/scripts/build_game.sh"
-else
-    [ -d "$ROOT/ioq3" ] && echo "=== qagame already built (ioq3/ exists) ===" || true
+# 1. Build qagame + ui dylibs from ioq3 source (skipped with --engine-only)
+if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
+    IOQ3_DIR="$ROOT/ioq3"
+    ARCH="$(uname -m)"; case "$ARCH" in arm64|aarch64) ARCH=arm64 ;; *) ARCH=x86_64 ;; esac
+
+    # Clone ioq3 once
+    if [ ! -d "$IOQ3_DIR/.git" ]; then
+        echo "=== Cloning ioquake3 (first time) ==="
+        git clone --depth=1 https://github.com/ioquake/ioq3.git "$IOQ3_DIR"
+    fi
+
+    # Ensure grapple patch
+    G_CLIENT="$IOQ3_DIR/code/game/g_client.c"
+    if ! grep -q "WP_GRAPPLING_HOOK.*STAT_WEAPONS\|STAT_WEAPONS.*WP_GRAPPLING_HOOK" "$G_CLIENT" 2>/dev/null; then
+        echo "=== Applying grapple spawn patch ==="
+        sed -i.bak '/ammo\[WP_GRAPPLING_HOOK\] = -1/i\\tclient->ps.stats[STAT_WEAPONS] |= ( 1 << WP_GRAPPLING_HOOK );' "$G_CLIENT"
+    fi
+
+    Q3IDE_BUILD="$IOQ3_DIR/build_q3ide"
+    mkdir -p "$Q3IDE_BUILD"
+    GCFLAGS="-O2 -arch ${ARCH}"
+
+    # Build qagame
+    echo "=== Building qagame ==="
+    GAME_SRCS="g_main.c ai_chat.c ai_cmd.c ai_dmnet.c ai_dmq3.c ai_main.c ai_team.c ai_vcmd.c
+        bg_misc.c bg_pmove.c bg_slidemove.c bg_lib.c
+        g_active.c g_arenas.c g_bot.c g_client.c g_cmds.c g_combat.c
+        g_items.c g_mem.c g_misc.c g_missile.c g_mover.c g_session.c
+        g_spawn.c g_svcmds.c g_target.c g_team.c g_trigger.c g_utils.c g_weapon.c g_syscalls.c"
+    GOBJS=""
+    for f in $GAME_SRCS; do
+        obj="$Q3IDE_BUILD/$(basename ${f%.c}.o)"
+        clang $GCFLAGS -I"$IOQ3_DIR/code/game" -DQAGAME -DQ3_VM_LINKED -c "$IOQ3_DIR/code/game/$f" -o "$obj" 2>&1 || { echo "ERROR: qagame compile failed: $f"; exit 1; }
+        GOBJS="$GOBJS $obj"
+    done
+    clang -dynamiclib -arch ${ARCH} -undefined dynamic_lookup $GOBJS -o "$Q3IDE_BUILD/qagame${ARCH}.dylib"
+    cp "$Q3IDE_BUILD/qagame${ARCH}.dylib" "$ROOT/baseq3/qagame${ARCH}.dylib"
+    cp "$Q3IDE_BUILD/qagame${ARCH}.dylib" "$ROOT/baseq3/qagame.dylib"
+
+    # Build ui (accent color #FF34DD)
+    echo "=== Building ui (accent #FF34DD) ==="
+    UI_SRC="$IOQ3_DIR/code/q3_ui"
+    UI_BUILD="$IOQ3_DIR/build_ui_q3ide"
+    mkdir -p "$UI_BUILD"
+    UI_SRCS="ui_main.c ui_atoms.c ui_connect.c ui_controls2.c ui_demo2.c
+        ui_cdkey.c ui_ingame.c ui_loadconfig.c ui_menu.c ui_mfield.c
+        ui_mods.c ui_network.c ui_options.c ui_playermodel.c ui_players.c
+        ui_qmenu.c ui_saveconfig.c ui_serverinfo.c ui_servers2.c
+        ui_setup.c ui_sound.c ui_sparena.c ui_specifyleague.c ui_specifyserver.c
+        ui_splevel.c ui_sppostgame.c ui_spreset.c ui_spskill.c ui_startserver.c
+        ui_team.c ui_teamorders.c ui_video.c
+        ui_addbots.c ui_removebots.c ui_cinematics.c
+        ui_confirm.c ui_credits.c ui_display.c ui_gameinfo.c ui_login.c
+        ui_playersettings.c ui_preferences.c ui_rankings.c ui_rankstatus.c
+        ui_signup.c"
+    UIOBJS=""
+    for f in $UI_SRCS; do
+        obj="$UI_BUILD/$(basename ${f%.c}.o)"
+        clang $GCFLAGS -I"$UI_SRC" -I"$IOQ3_DIR/code/game" -DUI -DQ3_VM_LINKED -c "$UI_SRC/$f" -o "$obj" 2>&1 || { echo "WARN: ui skip: $f"; continue; }
+        UIOBJS="$UIOBJS $obj"
+    done
+    # bg_misc + bg_lib needed by ui
+    for f in bg_misc.c bg_lib.c; do
+        obj="$UI_BUILD/ui_$(basename ${f%.c}.o)"
+        clang $GCFLAGS -I"$IOQ3_DIR/code/game" -DUI -DQ3_VM_LINKED -c "$IOQ3_DIR/code/game/$f" -o "$obj" 2>&1 || true
+        UIOBJS="$UIOBJS $obj"
+    done
+    clang -dynamiclib -arch ${ARCH} -undefined dynamic_lookup $UIOBJS -o "$UI_BUILD/ui${ARCH}.dylib" 2>&1 && {
+        cp "$UI_BUILD/ui${ARCH}.dylib" "$ROOT/baseq3/ui${ARCH}.dylib"
+        cp "$UI_BUILD/ui${ARCH}.dylib" "$ROOT/baseq3/ui.dylib"
+        echo "    ui.dylib built OK"
+    } || echo "WARN: ui link failed — keeping existing ui.dylib"
 fi
 
 # 2. Build the capture dylib (skip with --engine-only)

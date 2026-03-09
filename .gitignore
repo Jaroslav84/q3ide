@@ -1,7 +1,22 @@
-# Build outputs
-baseq3/*
-!baseq3/.gitkeep
-!baseq3/autoexec.cfg
+# Quake 3 is paid software — original paks are never committed.
+# Rule: if it shipped with Q3, ignore it. If we made/downloaded it, commit it.
+# Exception: if we hack an original pak and extract a modified version,
+#            commit ONLY the new custom pk3, not the original.
+
+# Original Q3 paks (baseq3 and baseq3-orig)
+baseq3/pak[0-9].pk3
+baseq3-orig/
+
+# Custom maps and player models — large binaries, re-downloadable (see MODS_README.md)
+baseq3/*.pk3
+!baseq3/q3ide_*.pk3
+
+# Built artifacts (generated at build time, not source)
+baseq3/*.dylib
+
+# Large downloaded archives (not useful in git — too big, re-downloadable)
+baseq3/*.7z
+baseq3/*.zip
 capture/target/*
 quake3e/build/*
 quake3e/output/*

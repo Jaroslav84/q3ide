@@ -4086,7 +4086,7 @@ void Com_WriteConfiguration( void ) {
 
 	Com_WriteConfigToFile( Q3CONFIG_CFG );
 
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(STANDALONE)
 	gamedir = FS_GetCurrentGameDir();
 	basegame = FS_GetBaseGameDir();
 	if ( UI_usesUniqueCDKey() && gamedir[0] && Q_stricmp( basegame, gamedir ) ) {

@@ -1,0 +1,28 @@
+Place md3-bender.pk3 file into the baseq3 folder.
+Also you may need to create a Baseq3/models/players/bender if you are having problems
+seeing the icons in the characters select screen.
+
+April 13, 2000
+================================================================
+Model Name:		bender
+Pack file:		baseq3/md3-bender.pk3
+Modeler:		Hays Clark (Omita)
+Skin Authors:		John"Ronin{Triad}" Fisher
+CTF Skins:		Hays Clark (Omita)
+Animator: 		John"Ronin{Triad}" Fisher
+Email Addresses:	omita@omitadesign.com
+			JFi7056052@aol.com
+
+websites:               http://www.omitadesign.com/Q3/
+
+Originally Modeled in LightWave 5.6.  Exported to 3dStudioMax 2.5.
+Animated using CharacterStudio 2.2.  MD3 made by Q3data.  Skins made
+in PhotoShop 5. Sound files captured from Futurama (TM) Series.
+SoundForge 4.5 for audio editing.
+<Special thanks to the ICQ and Licq>
+
+Model description:   	Character from TV Show "Futurama, Ex girder bender for suicide booths.
+
+Quake(R) and Quake3(R) are registered trademarks of id software
+Bender(R), Futurama(R) are registered trademarks of Matt Groening
+================================================================

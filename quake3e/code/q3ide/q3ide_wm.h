@@ -40,6 +40,9 @@ int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir);
 /* Move an active window to a new position (shoot-to-move). */
 void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal);
 
+/* Find slot index of a window by capture id; returns -1 if not found. */
+int Q3IDE_WM_FindById(unsigned int cid);
+
 /* Simple commands (in q3ide_wm.c) */
 void Q3IDE_WM_CmdList(void);
 void Q3IDE_WM_CmdDetachAll(void);
@@ -64,6 +67,12 @@ void Q3IDE_WM_PlaceMirror(vec3_t origin, vec3_t normal, float ww, float wh);
 void Q3IDE_WM_ClearMirror(void);
 qboolean Q3IDE_WM_MirrorActive(void);
 void Q3IDE_WM_GetMirrorOrigin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h);
+
+/* Second portal (return trip) */
+void Q3IDE_WM_PlaceMirror2(vec3_t origin, vec3_t normal, float ww, float wh);
+void Q3IDE_WM_ClearMirror2(void);
+qboolean Q3IDE_WM_Mirror2Active(void);
+void Q3IDE_WM_GetMirror2Origin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h);
 
 /* Update hover state for a specific window (called from interaction system) */
 void Q3IDE_WM_SetHover(int idx, float hover_t);

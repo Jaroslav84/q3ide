@@ -210,6 +210,15 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal)
 	q3ide_clamp_window_size(&q3ide_wm.wins[idx]);
 }
 
+int Q3IDE_WM_FindById(unsigned int cid)
+{
+	int i;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++)
+		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].capture_id == cid)
+			return i;
+	return -1;
+}
+
 /* ── Public API ─────────────────────────────────────────────────── */
 
 qboolean Q3IDE_WM_Init(void)
@@ -320,6 +329,35 @@ void Q3IDE_WM_GetMirrorOrigin(vec3_t out_origin, vec3_t out_normal, float *out_w
 		*out_h = q3ide_wm.mirror_h;
 }
 
+void Q3IDE_WM_PlaceMirror2(vec3_t origin, vec3_t normal, float ww, float wh)
+{
+	VectorCopy(origin, q3ide_wm.mirror2_origin);
+	VectorCopy(normal, q3ide_wm.mirror2_normal);
+	q3ide_wm.mirror2_w = ww;
+	q3ide_wm.mirror2_h = wh;
+	q3ide_wm.mirror2_active = qtrue;
+}
+
+void Q3IDE_WM_ClearMirror2(void)
+{
+	q3ide_wm.mirror2_active = qfalse;
+}
+
+qboolean Q3IDE_WM_Mirror2Active(void)
+{
+	return q3ide_wm.mirror2_active;
+}
+
+void Q3IDE_WM_GetMirror2Origin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h)
+{
+	VectorCopy(q3ide_wm.mirror2_origin, out_origin);
+	VectorCopy(q3ide_wm.mirror2_normal, out_normal);
+	if (out_w)
+		*out_w = q3ide_wm.mirror2_w;
+	if (out_h)
+		*out_h = q3ide_wm.mirror2_h;
+}
+
 /*
  * q3ide_wm_render_mirror — teleporter portal visual using Q3's own energy shader.
  *
@@ -387,6 +425,62 @@ static void q3ide_wm_render_mirror(void)
 	}
 }
 
+static void q3ide_wm_render_mirror2(void)
+{
+	polyVert_t verts[4];
+	vec3_t right;
+	float hw, hh, nx, ny, len;
+	int i;
+
+	if (!q3ide_wm.mirror2_active)
+		return;
+
+	if (!q3ide_wm.mirror_energy_shader && re.RegisterShader)
+		q3ide_wm.mirror_energy_shader = re.RegisterShader("models/mapobjects/teleporter/energy");
+
+	if (!q3ide_wm.mirror_energy_shader || !re.AddPolyToScene)
+		return;
+
+	nx = q3ide_wm.mirror2_normal[0];
+	ny = q3ide_wm.mirror2_normal[1];
+	len = sqrtf(nx * nx + ny * ny);
+	if (len > 0.01f) {
+		right[0] = -ny / len;
+		right[1] = nx / len;
+		right[2] = 0.0f;
+	} else {
+		right[0] = 1.0f;
+		right[1] = 0.0f;
+		right[2] = 0.0f;
+	}
+
+	hw = q3ide_wm.mirror2_w * 0.5f;
+	hh = q3ide_wm.mirror2_h * 0.5f;
+
+	for (i = 0; i < 4; i++) {
+		float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
+		float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
+		verts[i].xyz[0] = q3ide_wm.mirror2_origin[0] + right[0] * sx * hw;
+		verts[i].xyz[1] = q3ide_wm.mirror2_origin[1] + right[1] * sx * hw;
+		verts[i].xyz[2] = q3ide_wm.mirror2_origin[2] + sy * hh;
+		verts[i].st[0] = (sx + 1.0f) * 0.5f;
+		verts[i].st[1] = (sy + 1.0f) * 0.5f;
+		verts[i].modulate.rgba[0] = 255;
+		verts[i].modulate.rgba[1] = 255;
+		verts[i].modulate.rgba[2] = 255;
+		verts[i].modulate.rgba[3] = 255;
+	}
+	re.AddPolyToScene(q3ide_wm.mirror_energy_shader, 4, verts, 1);
+	{
+		polyVert_t rv[4];
+		rv[0] = verts[3];
+		rv[1] = verts[2];
+		rv[2] = verts[1];
+		rv[3] = verts[0];
+		re.AddPolyToScene(q3ide_wm.mirror_energy_shader, 4, rv, 1);
+	}
+}
+
 void Q3IDE_WM_InvalidateShaders(void)
 {
 	int i;
@@ -443,8 +537,9 @@ void Q3IDE_WM_AddPolys(void)
 		order[j + 1] = tmp;
 	}
 
-	/* Standalone mirror portal (real Q3 recursive rendering) */
+	/* Standalone mirror portals */
 	q3ide_wm_render_mirror();
+	q3ide_wm_render_mirror2();
 
 	/* Render windows: LOS check — skip if solid geometry fully blocks path to window.
 	 * Use a point 6u in front of the window face (along normal) as LOS target so the

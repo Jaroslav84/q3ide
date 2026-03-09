@@ -32,9 +32,7 @@ static void q3ide_laser_shader_init(void)
  * vieworg is used to compute a billboard perp so the ribbon always faces the
  * camera regardless of beam direction.
  */
-static void q3ide_draw_beam(const vec3_t from, const vec3_t to,
-                            const vec3_t vieworg,
-                            byte r, byte g, byte b, byte a)
+static void q3ide_draw_beam(const vec3_t from, const vec3_t to, const vec3_t vieworg, byte r, byte g, byte b, byte a)
 {
 	vec3_t beam_dir, mid, to_cam, perp, perp2, up = {0.0f, 0.0f, 1.0f};
 	float len;
@@ -90,10 +88,14 @@ static void q3ide_draw_beam(const vec3_t from, const vec3_t to,
 			VectorSubtract(to, *pv, v[2].xyz);
 			VectorAdd(to, *pv, v[3].xyz);
 
-			v[0].st[0] = 0.0f; v[0].st[1] = 0.0f;
-			v[1].st[0] = 1.0f; v[1].st[1] = 0.0f;
-			v[2].st[0] = 1.0f; v[2].st[1] = 1.0f;
-			v[3].st[0] = 0.0f; v[3].st[1] = 1.0f;
+			v[0].st[0] = 0.0f;
+			v[0].st[1] = 0.0f;
+			v[1].st[0] = 1.0f;
+			v[1].st[1] = 0.0f;
+			v[2].st[0] = 1.0f;
+			v[2].st[1] = 1.0f;
+			v[3].st[0] = 0.0f;
+			v[3].st[1] = 1.0f;
 
 			for (i = 0; i < 4; i++) {
 				v[i].modulate.rgba[0] = r;

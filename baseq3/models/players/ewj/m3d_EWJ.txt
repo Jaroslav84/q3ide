@@ -1,0 +1,44 @@
+March 30, 2000
+================================================================
+Model Name              : Earthworm Jim
+installation directory  : quake3/baseq3/
+Author                  : ]-UnderTOW-[
+Email Address           : Undertow_gh@hotmail.com (feel free to send any comments
+			  about Jim)
+Model description       : That GROOVY mutant butt kicking super worm, Earthworm Jim!
+Thanks to               : id Software for their kick arse game, polycount BB
+			  and of course Activision for the best intergalactic
+			  Super Hero
+Speacial Thanks to	: casManG for the q3data help
+================================================================
+* Play Information *
+
+New Sounds              : sounds from EWJ PC demo
+CTF Skins               : Yup
+
+* Construction *
+Poly Count              : 841
+Vert Count		: 502
+Skin Count              : 3
+Base                    : Earthworm Jim pictures, screen shots.
+Style used to model	: Spline modeling
+Editor used             : 3DSMax3.1 (Student Ver), Character Studio 2, Photoshop 5.5
+			  q3data.exe
+Known Bugs              : Dunno, but you can report them to me if you want
+Build/Animation time    : about a week to build and a week to animate, on and off
+			  (i have to do assignments)
+Additional		: If you played around with to model before reading this file
+			  you may wonder about the gun atop his head.
+			  Well, i wanted him to hold JUST Jim's Plasma Gun, but i
+			  needed to have a weapon tag so i made it Duke3D style
+
+
+* How to use this model *
+
+Place to EarthwormJim.pk3 file into your baesq3 dir.  If he doesn't appear
+in player set, try unziping files into baseq3 dir
+
+* Copyright *
+
+Quake 3 Arena is (C) id sofware
+Earthworm Jim is (C) Activision

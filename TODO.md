@@ -1,4 +1,4 @@
-So u can place windows in air and on walls. Great. But our window placement algorythm sucks. GArbage it. Create a custom class because this will be heavily used through out the whole project.
+So u can place windows in air and on walls. Great. But our window placement on wall algorythm sucks. GArbage it. Create a custom class because this will be heavily used through out the whole project.
 
 Here is what I need: I need an algo that takes all the windows as input -> and arranges them super ncielly inside the room the player is. It must be arranged evenly on the walls ONLY! Pick window size so that it has a ratio of 66.% of the wall height. If shit sticks out of the wall then you need to take that into consideration. Windows should be placed like TV screens on the wall, u get it? But be carefull. If there is only  a few inch little thing hanging out of the wall then dont care about that. Just put the TV over it. And dont u dare to mkae super small TV's!!! The bigger the better.
 
@@ -7,8 +7,30 @@ Also: if u know that a window is stuck to a wall then never render it's back. No
 - windows upgrade: if there is something in front of the window (parts of map, 3D object, other players, etc) then it should be in front of it. Right now I can see all my windows from any angle, from anywhere no matter what is in front of it. This needs to work pixel perfect. No cheats. A window is a normal 3D object like other things in the game world.
 - window spawn and die animation. One exception: I'm happy if own weapon is in an exclusion for better readibility (right now it works like so).
 
+- wow quake supports flying. toggle that with "-"
+
+allow to switch MAPS like projects
+======================================
+ # Tron-like
+sh ./scripts/build.sh --run --level acid3dm12 --execute 'q3ide attach all'
+
+# Officew
+sh ./scripts/build.sh --run --level ori_apt --execute 'q3ide attach all'
+
+# Porcelain CTF
+sh ./scripts/build.sh --run --level q3ctfchnu01 --execute 'q3ide attach all'
+
+# QuadCTF (BSP name might be quadctf or QuadCTF — try both)
+sh ./scripts/build.sh --run --level quadctf --execute 'q3ide attach all'
+
+# Quatrix
+sh ./scripts/build.sh --run --level quatrix --execute 'q3ide attach all'
+
+# Minecraft
+sh ./scripts/build.sh --run --level r7-blockworld1 --execute 'q3ide attach all' 
 
 
+- known quake issue: too dark, input lag. People solved it. Did quake3e solve it? see youytube video
 
 - lol: https://terminal.lvlworld.com/ascii-q3a
 

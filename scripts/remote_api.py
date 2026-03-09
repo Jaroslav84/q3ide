@@ -748,8 +748,8 @@ class Handler(BaseHTTPRequestHandler):
         elif path == '/events':
             self._handle_events(qs)
         elif path == '/logs':
-            alias = qs.get('file', ['engine'])[0]
-            n = int((qs.get('n') or qs.get('tail') or ['400'])[0])
+            alias = (qs.get('file') or qs.get('log') or ['engine'])[0]
+            n = max(400, int((qs.get('n') or qs.get('tail') or ['400'])[0]))
             log_path = LOG_ALIASES.get(alias)
             if log_path is None:
                 self._send(404, {'error': f'unknown: {alias}', 'available': list(LOG_ALIASES)})
