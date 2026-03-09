@@ -96,8 +96,6 @@ void Q3IDE_Log(const char *level, const char *fmt, ...)
 	Q_vsnprintf(msg, sizeof(msg), fmt, ap);
 	va_end(ap);
 
-	Com_Printf("[%s] q3ide: %s\n", level, msg);
-
 	if (q3ide_log_f) {
 		float t = (float) Sys_Milliseconds() / 1000.0f;
 		fprintf(q3ide_log_f, "[%s] %8.3f %s\n", level, t, msg);

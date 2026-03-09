@@ -7,6 +7,7 @@
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
+#include <pthread.h>
 #include <string.h>
 
 const char *q3ide_terminal_apps[] = {"iTerm2", "Terminal", NULL};
@@ -39,7 +40,7 @@ static void q3ide_auto_attach_new(unsigned int id, float aspect)
 
 	q3ide_room_scan(eye, &room);
 	if (!room.n) {
-		Com_Printf("q3ide: auto-attach failed wid=%u (no walls)\n", id);
+		Q3IDE_LOGI("auto-attach failed wid=%u (no walls)", id);
 		return;
 	}
 
@@ -47,10 +48,10 @@ static void q3ide_auto_attach_new(unsigned int id, float aspect)
 	aspects[0] = aspect;
 	is_disp[0] = 0;
 	q3ide_room_layout(&room, ids, aspects, is_disp, 1);
-	Com_Printf("q3ide: auto-attached wid=%u\n", id);
+	Q3IDE_LOGI("auto-attached wid=%u", id);
 }
 
-/* ── PollChanges — called every 2s; auto-attaches new windows ─── */
+/* ── PollChanges — background thread fetches, main thread drains ── */
 qboolean q3ide_is_attached(unsigned int id)
 {
 	int i;
@@ -60,27 +61,28 @@ qboolean q3ide_is_attached(unsigned int id)
 	return qfalse;
 }
 
-void Q3IDE_WM_PollChanges(void)
+static void q3ide_apply_change_list(const Q3ideWindowChangeList *clist)
 {
-	Q3ideWindowChangeList clist;
 	unsigned int i;
-
-	if (!q3ide_wm.cap_poll_changes || !q3ide_wm.cap_free_changes)
-		return;
-
-	clist = q3ide_wm.cap_poll_changes(q3ide_wm.cap);
-	if (!clist.changes || !clist.count)
-		return;
-
-	for (i = 0; i < clist.count; i++) {
-		const Q3ideWindowChange *ch = &clist.changes[i];
-		if (!ch->is_added) {
-			/* Window closed — detach silently if we had it */
+	for (i = 0; i < clist->count; i++) {
+		const Q3ideWindowChange *ch = &clist->changes[i];
+		if (ch->is_added == 0) {
+			/* Window closed — detach if attached */
 			if (q3ide_is_attached(ch->window_id))
 				Q3IDE_WM_DetachById(ch->window_id);
-		} else if (q3ide_wm.auto_attach) {
+		} else if (ch->is_added == 2) {
+			/* Window resized — update world aspect ratio */
+			int idx = Q3IDE_WM_FindById(ch->window_id);
+			if (idx >= 0 && ch->width > 0 && ch->height > 0) {
+				q3ide_win_t *w = &q3ide_wm.wins[idx];
+				float new_asp = (float) ch->width / (float) ch->height;
+				w->world_w = w->world_h * new_asp;
+				Q3IDE_LOGI("win %u resized %dx%d world %.0fx%.0f", ch->window_id, ch->width, ch->height, w->world_w,
+				           w->world_h);
+			}
+		} else if (ch->is_added == 1 && q3ide_wm.auto_attach) {
+			/* New window — auto-attach if it matches app filter */
 			float aspect;
-			/* New window — auto-attach if it matches our app filter */
 			if ((int) ch->width < Q3IDE_MIN_WIN_W || (int) ch->height < Q3IDE_MIN_WIN_H)
 				continue;
 			if (!q3ide_match(ch->app_name, q3ide_terminal_apps) && !q3ide_match(ch->app_name, q3ide_browser_apps))
@@ -90,7 +92,39 @@ void Q3IDE_WM_PollChanges(void)
 			Q3IDE_WM_SetLabel(ch->window_id, ch->app_name ? ch->app_name : "");
 		}
 	}
+}
 
+/* Called from Q3IDE_WM_PollFrames — drains changes fetched by background thread. */
+void Q3IDE_WM_DrainPendingChanges(void)
+{
+	Q3ideWindowChangeList clist;
+	qboolean has;
+
+	pthread_mutex_lock(&q3ide_wm.poll_mutex);
+	has = q3ide_wm.poll_has_pending;
+	if (has) {
+		clist = q3ide_wm.poll_pending;
+		q3ide_wm.poll_has_pending = qfalse;
+	}
+	pthread_mutex_unlock(&q3ide_wm.poll_mutex);
+
+	if (!has)
+		return;
+	q3ide_apply_change_list(&clist);
+	if (q3ide_wm.cap_free_changes)
+		q3ide_wm.cap_free_changes(clist);
+}
+
+/* Kept for callers that need a synchronous fetch (not used in normal flow). */
+void Q3IDE_WM_PollChanges(void)
+{
+	Q3ideWindowChangeList clist;
+	if (!q3ide_wm.cap_poll_changes || !q3ide_wm.cap_free_changes)
+		return;
+	clist = q3ide_wm.cap_poll_changes(q3ide_wm.cap);
+	if (!clist.changes || !clist.count)
+		return;
+	q3ide_apply_change_list(&clist);
 	q3ide_wm.cap_free_changes(clist);
 }
 
@@ -104,13 +138,13 @@ void Q3IDE_WM_CmdDesktop(void)
 	int n_disp, n_mon, center, i, j, attached = 0;
 
 	if (!q3ide_wm.cap || !q3ide_wm.cap_list_disp || !q3ide_wm.cap_start_disp) {
-		Com_Printf("q3ide: display capture not available\n");
+		Q3IDE_LOGI("display capture not available");
 		return;
 	}
 	Q3IDE_WM_CmdDetachAll();
 	dlist = q3ide_wm.cap_list_disp(q3ide_wm.cap);
 	if (!dlist.displays || !dlist.count) {
-		Com_Printf("q3ide: no displays found\n");
+		Q3IDE_LOGI("no displays found");
 		return;
 	}
 	n_disp = (int) dlist.count;
@@ -154,7 +188,7 @@ void Q3IDE_WM_CmdDesktop(void)
 			wnorm[2] = 0.0f;
 		}
 		if (q3ide_wm.cap_start_disp(q3ide_wm.cap, d->display_id, Q3IDE_CAPTURE_FPS) != 0) {
-			Com_Printf("q3ide: display %u start failed\n", d->display_id);
+			Q3IDE_LOGI("display %u start failed", d->display_id);
 			continue;
 		}
 		VectorCopy(wpos, pos);
@@ -164,7 +198,7 @@ void Q3IDE_WM_CmdDesktop(void)
 			attached++;
 		}
 	}
-	Com_Printf("q3ide: mirror: %d/%d display(s)\n", attached, n_disp);
+	Q3IDE_LOGI("mirror: %d/%d display(s)", attached, n_disp);
 }
 
 /* ── CmdSnap — snap wins[0] into the q3dm0 teleporter ── */
@@ -173,5 +207,5 @@ void Q3IDE_WM_CmdSnap(void)
 	vec3_t pos = {-1152.0f, -1868.0f, 84.0f};
 	vec3_t normal = {0.0f, 1.0f, 0.0f};
 	Q3IDE_WM_PlaceMirror(pos, normal, 112.0f, 176.0f);
-	Com_Printf("q3ide: snapped mirror into teleporter arch at (%.0f,%.0f,%.0f)\n", pos[0], pos[1], pos[2]);
+	Q3IDE_LOGI("snapped mirror into teleporter arch at (%.0f,%.0f,%.0f)", pos[0], pos[1], pos[2]);
 }

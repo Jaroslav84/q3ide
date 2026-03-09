@@ -43,6 +43,9 @@ void Q3IDE_WM_CmdAttach(void)
 					break;
 				if ((int) w->width < Q3IDE_MIN_WIN_W || (int) w->height < Q3IDE_MIN_WIN_H)
 					continue;
+				if ((w->title && strstr(w->title, "StatusIndicator")) ||
+				    (w->app_name && strstr(w->app_name, "StatusIndicator")))
+					continue;
 				for (int j = 0; j < item_n; j++)
 					if (items[j].id == w->window_id) {
 						dupe = qtrue;
@@ -55,9 +58,6 @@ void Q3IDE_WM_CmdAttach(void)
 				items[item_n].is_display = qfalse;
 				Q_strncpyz(items[item_n].label, (w->title && w->title[0]) ? w->title : (w->app_name ? w->app_name : ""),
 				           sizeof(items[item_n].label));
-				Com_Printf("q3ide: app [%d] wid=%u \"%s\" %ux%u\n", item_n, w->window_id, w->app_name, w->width,
-				           w->height);
-				Q3IDE_Eventf("window_found", "\"wid\":%u,\"w\":%u,\"h\":%u", w->window_id, w->width, w->height);
 				item_n++;
 			}
 		}
@@ -75,8 +75,6 @@ void Q3IDE_WM_CmdAttach(void)
 				items[item_n].aspect = d->height ? (float) d->width / d->height : 16.0f / 9.0f;
 				items[item_n].is_display = qtrue;
 				Q_strncpyz(items[item_n].label, va("Display %d", i + 1), sizeof(items[item_n].label));
-				Com_Printf("q3ide: disp [%d] id=%u %ux%u\n", item_n, d->display_id, d->width, d->height);
-				Q3IDE_Eventf("display_found", "\"id\":%u,\"w\":%u,\"h\":%u", d->display_id, d->width, d->height);
 				item_n++;
 			}
 		}
@@ -106,6 +104,8 @@ void Q3IDE_WM_CmdAttach(void)
 		}
 	}
 
+	Com_Printf("q3ide: attaching %d windows...\n", item_n);
+
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
 
@@ -134,6 +134,6 @@ void Q3IDE_WM_CmdAttach(void)
 	}
 
 	q3ide_wm.auto_attach = qtrue;
-	Q3IDE_LOGI("attached %d/%d items (windows+displays)", q3ide_wm.num_active, item_n);
+	Com_Printf("q3ide: attaching ended, %d windows\n", q3ide_wm.num_active);
 	Q3IDE_Eventf("attach_done", "\"attached\":%d,\"total\":%d", q3ide_wm.num_active, item_n);
 }

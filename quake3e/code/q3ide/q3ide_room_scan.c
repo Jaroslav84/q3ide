@@ -58,7 +58,7 @@ void q3ide_room_scan(vec3_t eye, q3ide_room_t *out)
 			           w->normal[1], w->normal[2]);
 			out->n++;
 		}
-		Com_Printf("q3ide: room scan (AAS) found %d wall(s)\n", out->n);
+		Q3IDE_LOGI("room scan (AAS) found %d wall(s)", out->n);
 		return;
 	}
 
@@ -87,6 +87,6 @@ void q3ide_room_scan(vec3_t eye, q3ide_room_t *out)
 			q3ide_measure_wall(wp, wn, &out->walls[out->n], eye);
 			out->n++;
 		}
-		Com_Printf("q3ide: room scan (raycast fallback) found %d wall(s)\n", out->n);
+		Q3IDE_LOGI("room scan (raycast fallback) found %d wall(s)", out->n);
 	}
 }

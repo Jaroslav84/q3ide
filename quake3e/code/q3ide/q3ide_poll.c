@@ -11,37 +11,32 @@
 #include "../renderercommon/tr_public.h"
 #include <string.h>
 
-extern void Q3IDE_WM_PollChanges(void);
+extern void Q3IDE_WM_DrainPendingChanges(void);
 
 static void q3ide_upload_frame(q3ide_win_t *win, const Q3ideFrame *frame)
 {
-	int needed = (int) (frame->width * frame->height * 4);
-	int row = (int) frame->width * 4;
-	unsigned int r, c;
-
 	if (!re.UploadCinematic)
 		return;
 
-	if (needed > q3ide_wm.fbuf_size) {
-		if (q3ide_wm.fbuf)
-			Z_Free(q3ide_wm.fbuf);
-		q3ide_wm.fbuf = Z_Malloc(needed);
-		q3ide_wm.fbuf_size = needed;
-	}
-
-	for (r = 0; r < frame->height; r++) {
-		const unsigned char *s = frame->pixels + r * frame->stride;
-		byte *d = q3ide_wm.fbuf + r * row;
-		for (c = 0; c < frame->width; c++, s += 4, d += 4) {
-			d[0] = s[2];
-			d[1] = s[1];
-			d[2] = s[0];
-			d[3] = s[3]; /* BGRA→RGBA */
+	/* Pass BGRA pixels directly to GL — no CPU swizzle. GL_BGRA = 0x80E1.
+	 * If stride != width*4 the rows aren't contiguous; pack into fbuf first. */
+	if (frame->stride != frame->width * 4) {
+		int needed = (int) (frame->width * frame->height * 4);
+		unsigned int r;
+		if (needed > q3ide_wm.fbuf_size) {
+			if (q3ide_wm.fbuf)
+				Z_Free(q3ide_wm.fbuf);
+			q3ide_wm.fbuf = Z_Malloc(needed);
+			q3ide_wm.fbuf_size = needed;
 		}
+		for (r = 0; r < frame->height; r++)
+			memcpy(q3ide_wm.fbuf + r * frame->width * 4, frame->pixels + r * frame->stride, frame->width * 4);
+		re.UploadCinematic((int) frame->width, (int) frame->height, (int) frame->width, (int) frame->height,
+		                   q3ide_wm.fbuf, win->scratch_slot, qtrue, 0x80E1);
+	} else {
+		re.UploadCinematic((int) frame->width, (int) frame->height, (int) frame->width, (int) frame->height,
+		                   (byte *) frame->pixels, win->scratch_slot, qtrue, 0x80E1);
 	}
-
-	re.UploadCinematic((int) frame->width, (int) frame->height, (int) frame->width, (int) frame->height, q3ide_wm.fbuf,
-	                   win->scratch_slot, qtrue);
 	win->tex_w = (int) frame->width;
 	win->tex_h = (int) frame->height;
 
@@ -73,12 +68,8 @@ void Q3IDE_WM_PollFrames(void)
 		return;
 	now_ms = Sys_Milliseconds();
 
-	/* Only poll window changes when auto_attach is active — enumerating all
-	 * windows via SCShareableContent blocks the main thread briefly each call. */
-	if (q3ide_wm.auto_attach && now_ms - q3ide_wm.last_scan_ms >= 5000) {
-		Q3IDE_WM_PollChanges();
-		q3ide_wm.last_scan_ms = now_ms;
-	}
+	/* Drain changes fetched by background poll thread (1s interval). */
+	Q3IDE_WM_DrainPendingChanges();
 
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
@@ -90,7 +81,7 @@ void Q3IDE_WM_PollFrames(void)
 			continue;
 		if (frame.source_wid != win->capture_id) {
 			if (win->frames < 5)
-				Com_Printf("q3ide: MISMATCH [%d] want=%u got=%u\n", i, win->capture_id, frame.source_wid);
+				Q3IDE_LOGI("MISMATCH win[%d] id=%u got wid=%u", i, win->capture_id, frame.source_wid);
 			continue;
 		}
 		win->last_frame_ms = now_ms;
@@ -98,18 +89,19 @@ void Q3IDE_WM_PollFrames(void)
 			win->first_frame_ms = now_ms;
 		win->status = Q3IDE_WIN_STATUS_ACTIVE;
 
+		/* Timestamp-based throttle: works for any fps_target, adapts to game framerate. */
 		if (win->fps_target > 0 && win->fps_target < Q3IDE_FPS_FULL) {
-			int skip_ratio = (Q3IDE_FPS_FULL / win->fps_target) - 1;
-			if (win->skip_counter++ < skip_ratio)
+			unsigned long long interval_ms = 1000ULL / (unsigned long long) win->fps_target;
+			if (now_ms - win->last_upload_ms < interval_ms)
 				continue;
-			win->skip_counter = 0;
 		}
+		win->last_upload_ms = now_ms;
 
 		if (win->tex_w > 0 && ((int) frame.width != win->tex_w || (int) frame.height != win->tex_h)) {
 			float frame_asp = (frame.height > 0) ? (float) frame.width / (float) frame.height : 1.0f;
 			win->world_w = win->world_h * frame_asp;
-			Com_Printf("q3ide: win %u resized %dx%d -> %dx%d (world %.0fx%.0f)\n", win->capture_id, win->tex_w,
-			           win->tex_h, (int) frame.width, (int) frame.height, win->world_w, win->world_h);
+			Q3IDE_LOGI("win %u resized %dx%d -> %dx%d (world %.0fx%.0f)", win->capture_id, win->tex_w, win->tex_h,
+			           (int) frame.width, (int) frame.height, win->world_w, win->world_h);
 		}
 		/* First frame: correct world_w to match actual capture aspect ratio. */
 		if (win->frames == 0 && frame.height > 0) {
@@ -117,6 +109,7 @@ void Q3IDE_WM_PollFrames(void)
 			win->world_w = win->world_h * frame_asp;
 		}
 		q3ide_upload_frame(win, &frame);
+		q3ide_wm.frame_uploads++;
 		win->frames++;
 	}
 }

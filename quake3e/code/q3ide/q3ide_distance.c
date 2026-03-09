@@ -39,6 +39,9 @@ void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz)
 			win->fps_target = Q3IDE_FPS_LOW;
 		else
 			win->fps_target = Q3IDE_FPS_MIN;
+		/* Cap tunnel windows to MAX_TUNNEL_FPS */
+		if (win->is_tunnel && win->fps_target > Q3IDE_MAX_TUNNEL_FPS)
+			win->fps_target = Q3IDE_MAX_TUNNEL_FPS;
 		/* Update idle status */
 		if (win->last_frame_ms > 0 && now_ms - win->last_frame_ms > Q3IDE_IDLE_TIMEOUT_MS)
 			win->status = Q3IDE_WIN_STATUS_IDLE;

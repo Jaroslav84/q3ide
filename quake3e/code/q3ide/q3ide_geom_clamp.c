@@ -134,7 +134,7 @@ int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)
 		vec3_t right, up, diff, hit;
 		float denom, t, hw, hh, lx, ly;
 
-		if (!win->active || !win->shader)
+		if (!win->active)
 			continue;
 
 		denom = DotProduct(dir, win->normal);
@@ -175,7 +175,7 @@ int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)
 	return best;
 }
 
-#define Q3IDE_WALL_DIST 512.0f
+#define Q3IDE_WALL_DIST   512.0f
 #define Q3IDE_WALL_OFFSET 3.0f
 
 qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out_normal)

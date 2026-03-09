@@ -20,10 +20,10 @@
 /* Character cell — sized for OVL_DIST units from camera at 90° FOV.
  * Rule: apparent_px = OVL_CW / OVL_DIST * screen_half_px.
  * At D=10, OVL_CW=0.35 → ~33px per char on 1920px. */
-#define OVL_CW 0.14f    /* char width  */
-#define OVL_CH 0.20f    /* char height */
-#define OVL_LH 0.30f    /* line pitch  */
-#define OVL_GAP 0.22f   /* gap between key col and label col */
+#define OVL_CW    0.14f /* char width  */
+#define OVL_CH    0.20f /* char height */
+#define OVL_LH    0.30f /* line pitch  */
+#define OVL_GAP   0.22f /* gap between key col and label col */
 #define OVL_KEY_W 0.56f /* fixed key column (4 chars * OVL_CW) */
 
 /* Very close to camera so polys are always in front of walls */
@@ -102,6 +102,7 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		const char *label;
 	} entries[] = {
 	    {"Q3IDE", ""},   /* header */
+	    {"K", "Laser"},  /* hold K → laser beams */
 	    {"L", "Focus"},  /* enter Pointer Mode */
 	    {"M1", "Click"}, /* click in Pointer Mode */
 	    {"ESC", "Exit"}, /* exit mode */

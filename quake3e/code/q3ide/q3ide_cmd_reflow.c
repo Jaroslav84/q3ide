@@ -156,5 +156,5 @@ void Q3IDE_WM_Reflow(void)
 			queued++;
 		}
 	}
-	Com_Printf("q3ide: reflow: queued %d/%d window(s)\n", queued, nw);
+	Q3IDE_LOGI("reflow: queued %d/%d window(s)", queued, nw);
 }

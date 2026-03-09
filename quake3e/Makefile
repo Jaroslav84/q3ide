@@ -43,7 +43,7 @@ USE_VULKAN_API   = 1
 USE_RENDERER_DLOPEN = 1
 
 # valid options: opengl, vulkan, opengl2
-RENDERER_DEFAULT = opengl2
+RENDERER_DEFAULT = opengl
 
 CNAME            = quake3e
 DNAME            = quake3e.ded
@@ -1171,7 +1171,11 @@ Q3OBJ += \
   $(B)/client/q3ide_wall_score.o \
   $(B)/client/q3ide_room_layout.o \
   $(B)/client/q3ide_entity.o \
-  $(B)/client/q3ide_laser.o
+  $(B)/client/q3ide_laser.o \
+  $(B)/client/q3ide_rope.o \
+  $(B)/client/q3ide_effects.o \
+  $(B)/client/q3ide_teleport.o \
+  $(B)/client/q3ide_spawn.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1574,6 +1578,18 @@ $(B)/client/q3ide_entity.o: $(Q3IDEDIR)/q3ide_entity.c
 	$(DO_CC)
 
 $(B)/client/q3ide_laser.o: $(Q3IDEDIR)/q3ide_laser.c
+	$(DO_CC)
+
+$(B)/client/q3ide_rope.o: $(Q3IDEDIR)/q3ide_rope.c
+	$(DO_CC)
+
+$(B)/client/q3ide_effects.o: $(Q3IDEDIR)/q3ide_effects.c
+	$(DO_CC)
+
+$(B)/client/q3ide_teleport.o: $(Q3IDEDIR)/q3ide_teleport.c
+	$(DO_CC)
+
+$(B)/client/q3ide_spawn.o: $(Q3IDEDIR)/q3ide_spawn.c
 	$(DO_CC)
 
 $(B)/rend1/%.o: $(R1DIR)/%.c

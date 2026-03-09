@@ -5,6 +5,7 @@
 #include "q3ide_interaction.h"
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
+#include "q3ide_log.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -36,11 +37,9 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 			}
 
 			if (q3ide_interaction.dwell_start_ms >= 0.0f) {
-				float dwell_elapsed = (float) Sys_Milliseconds() - q3ide_interaction.dwell_start_ms;
-				q3ide_interaction.hover_t = dwell_elapsed / Q3IDE_DWELL_MS;
-				if (q3ide_interaction.hover_t > 1.0f)
-					q3ide_interaction.hover_t = 1.0f;
-				Q3IDE_WM_SetHover(q3ide_interaction.focused_win, q3ide_interaction.hover_t);
+				/* Visual highlight is instant; dwell_start_ms only retained for pointer-mode entry. */
+				q3ide_interaction.hover_t = 1.0f;
+				Q3IDE_WM_SetHover(q3ide_interaction.focused_win, 1.0f);
 			}
 
 			if (lock_key && q3ide_interaction.focused_win >= 0 && q3ide_interaction.hover_t >= 1.0f &&
@@ -48,7 +47,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 				q3ide_interaction.mode = Q3IDE_MODE_POINTER;
 				q3ide_interaction.pointer_uv[0] = q3ide_interaction.focused_uv[0];
 				q3ide_interaction.pointer_uv[1] = q3ide_interaction.focused_uv[1];
-				Com_Printf("q3ide: entered Pointer Mode win=%d (L-key)\n", q3ide_interaction.focused_win);
+				Q3IDE_LOGI("entered Pointer Mode win=%d (L-key)", q3ide_interaction.focused_win);
 				return;
 			}
 		} else {
@@ -66,7 +65,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 			q3ide_interaction.mode = Q3IDE_MODE_FPS;
 			q3ide_interaction.hover_t = 0.0f;
 			q3ide_interaction.dwell_start_ms = (float) Sys_Milliseconds();
-			Com_Printf("q3ide: exited Pointer Mode (window lost)\n");
+			Q3IDE_LOGI("exited Pointer Mode (window lost)");
 			return;
 		}
 
@@ -86,7 +85,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 			q3ide_interaction.mode = Q3IDE_MODE_FPS;
 			q3ide_interaction.hover_t = 0.0f;
 			q3ide_interaction.dwell_start_ms = (float) Sys_Milliseconds();
-			Com_Printf("q3ide: exited Pointer Mode (edge)\n");
+			Q3IDE_LOGI("exited Pointer Mode (edge)");
 			return;
 		}
 
@@ -104,7 +103,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 			               q3ide_interaction.pointer_uv[1]);
 		if (use_key) {
 			q3ide_interaction.mode = Q3IDE_MODE_KEYBOARD;
-			Com_Printf("q3ide: entered Keyboard Mode\n");
+			Q3IDE_LOGI("entered Keyboard Mode");
 			return;
 		}
 		if (escape) {
@@ -112,7 +111,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 			q3ide_interaction.mode = Q3IDE_MODE_FPS;
 			q3ide_interaction.hover_t = 0.0f;
 			q3ide_interaction.dwell_start_ms = (float) Sys_Milliseconds();
-			Com_Printf("q3ide: exited Pointer Mode (ESC)\n");
+			Q3IDE_LOGI("exited Pointer Mode (ESC)");
 			return;
 		}
 
@@ -120,7 +119,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 		(void) attacking;
 		if (escape) {
 			q3ide_interaction.mode = Q3IDE_MODE_FPS;
-			Com_Printf("q3ide: exited Keyboard Mode (ESC)\n");
+			Q3IDE_LOGI("exited Keyboard Mode (ESC)");
 		}
 	}
 }
@@ -137,7 +136,7 @@ qboolean Q3IDE_Interaction_OnKeyEvent(int key, qboolean down)
 			q3ide_interaction.mode = Q3IDE_MODE_FPS;
 			q3ide_interaction.hover_t = 0.0f;
 			q3ide_interaction.dwell_start_ms = (float) Sys_Milliseconds();
-			Com_Printf("q3ide: exited Pointer Mode (ESC)\n");
+			Q3IDE_LOGI("exited Pointer Mode (ESC)");
 			return qtrue;
 		}
 		return qfalse;
@@ -148,7 +147,7 @@ qboolean Q3IDE_Interaction_OnKeyEvent(int key, qboolean down)
 
 	if (down && key == 27) {
 		q3ide_interaction.mode = Q3IDE_MODE_FPS;
-		Com_Printf("q3ide: exited Keyboard Mode (ESC)\n");
+		Q3IDE_LOGI("exited Keyboard Mode (ESC)");
 		return qtrue;
 	}
 

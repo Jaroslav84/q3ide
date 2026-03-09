@@ -97,19 +97,19 @@ typedef struct Q3ideQ3ideFrame {
 } Q3ideQ3ideFrame;
 
 /**
- * A single window change event (window opened or closed).
+ * A single window change event.
  */
 typedef struct Q3ideQ3ideWindowChange {
     unsigned int window_id;
     /**
-     * Added events: heap-allocated null-terminated app name, freed by q3ide_free_change_list.
-     * Removed events: null.
+     * Added/resized: heap-allocated null-terminated app name, freed by q3ide_free_change_list.
+     * Removed: null.
      */
     char *app_name;
     unsigned int width;
     unsigned int height;
     /**
-     * 1 = window was added, 0 = window was removed.
+     * 1 = added, 0 = removed, 2 = resized.
      */
     int is_added;
 } Q3ideQ3ideWindowChange;

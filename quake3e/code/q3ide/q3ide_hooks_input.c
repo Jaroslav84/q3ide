@@ -47,7 +47,7 @@ void q3ide_shoot_frame(void)
 		q3ide_last_attack = attacking;
 		/* Expire stale selection */
 		if (q3ide_selected_win >= 0 && Sys_Milliseconds() - q3ide_select_time >= Q3IDE_REPOSITION_MS) {
-			Com_Printf("q3ide: selection expired\n");
+			Q3IDE_LOGI("selection expired");
 			q3ide_selected_win = -1;
 		}
 		return;
@@ -68,7 +68,7 @@ void q3ide_shoot_frame(void)
 		/* Shot hit a window → select it */
 		q3ide_selected_win = hit;
 		q3ide_select_time = Sys_Milliseconds();
-		Com_Printf("q3ide: selected [%d] -> shoot surface to move (5s)\n", hit);
+		Q3IDE_LOGI("selected [%d] -> shoot surface to move (5s)", hit);
 		Cbuf_AddText("give ammo\n");
 	} else if (q3ide_selected_win >= 0 && Sys_Milliseconds() - q3ide_select_time < Q3IDE_REPOSITION_MS) {
 		/* Selection active, shot missed windows → move to hit surface */
@@ -76,8 +76,7 @@ void q3ide_shoot_frame(void)
 		if (Q3IDE_WM_TraceWall(eye, fwd, wall_pos, wall_normal)) {
 			wall_pos[2] = eye[2];                                                   /* keep at eye height */
 			Q3IDE_WM_MoveWindow(q3ide_selected_win, wall_pos, wall_normal, qfalse); /* user-placed: clamp to fit */
-			Com_Printf("q3ide: moved [%d] to (%.0f,%.0f,%.0f)\n", q3ide_selected_win, wall_pos[0], wall_pos[1],
-			           wall_pos[2]);
+			Q3IDE_LOGI("moved [%d] to (%.0f,%.0f,%.0f)", q3ide_selected_win, wall_pos[0], wall_pos[1], wall_pos[2]);
 		} else {
 			/* No wall — move to floating position in front */
 			vec3_t float_pos, float_normal;
@@ -88,7 +87,7 @@ void q3ide_shoot_frame(void)
 			float_normal[1] = -fwd[1];
 			float_normal[2] = 0.0f;
 			Q3IDE_WM_MoveWindow(q3ide_selected_win, float_pos, float_normal, qfalse);
-			Com_Printf("q3ide: moved [%d] floating\n", q3ide_selected_win);
+			Q3IDE_LOGI("moved [%d] floating", q3ide_selected_win);
 		}
 		q3ide_select_time = Sys_Milliseconds(); /* restart 5s window — keep shooting to keep moving */
 		Cbuf_AddText("give ammo\n");

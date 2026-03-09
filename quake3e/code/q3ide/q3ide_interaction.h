@@ -34,9 +34,9 @@ typedef struct {
 	char hovered_entity_name[64]; /* name of game entity under crosshair, "" = none */
 } q3ide_interaction_state_t;
 
-#define Q3IDE_DWELL_MS 150.0f          /* ms to activate hover */
+#define Q3IDE_DWELL_MS         150.0f  /* ms to activate hover */
 #define Q3IDE_POINTER_MAX_DIST 1000.0f /* max distance for Pointer Mode (~10m) */
-#define Q3IDE_EDGE_ZONE_UV 0.05f       /* edge zone in UV fraction (~20px at typical size) */
+#define Q3IDE_EDGE_ZONE_UV     0.05f   /* edge zone in UV fraction (~20px at typical size) */
 
 /* Initialise interaction state */
 void Q3IDE_Interaction_Init(void);

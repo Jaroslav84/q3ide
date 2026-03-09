@@ -65,6 +65,8 @@ qboolean Q3IDE_WM_ReflowTick(void);
 
 /* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_cmd.c) */
 void Q3IDE_WM_PollChanges(void);
+/* Drain change list fetched by background poll thread — call from main thread. */
+void Q3IDE_WM_DrainPendingChanges(void);
 
 /* Called from Q3IDE_Frame with current player eye position */
 void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz);

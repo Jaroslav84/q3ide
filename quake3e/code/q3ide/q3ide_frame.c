@@ -20,9 +20,14 @@ extern int q3ide_last_attack;
 extern void q3ide_grapple_type_frame(void);
 extern void q3ide_grapple_window_frame(void);
 
+/* Teleport blocker — q3ide_teleport.c */
+extern void q3ide_teleport_block_frame(void);
+
+/* Spawn-focus — q3ide_spawn.c */
+extern void q3ide_spawn_focus_terminal(const vec3_t eye);
+
 /* Shoot-to-place — q3ide_hooks_input.c */
 extern void q3ide_shoot_frame(void);
-
 void Q3IDE_Frame(void)
 {
 	if (!q3ide_state.initialized)
@@ -33,11 +38,11 @@ void Q3IDE_Frame(void)
 		if (++q3ide_state.autoexec_delay > 60) {
 			q3ide_state.stream_last_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
 			q3ide_state.stream_cooldown = 60;
-			Cbuf_AddText("give grappling hook\nweapon 10\n");
+			Cbuf_AddText("give grappling hook\nweapon 10\nq3ide attach all\n");
 			{
 				cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
 				if (cmd && cmd->string[0]) {
-					Com_Printf("q3ide: auto: %s\n", cmd->string);
+					Q3IDE_LOGI("auto: %s", cmd->string);
 					Cbuf_AddText(cmd->string);
 					Cbuf_AddText("\n");
 					Cvar_Set("nextdemo", "");
@@ -67,14 +72,36 @@ void Q3IDE_Frame(void)
 		float cur_yaw, cur_pitch, mouse_dx, mouse_dy;
 		qboolean attacking, use_key, escape, lock_key;
 
+		q3ide_teleport_block_frame();
+
 		VectorCopy(cl.snap.ps.origin, eye);
 		eye[2] += cl.snap.ps.viewheight;
 		Q3IDE_WM_UpdatePlayerPos(eye[0], eye[1], eye[2]);
 
+		/* Cache LOS visibility once per frame — reused across all monitor render passes. */
+		if (q3ide_wm.num_active) {
+			static vec3_t los_mins = {0, 0, 0}, los_maxs = {0, 0, 0};
+			int _li;
+			for (_li = 0; _li < Q3IDE_MAX_WIN; _li++) {
+				q3ide_win_t *_w = &q3ide_wm.wins[_li];
+				if (!_w->active) {
+					_w->los_visible = qfalse;
+					continue;
+				}
+				{
+					trace_t _tr;
+					CM_BoxTrace(&_tr, eye, _w->origin, los_mins, los_maxs, 0, CONTENTS_SOLID, qfalse);
+					_w->los_visible = (_tr.startsolid || _tr.fraction >= 0.95f) ? qtrue : qfalse;
+				}
+			}
+		}
+
 		{
 			int cur_health = cl.snap.ps.stats[STAT_HEALTH];
-			if (q3ide_state.last_health <= 0 && cur_health > 0)
+			if (q3ide_state.last_health <= 0 && cur_health > 0) {
 				Cbuf_AddText("give grappling hook\nweapon 10\n");
+				q3ide_spawn_focus_terminal(eye);
+			}
 			q3ide_state.last_health = cur_health;
 		}
 
@@ -114,13 +141,19 @@ void Q3IDE_Frame(void)
 	Q3IDE_WM_ReflowTick();
 	Q3IDE_WM_PollFrames();
 
-	/* Heartbeat every 5 seconds so crash time is visible in q3ide.log */
+	/* Heartbeat + FPS stats every 5 seconds */
 	{
 		static unsigned long long last_hb_ms;
 		unsigned long long now_ms = Sys_Milliseconds();
 		if (now_ms - last_hb_ms >= 5000) {
-			Q3IDE_LOGI("heartbeat active=%d", q3ide_wm.num_active);
+			static int last_framecount;
+			unsigned long long elapsed = now_ms - last_hb_ms;
+			int frames = cls.framecount - last_framecount;
+			int fps = (int) ((unsigned long long) frames * 1000 / elapsed);
+			Q3IDE_LOGI("heartbeat active=%d fps=%d uploads=%d", q3ide_wm.num_active, fps, q3ide_wm.frame_uploads);
+			q3ide_wm.frame_uploads = 0;
 			last_hb_ms = now_ms;
+			last_framecount = cls.framecount;
 		}
 	}
 }

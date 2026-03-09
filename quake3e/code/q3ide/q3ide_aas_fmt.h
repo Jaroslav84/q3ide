@@ -6,28 +6,28 @@
 #ifndef Q3IDE_AAS_FMT_H
 #define Q3IDE_AAS_FMT_H
 
-#define AASID (('S' << 24) + ('A' << 16) + ('A' << 8) + 'E')
+#define AASID      (('S' << 24) + ('A' << 16) + ('A' << 8) + 'E')
 #define AASVERSION 5
-#define AAS_LUMPS 14
+#define AAS_LUMPS  14
 
-#define AASLUMP_BBOXES 0
-#define AASLUMP_VERTEXES 1
-#define AASLUMP_PLANES 2
-#define AASLUMP_EDGES 3
-#define AASLUMP_EDGEINDEX 4
-#define AASLUMP_FACES 5
-#define AASLUMP_FACEINDEX 6
-#define AASLUMP_AREAS 7
+#define AASLUMP_BBOXES       0
+#define AASLUMP_VERTEXES     1
+#define AASLUMP_PLANES       2
+#define AASLUMP_EDGES        3
+#define AASLUMP_EDGEINDEX    4
+#define AASLUMP_FACES        5
+#define AASLUMP_FACEINDEX    6
+#define AASLUMP_AREAS        7
 #define AASLUMP_AREASETTINGS 8
 #define AASLUMP_REACHABILITY 9
-#define AASLUMP_NODES 10
-#define AASLUMP_PORTALS 11
-#define AASLUMP_PORTALINDEX 12
-#define AASLUMP_CLUSTERS 13
+#define AASLUMP_NODES        10
+#define AASLUMP_PORTALS      11
+#define AASLUMP_PORTALINDEX  12
+#define AASLUMP_CLUSTERS     13
 
-#define FACE_SOLID 1
+#define FACE_SOLID  1
 #define FACE_GROUND 4
-#define FACE_GAP 8
+#define FACE_GAP    8
 
 typedef struct {
 	int fileofs, filelen;

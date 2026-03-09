@@ -14,10 +14,10 @@ extern void q3ide_queue_push(unsigned int id, const vec3_t pos, const vec3_t nor
 extern void q3ide_sort_walls_by_facing(q3ide_room_t *room, float yaw);
 extern float q3ide_tv_score(const q3ide_wall_t *wall, int k, float aspect);
 
-#define Q3IDE_WALL_OFFSET 3.0f
-#define Q3IDE_LAYOUT_GAP 16.0f
+#define Q3IDE_WALL_OFFSET   3.0f
+#define Q3IDE_LAYOUT_GAP    16.0f
 #define Q3IDE_LAYOUT_MARGIN 24.0f
-#define Q3IDE_MIN_TV_H 64.0f /* below this → look for another wall */
+#define Q3IDE_MIN_TV_H      64.0f /* below this → look for another wall */
 
 /* ── helpers ─────────────────────────────────────────────────────── */
 

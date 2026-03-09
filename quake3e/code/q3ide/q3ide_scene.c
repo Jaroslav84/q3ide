@@ -13,8 +13,13 @@
 /* Geometry helpers — q3ide_geom.c */
 extern void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader);
 extern void q3ide_add_depth_quad(q3ide_win_t *win);
+extern void q3ide_add_select_border(q3ide_win_t *win);
+extern void q3ide_add_hover_border(q3ide_win_t *win);
 extern void q3ide_add_poly(q3ide_win_t *win);
 extern void q3ide_add_blood_splat(q3ide_win_t *win);
+
+/* Shoot-to-place selection — q3ide_portal.c */
+extern int q3ide_selected_win;
 
 /* Mirror quads — q3ide_wm_render.c */
 extern void q3ide_wm_render_mirrors(void);
@@ -37,36 +42,35 @@ void Q3IDE_WM_InvalidateShaders(void)
 void Q3IDE_WM_AddPolys(void)
 {
 	int i;
-	static vec3_t mins = {0, 0, 0}, maxs = {0, 0, 0};
 
 	if (!re.AddPolyToScene)
 		return;
 
 	if (!q3ide_wm.border_shader && re.RegisterShader)
-		q3ide_wm.border_shader = re.RegisterShader("*white");
+		q3ide_wm.border_shader = re.RegisterShader("q3ide/border");
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
-		trace_t los;
-		vec3_t eye;
 
-		if (!win->active || !win->shader)
+		if (!win->active)
 			continue;
 
-		VectorCopy(q3ide_wm.player_eye, eye);
-
-		/* LOS occlusion: skip windows hidden behind solid geometry. */
-		CM_BoxTrace(&los, eye, win->origin, mins, maxs, 0, CONTENTS_SOLID, qfalse);
-		if (!los.startsolid && los.fraction < 0.95f)
+		/* LOS cached once per frame in Q3IDE_Frame — no per-pass trace needed. */
+		if (!win->los_visible)
 			continue;
 
 		/* Back-face cull for wall-mounted windows. */
 		if (win->wall_mounted) {
 			vec3_t diff;
-			VectorSubtract(eye, win->origin, diff);
+			VectorSubtract(q3ide_wm.player_eye, win->origin, diff);
 			if (DotProduct(diff, win->normal) < 0.0f)
 				continue;
 		}
 
+		if (i == q3ide_selected_win)
+			q3ide_add_select_border(win);
+		q3ide_add_hover_border(win);
+		if (!win->shader)
+			continue; /* no texture yet — borders drawn, but skip depth/poly/splat */
 		q3ide_add_depth_quad(win);
 		q3ide_add_poly(win);
 		q3ide_add_blood_splat(win);

@@ -84,7 +84,7 @@ typedef struct {
 
 	// Draw images for cinematic rendering, pass as 32 bit rgba
 	void	(*DrawStretchRaw)( int x, int y, int w, int h, int cols, int rows, byte *data, int client, qboolean dirty );
-	void	(*UploadCinematic)( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty );
+	void	(*UploadCinematic)( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty, unsigned int format );
 
 	void	(*BeginFrame)( stereoFrame_t stereoFrame );
 

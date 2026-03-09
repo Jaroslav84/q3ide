@@ -58,6 +58,8 @@ void Q3IDE_UpdateEntityHover(void);
 
 /* Draw red laser beams from player eye to all active windows (hold K). */
 void Q3IDE_DrawLasers(const void *refdef_ptr);
+/* Draw brown rope from player to grapple point when rope mode (type 1) active. */
+void Q3IDE_DrawGrappleRope(const void *refdef_ptr);
 
 /* Internal frame state — shared between q3ide_hooks*.c TUs. */
 typedef struct {

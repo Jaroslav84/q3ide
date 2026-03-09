@@ -232,7 +232,8 @@ echo "========================================"
 
 # 7. Ensure Screen Recording permission (macOS only)
 if [ "$BUILD_OS" = "darwin" ] && [ -n "$ENGINE_BIN" ] && [ -f "$ENGINE_BIN" ]; then
-    PERMISSION_MARKER="$ROOT/.q3ide_screen_permission_granted"
+    PERMISSION_MARKER="$HOME/.config/q3ide/screen_permission_granted"
+    mkdir -p "$HOME/.config/q3ide"
     if [ ! -f "$PERMISSION_MARKER" ]; then
         echo ""
         echo "  Screen Recording permission is required for window capture."
@@ -304,7 +305,7 @@ if [ "$DO_RUN" = "1" ]; then
 
     # Build command args
     # vm_game 0 = native dylib; vm_cgame 2 = standard QVM (native cgame is incompatible with quake3e)
-    ENGINE_ARGS="+set vm_game 0 +set vm_cgame 2 +set vm_ui 2"
+    ENGINE_ARGS="+set vm_game 0 +set vm_cgame 2 +set vm_ui 2 +set cl_renderer opengl1"
 
     # --level: override the map
     if [ -n "$LEVEL" ]; then

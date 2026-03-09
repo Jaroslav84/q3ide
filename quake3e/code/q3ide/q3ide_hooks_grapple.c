@@ -56,19 +56,25 @@ void q3ide_grapple_type_frame(void)
 		q3ide_rope_swing_frames = 0;
 
 		if (gtype == 2) {
-			/* Rail — snap player to hook point */
-			vec3_t gp;
+			/* Rail — snap player to 48u in front of hook point (not into wall) */
+			vec3_t gp, dir, dest;
 			char cmd[256];
 			VectorCopy(cl.snap.ps.grapplePoint, gp);
-			Com_sprintf(cmd, sizeof(cmd), "cmd setviewpos %.0f %.0f %.0f %.0f\n", gp[0], gp[1], gp[2],
+			/* Direction from grapple point back toward player */
+			VectorSubtract(cl.snap.ps.origin, gp, dir);
+			VectorNormalize(dir);
+			/* Stand 48u from the wall; lower by half viewheight so feet land near surface */
+			VectorMA(gp, 48.0f, dir, dest);
+			dest[2] -= (float) cl.snap.ps.viewheight * 0.5f;
+			Com_sprintf(cmd, sizeof(cmd), "cmd setviewpos %.0f %.0f %.0f %.0f\n", dest[0], dest[1], dest[2],
 			            cl.snap.ps.viewangles[1]);
 			Cbuf_AddText(cmd);
 			Cbuf_AddText("-button5\n"); /* release hook after teleport */
-			Com_Printf("q3ide: RAIL — snap to (%.0f %.0f %.0f)\n", gp[0], gp[1], gp[2]);
+			Q3IDE_LOGI("RAIL — snap to (%.0f %.0f %.0f)", dest[0], dest[1], dest[2]);
 		} else if (gtype == 1) {
-			Com_Printf("q3ide: ROPE — rest=%.0f\n", q3ide_rope_rest);
+			Q3IDE_LOGI("ROPE — rest=%.0f", q3ide_rope_rest);
 		} else {
-			Com_Printf("q3ide: HOOK\n");
+			Q3IDE_LOGI("HOOK");
 		}
 	}
 

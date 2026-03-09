@@ -106,11 +106,6 @@ All spatial UI follows Apple VisionOS terminology and design patterns. This is n
 // q3ide_design.h — spatial design tokens
 // Derived from Apple VisionOS Human Interface Guidelines
 
-// Glass Material
-#define Q3IDE_GLASS_ALPHA           0.72f
-#define Q3IDE_GLASS_TINT            {0.95f, 0.95f, 0.97f}
-#define Q3IDE_GLASS_SPECULAR        0.04f
-
 // Window Geometry
 #define Q3IDE_CORNER_RADIUS         12.0f
 #define Q3IDE_WINDOW_BAR_HEIGHT     32.0f

@@ -1,12 +1,6 @@
 /*
  * q3ide_laser.c — Red laser beams from player to all active windows.
- *
- * Hold K → q3ide_laser_active set to 1.
- * Release K → cleared.
- * Q3IDE_DrawLasers() draws two crossed billboard quads per beam so they are
- * visible from any angle, including head-on from the camera.
- * Beams start 30u in front of the eye (not at the exact eye position) so the
- * ribbon is not degenerate when viewed from the camera.
+ * Grapple rope rendering: q3ide_rope.c.
  */
 
 #include "q3ide_hooks.h"
@@ -20,7 +14,7 @@
 
 /* q3ide_params singleton — input/keyboard must never write to this. */
 const q3ide_params_t q3ide_params = {
-    .laserPointerWidth = 2.0f, /* ~2 px at typical viewing distance */
+    .laserPointerWidth = 0.5f,
 };
 
 static qhandle_t g_laser_shader;
@@ -127,10 +121,10 @@ void Q3IDE_DrawLasers(const void *refdef_ptr)
 	if (!g_laser_shader || !re.AddPolyToScene)
 		return;
 
-	/* Start beams from the player's heart (body center, ~40u above feet). */
+	/* Start beams from mid-body: scales with player viewheight (stand/crouch). */
 	beam_start[0] = cl.snap.ps.origin[0];
 	beam_start[1] = cl.snap.ps.origin[1];
-	beam_start[2] = cl.snap.ps.origin[2] + 24.0f; /* +0.5m up */
+	beam_start[2] = cl.snap.ps.origin[2] + (float) cl.snap.ps.viewheight * 0.5f;
 
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];

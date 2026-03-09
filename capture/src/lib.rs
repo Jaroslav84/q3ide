@@ -402,16 +402,16 @@ pub unsafe extern "C" fn q3ide_free_string(s: *mut c_char) {
     }
 }
 
-/// A single window change event (window opened or closed).
+/// A single window change event.
 #[repr(C)]
 pub struct Q3ideWindowChange {
     pub window_id: c_uint,
-    /// Added events: heap-allocated null-terminated app name, freed by q3ide_free_change_list.
-    /// Removed events: null.
+    /// Added/resized: heap-allocated null-terminated app name, freed by q3ide_free_change_list.
+    /// Removed: null.
     pub app_name: *mut c_char,
     pub width: c_uint,
     pub height: c_uint,
-    /// 1 = window was added, 0 = window was removed.
+    /// 1 = added, 0 = removed, 2 = resized.
     pub is_added: c_int,
 }
 
@@ -489,6 +489,22 @@ pub unsafe extern "C" fn q3ide_poll_window_changes(
         }
     }
 
+    // Resized: in both known and current, but dimensions changed.
+    for w in &current {
+        if let Some(prev) = known.get(&w.window_id) {
+            if prev.width != w.width || prev.height != w.height {
+                let app_name = CString::new(w.app_name.as_str()).unwrap_or_default().into_raw();
+                changes.push(Q3ideWindowChange {
+                    window_id: w.window_id,
+                    app_name,
+                    width: w.width,
+                    height: w.height,
+                    is_added: 2,
+                });
+            }
+        }
+    }
+
     // Update snapshot to current.
     let new_known: HashMap<u32, backend::WindowInfo> =
         current.into_iter().map(|w| (w.window_id, w)).collect();
@@ -498,6 +514,7 @@ pub unsafe extern "C" fn q3ide_poll_window_changes(
         return empty;
     }
 
+    changes.shrink_to_fit(); /* capacity must == len before forget, else free corrupts heap */
     let count = changes.len() as c_uint;
     let ptr = changes.as_mut_ptr();
     std::mem::forget(changes);

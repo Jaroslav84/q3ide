@@ -4,6 +4,7 @@
  */
 
 #include "q3ide_interaction.h"
+#include "q3ide_log.h"
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
 #include "../qcommon/qcommon.h"
@@ -19,7 +20,7 @@ void q3ide_do_click(unsigned int wid, float uv_x, float uv_y)
 	if (q3ide_wm.cap_inject_click)
 		q3ide_wm.cap_inject_click(q3ide_wm.cap, wid, uv_x, uv_y);
 	else
-		Com_Printf("q3ide: click wid=%u uv=(%.2f,%.2f) — inject unavailable\n", wid, uv_x, uv_y);
+		Q3IDE_LOGW("click wid=%u uv=(%.2f,%.2f) - inject unavailable", wid, uv_x, uv_y);
 }
 
 /* Compute UV, distance, and 3D hit position for the window under the crosshair. */

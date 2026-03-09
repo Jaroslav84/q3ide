@@ -7,13 +7,14 @@
 #define Q3IDE_WM_INTERNAL_H
 
 #include "../qcommon/q_shared.h"
+#include <pthread.h>
 
 /* ── Constants ─────────────────────────────────────────────────── */
-#define Q3IDE_MAX_WIN 64
+#define Q3IDE_MAX_WIN     64
 #define Q3IDE_CAPTURE_FPS 60
-#define Q3IDE_WIN_INCHES 150.0f
-#define Q3IDE_MIN_WIN_W 400
-#define Q3IDE_MIN_WIN_H 300
+#define Q3IDE_WIN_INCHES  150.0f
+#define Q3IDE_MIN_WIN_W   400
+#define Q3IDE_MIN_WIN_H   300
 
 /* ── Dylib C-ABI types ─────────────────────────────────────────── */
 
@@ -69,7 +70,7 @@ typedef struct {
 	unsigned int window_id;
 	char *app_name; /* owned by lib (added events only; NULL for removed) */
 	unsigned int width, height;
-	int is_added; /* 1=added, 0=removed */
+	int is_added; /* 1=added, 0=removed, 2=resized */
 } Q3ideWindowChange;
 
 typedef struct {
@@ -88,13 +89,14 @@ typedef enum {
 	Q3IDE_WIN_STATUS_ERROR,
 } q3ide_win_status_t;
 
-#define Q3IDE_DIST_FULL 200.0f /* full 60fps */
-#define Q3IDE_DIST_HALF 500.0f /* 30fps */
-#define Q3IDE_DIST_LOW 1000.0f /* 15fps */
-#define Q3IDE_FPS_FULL 60
-#define Q3IDE_FPS_HALF 30
-#define Q3IDE_FPS_LOW 15
-#define Q3IDE_FPS_MIN 5
+#define Q3IDE_DIST_FULL      200.0f  /* full 60fps */
+#define Q3IDE_DIST_HALF      500.0f  /* 30fps */
+#define Q3IDE_DIST_LOW       1000.0f /* 15fps */
+#define Q3IDE_FPS_FULL       60
+#define Q3IDE_FPS_HALF       30
+#define Q3IDE_FPS_LOW        15
+#define Q3IDE_FPS_MIN        5
+#define Q3IDE_MAX_TUNNEL_FPS 25 /* hard cap for screen-capture tunnel windows */
 
 /* ── Per-window state ─────────────────────────────────────────── */
 typedef struct {
@@ -112,7 +114,7 @@ typedef struct {
 	unsigned long long last_frame_ms;  /* Sys_Milliseconds() on last frame */
 	float player_dist;                 /* distance from player, updated each frame */
 	int fps_target;                    /* target FPS for this window (distance-based) */
-	int skip_counter;                  /* frames skipped since last upload */
+	unsigned long long last_upload_ms; /* Sys_Milliseconds() of last texture upload */
 	/* Batch 2: Interaction */
 	int hover_active; /* 1 = crosshair dwelling on this window */
 	float hover_t;    /* 0..1 hover animation progress */
@@ -122,6 +124,7 @@ typedef struct {
 	vec3_t hit_pos;                 /* world position of hit point */
 	/* Layout: wall-mounted windows skip back-face rendering */
 	qboolean wall_mounted; /* qtrue = placed by room layout engine on a wall */
+	qboolean los_visible;  /* cached LOS result — updated once per frame, reused across monitor passes */
 	/* Tunnel: OS screen-capture window. detach-all only removes these.
 	 * Non-tunnel windows (HUD, FPS, overlays) survive detach-all. */
 	qboolean is_tunnel;
@@ -152,6 +155,7 @@ typedef struct {
 	unsigned long long last_scan_ms; /* last time we polled for changes */
 	q3ide_win_t wins[Q3IDE_MAX_WIN];
 	int num_active;
+	int frame_uploads;            /* texture uploads since last heartbeat */
 	unsigned long long slot_mask; /* bit N = scratch slot N is in use */
 	byte *fbuf;
 	int fbuf_size;
@@ -164,6 +168,12 @@ typedef struct {
 	float mirror_w, mirror_h;
 	qhandle_t mirror_shader;        /* q3ide/mirror — sort portal */
 	qhandle_t mirror_energy_shader; /* energy glow overlay */
+	/* Background poll thread — fetches SCK change list off the main thread */
+	pthread_t poll_thread;
+	pthread_mutex_t poll_mutex;
+	volatile int poll_running;
+	Q3ideWindowChangeList poll_pending; /* protected by poll_mutex */
+	qboolean poll_has_pending;          /* protected by poll_mutex */
 	/* Second standalone portal (return trip) */
 	qboolean mirror2_active;
 	vec3_t mirror2_origin;

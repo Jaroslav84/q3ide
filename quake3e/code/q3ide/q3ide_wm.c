@@ -6,12 +6,13 @@
 #include "q3ide_wm.h"
 #include "q3ide_log.h"
 #include "q3ide_wm_internal.h"
-#include "../../../q3ide_design.h"
+#include "q3ide_design.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <dlfcn.h>
 #include <math.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef __APPLE__
 #define Q3IDE_DYLIB "libq3ide_capture.dylib"
@@ -19,7 +20,7 @@
 #define Q3IDE_DYLIB "libq3ide_capture.so"
 #endif
 
-#define Q3IDE_WALL_DIST 512.0f
+#define Q3IDE_WALL_DIST   512.0f
 #define Q3IDE_WALL_OFFSET 3.0f
 
 q3ide_wm_t q3ide_wm;
@@ -126,10 +127,6 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	win->world_h = wh;
 	win->wall_mounted = skip_clamp;
 	win->is_tunnel = do_start; /* OS screen-capture windows are tunnels */
-	// clang-format off
-	Com_Printf("q3ide: attach win[%d] id=%u slot=%d pos=(%.0f,%.0f,%.0f) norm=(%.2f,%.2f) size=%.0fx%.0f\n",
-	           i, id, slot, origin[0], origin[1], origin[2], win->normal[0], win->normal[1], ww, wh);
-	// clang-format on
 	q3ide_wm.num_active++;
 	if (!skip_clamp)
 		q3ide_clamp_window_size(win);
@@ -163,6 +160,32 @@ int Q3IDE_WM_FindById(unsigned int cid)
 	return -1;
 }
 
+/* Background thread: fetch SCK change list every 1s, store for main thread drain. */
+static void *q3ide_poll_thread_fn(void *arg)
+{
+	(void) arg;
+	while (q3ide_wm.poll_running) {
+		struct timespec ts = {1, 0};
+		nanosleep(&ts, NULL);
+		if (!q3ide_wm.poll_running || !q3ide_wm.auto_attach)
+			continue;
+		if (!q3ide_wm.cap_poll_changes || !q3ide_wm.cap)
+			continue;
+		{
+			Q3ideWindowChangeList clist = q3ide_wm.cap_poll_changes(q3ide_wm.cap);
+			if (clist.changes && clist.count) {
+				pthread_mutex_lock(&q3ide_wm.poll_mutex);
+				if (q3ide_wm.poll_has_pending && q3ide_wm.cap_free_changes)
+					q3ide_wm.cap_free_changes(q3ide_wm.poll_pending);
+				q3ide_wm.poll_pending = clist;
+				q3ide_wm.poll_has_pending = qtrue;
+				pthread_mutex_unlock(&q3ide_wm.poll_mutex);
+			}
+		}
+	}
+	return NULL;
+}
+
 qboolean Q3IDE_WM_Init(void)
 {
 	memset(&q3ide_wm, 0, sizeof(q3ide_wm));
@@ -175,11 +198,21 @@ qboolean Q3IDE_WM_Init(void)
 		q3ide_wm.dylib = NULL;
 		return qfalse;
 	}
+	pthread_mutex_init(&q3ide_wm.poll_mutex, NULL);
+	q3ide_wm.poll_running = 1;
+	pthread_create(&q3ide_wm.poll_thread, NULL, q3ide_poll_thread_fn, NULL);
 	return qtrue;
 }
 
 void Q3IDE_WM_Shutdown(void)
 {
+	/* Stop poll thread before cap_shutdown — thread uses cap */
+	q3ide_wm.poll_running = 0;
+	pthread_join(q3ide_wm.poll_thread, NULL);
+	if (q3ide_wm.poll_has_pending && q3ide_wm.cap_free_changes)
+		q3ide_wm.cap_free_changes(q3ide_wm.poll_pending);
+	pthread_mutex_destroy(&q3ide_wm.poll_mutex);
+
 	Q3IDE_WM_CmdDetachAll();
 	if (q3ide_wm.cap && q3ide_wm.cap_shutdown)
 		q3ide_wm.cap_shutdown(q3ide_wm.cap);

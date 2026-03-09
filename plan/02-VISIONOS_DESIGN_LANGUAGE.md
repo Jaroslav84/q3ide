@@ -317,15 +317,6 @@ Translated from visionOS spatial specs to Quake 3 engine units:
 // Adapted from Apple VisionOS Human Interface Guidelines
 // ═══════════════════════════════════════════════════════
 
-// --- Glass Material ---
-#define Q3IDE_GLASS_ALPHA           0.72f    // Base transparency
-#define Q3IDE_GLASS_BLUR_PASSES     3        // Multi-pass blur simulation
-#define Q3IDE_GLASS_TINT_R          0.95f
-#define Q3IDE_GLASS_TINT_G          0.95f
-#define Q3IDE_GLASS_TINT_B          0.97f
-#define Q3IDE_GLASS_SPECULAR        0.04f    // Top-edge highlight opacity
-#define Q3IDE_GLASS_SHADOW_ALPHA    0.25f
-
 // --- Window Geometry ---
 #define Q3IDE_CORNER_RADIUS         12.0f    // In reference points
 #define Q3IDE_WINDOW_BAR_HEIGHT     32.0f    // Bottom bar

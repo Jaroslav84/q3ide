@@ -772,13 +772,24 @@ static void Con_DrawSolidConsole( float frac ) {
 	con.xadjust = 0;
 	SCR_AdjustFrom640( &con.xadjust, &yf, &wf, NULL );
 
+#ifdef USE_Q3IDE
+	/* On multi-monitor spanning window, shift console to center display. */
+	{
+		int cx = Cvar_VariableIntegerValue( "r_mmCenterX" );
+		if ( cx > 0 ) con.xadjust += (float)cx;
+	}
+#define CON_X (con.xadjust)
+#else
+#define CON_X 0
+#endif
+
 	if ( yf < 1.0 ) {
 		yf = 0;
 	} else {
 		// custom console background color
 		if ( cl_conColor->string[0] ) {
 			// track changes
-			if ( strcmp( cl_conColor->string, conColorString ) ) 
+			if ( strcmp( cl_conColor->string, conColorString ) )
 			{
 				Q_strncpyz( conColorString, cl_conColor->string, sizeof( conColorString ) );
 				Q_strncpyz( buf, cl_conColor->string, sizeof( buf ) );
@@ -793,16 +804,18 @@ static void Con_DrawSolidConsole( float frac ) {
 				}
 			}
 			re.SetColor( conColorValue );
-			re.DrawStretchPic( 0, 0, wf, yf, 0, 0, 1, 1, cls.whiteShader );
+			re.DrawStretchPic( CON_X, 0, wf, yf, 0, 0, 1, 1, cls.whiteShader );
 		} else {
 			re.SetColor( g_color_table[ ColorIndex( COLOR_WHITE ) ] );
-			re.DrawStretchPic( 0, 0, wf, yf, 0, 0, 1, 1, cls.consoleShader );
+			re.DrawStretchPic( CON_X, 0, wf, yf, 0, 0, 1, 1, cls.consoleShader );
 		}
 
 	}
 
 	re.SetColor( g_color_table[ ColorIndex( COLOR_RED ) ] );
-	re.DrawStretchPic( 0, yf, wf, 2, 0, 0, 1, 1, cls.whiteShader );
+	re.DrawStretchPic( CON_X, yf, wf, 2, 0, 0, 1, 1, cls.whiteShader );
+
+#undef CON_X
 
 	//y = yf;
 

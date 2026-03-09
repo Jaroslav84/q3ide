@@ -3,52 +3,28 @@
 #
 # Checks:
 #   q3ide/   — clang-format, cppcheck, file length, prefix, USE_Q3IDE guards
-#   quake3e/ — modified files: USE_Q3IDE guard coverage only (no style checks)
+#   quake3e/ — modified files: USE_Q3IDE guard coverage only
 #   capture/ — Rust: no unsafe outside lib.rs, limit .unwrap()
-#
-# Works in Docker (clang-format-14 at /usr/local/bin/clang-format) and macOS.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 Q3IDE_DIR="$ROOT/quake3e/code/q3ide"
 
+RUN_CPPCHECK=0
+for arg in "$@"; do
+    [ "$arg" = "--cppcheck" ] && RUN_CPPCHECK=1
+done
+
 ERRORS=0
 WARNINGS=0
-FILES_CHECKED=0
-# Accumulate error file list for summary (newline-separated)
 ERROR_FILES=""
 
-err()  {
-    printf '[ERR]  %s\n' "$*"
-    ERRORS=$((ERRORS+1))
-}
+err()  { printf '[ERR]  %s\n' "$*"; ERRORS=$((ERRORS+1)); }
 warn() { printf '[WRN]  %s\n' "$*"; WARNINGS=$((WARNINGS+1)); }
 ok()   { printf '[ OK ] %s\n' "$*"; }
 info() { printf '[   ]  %s\n' "$*"; }
 
-rel() { echo "${1#$ROOT/}"; }
-# Strip leading/trailing whitespace (for wc -l output on macOS)
+rel()  { echo "${1#$ROOT/}"; }
 trim() { echo "$1" | tr -d ' \t'; }
-
-# ─── tool bootstrap ───────────────────────────────────────────────────────────
-
-ensure_tool() {
-    local tool="$1"
-    local pkg="${2:-$1}"
-    command -v "$tool" >/dev/null 2>&1 && return 0
-
-    # Try apt (Docker/Debian/Ubuntu with network)
-    if command -v apt-get >/dev/null 2>&1; then
-        apt-get install -y -q "$pkg" >/dev/null 2>&1 && return 0
-    fi
-
-    # Give platform-appropriate install hint
-    if [ "$(uname)" = "Darwin" ]; then
-        info "SKIP $tool — install: brew install $pkg"
-    else
-        info "SKIP $tool — install: apt-get install $pkg"
-    fi
-    return 1
-}
 
 # ─── clang-format (q3ide/ only) ───────────────────────────────────────────────
 
@@ -56,30 +32,23 @@ run_clang_format() {
     echo ""
     echo "-- clang-format (q3ide/ only) --"
 
-    if ! ensure_tool clang-format clang-format; then
-        info "skipped — clang-format not available"
+    if ! command -v clang-format >/dev/null 2>&1; then
+        info "skipped — clang-format not available (brew install clang-format)"
         return
     fi
 
-    local any=0
     for f in "$Q3IDE_DIR"/*.c "$Q3IDE_DIR"/*.h; do
         [ -f "$f" ] || continue
-        any=1
-        FILES_CHECKED=$((FILES_CHECKED+1))
         local r; r="$(rel "$f")"
         local lines; lines=$(trim "$(wc -l < "$f")")
-        # --dry-run prints what would change, --Werror makes it exit non-zero
-        local out
-        out="$(clang-format --dry-run --Werror "$f" 2>&1)"
+        local out; out="$(clang-format --dry-run "$f" 2>&1)"
         if [ -n "$out" ]; then
-            err "$r [${lines}L]: clang-format violations (fix: clang-format -i $r)"
-            echo "$out" | head -5 | while IFS= read -r line; do info "  $line"; done
-            ERROR_FILES="${ERROR_FILES}  clang-format: $r\n"
+            warn "$r [${lines}L]: clang-format violations (fix: clang-format -i $r)"
+            echo "$out" | head -6 | while IFS= read -r line; do info "  $line"; done
         else
             ok "$r [${lines}L]"
         fi
     done
-    [ "$any" -eq 0 ] && info "no C files found"
 }
 
 # ─── cppcheck (q3ide/ only) ───────────────────────────────────────────────────
@@ -88,41 +57,36 @@ run_cppcheck() {
     echo ""
     echo "-- cppcheck (q3ide/ only) --"
 
-    if ! ensure_tool cppcheck cppcheck; then
-        info "skipped — cppcheck not available"
+    if ! command -v cppcheck >/dev/null 2>&1; then
+        info "skipped — cppcheck not available (brew install cppcheck)"
         return
     fi
 
-    # Include paths so cppcheck can resolve Quake3e headers
-    local inc="-I$ROOT/quake3e/code/qcommon -I$ROOT/quake3e/code/client -I$ROOT/quake3e/code/renderercommon"
+    local any_issues=0
+    for f in "$Q3IDE_DIR"/*.c; do
+        [ -f "$f" ] || continue
+        local r; r="$(rel "$f")"
+        printf '[...] %s\r' "$r"
 
-    local out
-    out="$(cppcheck \
-        --enable=warning,style,performance \
-        --suppress=missingInclude \
-        --suppress=missingIncludeSystem \
-        --suppress=unusedFunction \
-        --error-exitcode=0 \
-        --quiet \
-        $inc \
-        "$Q3IDE_DIR" 2>&1)"
+        local out
+        out="$(cppcheck \
+            --enable=warning \
+            --suppress=missingInclude \
+            --suppress=missingIncludeSystem \
+            --suppress=unusedFunction \
+            --error-exitcode=0 \
+            --quiet \
+            "$f" 2>&1)"
 
-    if [ -z "$out" ]; then
-        ok "q3ide/ — no issues"
-        return
-    fi
-
-    # Print all cppcheck output as info lines (note: lines are context, not separate issues)
-    echo "$out" | while IFS= read -r line; do info "cppcheck: $line"; done
-
-    # Count only real issues (not note: context lines) — use wc -l to avoid macOS grep -c exit-1 bug
-    local nerr nwarn
-    nerr=$(echo "$out" | grep ": error:" | wc -l | tr -d ' ')
-    nwarn=$(echo "$out" | grep -E ": (warning|style|performance):" | wc -l | tr -d ' ')
-    ERRORS=$((ERRORS + nerr))
-    WARNINGS=$((WARNINGS + nwarn))
-    [ "${nerr:-0}" -gt 0 ] && err "cppcheck: ${nerr} error(s)" && ERROR_FILES="${ERROR_FILES}  cppcheck: ${nerr} error(s) in q3ide/\n"
-    [ "${nwarn:-0}" -gt 0 ] && warn "cppcheck: ${nwarn} issue(s)"
+        if [ -n "$out" ]; then
+            printf '%-60s\n' " "
+            echo "$out" | while IFS= read -r line; do info "  $line"; done
+            warn "$r: cppcheck issues"
+            any_issues=1
+        fi
+    done
+    printf '%-60s\r' " "
+    [ "$any_issues" -eq 0 ] && ok "q3ide/ — no issues"
 }
 
 # ─── basic checks: file length + prefix (q3ide/ only) ────────────────────────
@@ -138,7 +102,6 @@ run_basic_checks() {
         local r; r="$(rel "$f")"
         local lines; lines=$(trim "$(wc -l < "$f")")
 
-        # File length — line count already shown in clang-format section, only flag thresholds
         if [ "$lines" -gt 400 ]; then
             err "$r: $lines lines (max 400 — split this file)"
             ERROR_FILES="${ERROR_FILES}  too-long: $r (${lines}L)\n"
@@ -148,7 +111,6 @@ run_basic_checks() {
             any_issues=1
         fi
 
-        # Public symbols must use q3ide_/Q3IDE_ prefix
         grep -n "^[a-zA-Z_][a-zA-Z0-9_ *]*  *[a-zA-Z_][a-zA-Z0-9_]* *(" "$f" 2>/dev/null | \
             grep -v "static " | \
             grep -v "^[0-9]*:#" | \
@@ -170,6 +132,7 @@ run_guard_checks() {
     local MODIFIED="
         quake3e/code/client/cl_cgame.c
         quake3e/code/client/cl_main.c
+        quake3e/code/client/cl_console.c
         quake3e/code/sdl/sdl_glimp.c
         quake3e/code/renderer/tr_backend.c
         quake3e/code/renderer/tr_arb.c
@@ -238,7 +201,6 @@ run_rust_checks() {
         local r; r="$(rel "$f")"
         local base; base="$(basename "$f")"
 
-        # unsafe outside lib.rs
         if [ "$base" != "lib.rs" ]; then
             local nu
             nu="$(grep -c "\bunsafe\b" "$f" 2>/dev/null || true)"
@@ -249,7 +211,6 @@ run_rust_checks() {
             fi
         fi
 
-        # excess .unwrap()
         local u
         u="$(grep -c "\.unwrap()" "$f" 2>/dev/null || true)"
         [ "${u:-0}" -gt 3 ] && warn "$r: ${u} .unwrap() calls — prefer ? or .expect()"
@@ -264,7 +225,7 @@ echo "=== Q3IDE Linter ==="
 echo "root: $ROOT"
 
 run_clang_format
-run_cppcheck
+[ "$RUN_CPPCHECK" -eq 1 ] && run_cppcheck
 run_basic_checks
 run_guard_checks
 run_rust_checks

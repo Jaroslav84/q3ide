@@ -1,43 +1,5 @@
 # Q3IDE Custom Shader Patterns
 
-## Glass Material Shader
-
-A semi-transparent glass shader that renders screen content through it with proper blending and opacity.
-
-```
-textures/q3ide/glass_window
-{
-    nomipmaps
-    nopicmip
-    surfaceparm nomarks
-    {
-        map $whiteimage
-        blendfunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
-        rgbGen const ( 0.15 0.15 0.2 )
-        alphaGen const 0.85
-    }
-    {
-        map *q3ide_win0
-        blendfunc GL_ONE GL_ONE_MINUS_SRC_ALPHA
-        rgbGen identity
-    }
-}
-```
-
-**Usage:**
-- Stage 1: Semi-transparent dark blue base (glass tint)
-- Stage 2: Screen content texture with additive blending
-- **Parameters:**
-  - `nomipmaps/nopicmip`: Disables scaling for clarity
-  - `nomarks`: No bullet holes on windows
-  - `alphaGen const 0.85`: Window is mostly opaque (85% visible glass)
-  - `rgbGen const`: Glass tint color (0.15, 0.15, 0.2 = dark blue-grey)
-
-**Customization:**
-- Change `rgbGen const` values to tint glass (higher = more transparent, lower = darker)
-- Adjust `alphaGen const` for window opacity (0.0 = fully transparent, 1.0 = fully opaque)
-- Multiple windows: Use `*q3ide_win1`, `*q3ide_win2`, etc. (slots 0-15 available)
-
 ## Window Surface Shader (Per-Slot, Slots 0-15)
 
 A self-illuminated window shader for displaying captured screen content. Each window uses its own slot.
@@ -280,25 +242,6 @@ Q3IDE provides 16 dynamic texture slots for window content:
 A minimal complete shader file for Q3IDE window texturing:
 
 ```
-// Glass windows (semi-transparent with screen)
-textures/q3ide/glass_window
-{
-    nomipmaps
-    nopicmip
-    surfaceparm nomarks
-    {
-        map $whiteimage
-        blendfunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
-        rgbGen const ( 0.15 0.15 0.2 )
-        alphaGen const 0.85
-    }
-    {
-        map *q3ide_win0
-        blendfunc GL_ONE GL_ONE_MINUS_SRC_ALPHA
-        rgbGen identity
-    }
-}
-
 // Window surface slots 0-3
 textures/q3ide/window0
 {

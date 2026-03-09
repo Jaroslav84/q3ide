@@ -71,10 +71,10 @@ qboolean Q3IDE_WM_DetachById(unsigned int cid)
 		q3ide_wm.slot_mask &= ~(1ULL << w->scratch_slot);
 		memset(w, 0, sizeof(q3ide_win_t));
 		q3ide_wm.num_active--;
-		Com_Printf("q3ide: detached wid=%u\n", cid);
+		Q3IDE_LOGI("detached wid=%u", cid);
 		return qtrue;
 	}
-	Com_Printf("q3ide: wid=%u not found\n", cid);
+	Q3IDE_LOGI("wid=%u not found", cid);
 	return qfalse;
 }
 

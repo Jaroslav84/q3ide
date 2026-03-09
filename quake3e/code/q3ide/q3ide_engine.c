@@ -49,11 +49,6 @@ void Q3IDE_Init(void)
 
 	Cmd_AddCommand("q3ide", Q3IDE_Cmd_f);
 	q3ide_state.initialized = qtrue;
-	Com_Printf("q3ide: Interaction: dwell 150ms on window → hover highlight (no movement lock)\n");
-	Com_Printf("q3ide: Key bindings:\n");
-	Com_Printf("  bind L \"set q3ide_lock 1\"            (lock into Pointer Mode on highlighted window)\n");
-	Com_Printf("  bind <key> \"set q3ide_use_key 1\"     (enter Keyboard mode from Pointer)\n");
-	Com_Printf("  bind <key> \"set q3ide_escape 1\"      (exit Pointer/Keyboard modes)\n");
 }
 
 void Q3IDE_OnVidRestart(void)
@@ -72,7 +67,7 @@ void Q3IDE_OnVidRestart(void)
 		static byte q3ide_black[4] = {0, 0, 0, 255};
 		int i;
 		for (i = 0; i < Q3IDE_MAX_WIN; i++)
-			re.UploadCinematic(1, 1, 1, 1, q3ide_black, i, qtrue);
+			re.UploadCinematic(1, 1, 1, 1, q3ide_black, i, qtrue, 0x1908 /* GL_RGBA */);
 	}
 
 	mapname = Cvar_VariableString("mapname");
@@ -110,7 +105,7 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 		return qfalse;
 	if (key == 'k' || key == 'K') {
 		q3ide_laser_active = down;
-		Com_Printf("q3ide: laser %s (key=%d)\n", down ? "ON" : "OFF", key);
+		Q3IDE_LOGI("laser %s", down ? "ON" : "OFF");
 	}
 	return Q3IDE_Interaction_OnKeyEvent(key, down);
 }

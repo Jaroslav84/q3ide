@@ -1,15 +1,17 @@
-![Version](https://img.shields.io/badge/Version-v0.1-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v0.2-blue?style=for-the-badge)
 
-# Vision for q3ide
+# q3ide
 
 ![Quake III IDE](idea.png)
 
-Q3IDE ("Quake III IDE") turns a Quake III Arena (quake3e fork) into a live developer workspace with all your existing tools on all of your monitors. Live macOS windows stream as real-time textures onto in-game surfaces using ScreenCaptureKit, rendered through a modified Quake3e engine. The project follows Apple VisionOS design language (Glass Material, Windows, Ornaments, Hover effects).
+Q3IDE ("Quake III IDE") turns a Quake III Arena (quake3e fork) into a multi-montinor, live developer workspace with all your existing tools, LLMs. Live macOS windows stream as real-time textures onto in-game surfaces using ScreenCaptureKit, rendered through a modified Quake3e engine. The project follows Apple VisionOS design language (Windows, Ornaments, Hover effects).
 
 ## Vibe Coding? Pfff! Frag Coding! 
 
-- Image that you are inside Quake III Arena on 3 monitors or VR. 
-- All your macOS/terminal/IDE is mirrored inside the game. 
+Imagine that you are...
+- inside Quake III Arena on 3 monitors or VR. 
+- All your macOS/terminal/IDE is mirrored inside the game.
+- You don't navigate by files anymore. LLMs do that. You navigate by UML class diagrams, component diagrams vidually displayed in the game scene.
 - Each room, each wall has files which makes everything have a special meaning in your projects and codebase. It's all loci! It's all 3D and fun.
 - Multiple AI agents and clawbots are running, coding, and shooting inside the game. 
 - You are not waiting because you're fragging the shit out of your co-worker. 
@@ -32,37 +34,50 @@ It's the beggining of something more with an awesome FPS engine behind it.
 ---
 ## Roadmap
 
+While keeping FPS at 90..
+
 | Phase | Milestone | Batch | Status |
 |-------|-----------|-------|--------|
-| 0 | Vision, architecture, design language | 0 | ✅ Done |
+| 0 | **Vision, architecture, design language** | 0 | ✅ Done |
 | 1 | **MVP — terminal on nearest wall at spawn** | 0 | ✅ Done |
 | 2 | **Multiple windows, floating panels** | 0 | ✅ Done |
-| 3 | **Multi-window capture fix (unique windowID per SCStream)** | 0 | ✅ Done |
+| 3 | **Multi-window windows capture (unique windowID per SCStream)** | 0 | ✅ Done |
 | 4 | **Three-monitor support** | 0 | ✅ Done |
-| 5 | Window Entity data model & lifecycle management | 1 | — |
+| 5 | **Window Entity data model** & lifecycle management | 1 | 🔧 In Progress |
+| 5.1 | ↳ Kill BGRA→RGBA swizzle (GL_BGRA native) | 1 | — |
+| 5.2 | ↳ Visibility-gated texture uploads (dot product + BSP trace) | 1 | — |
+| 5.3 | ↳ Wall scanner + cache (pre-scan on area entry) | 1 | — |
+| 5.4 | ↳ Area transition placement (destroy old rules, build new) | 1 | — |
+| 5.5 | ↳ Within-area leapfrog (furthest window jumps forward) | 1 | — |
+| 5.6 | ↳ Trained positions (dogs remember their spot) | 1 | — |
+| 5.7 | ↳ Adaptive resolution (8 tiers, SCK source-side downscale) | 1 | — |
+| 5.8 | ↳ Static detection + SCK frame interval + mipmaps | 1 | — |
+| 5.9 | ↳ Texture Array (GL_TEXTURE_2D_ARRAY, batched draw calls) | 1 | — |
+| 5.10 | ↳ Per-window performance metrics | 1 | — |
 | 6 | Interaction model — Pointer Mode, Keyboard Passthrough, dwell detection | 2 | — |
-| 7 | IOSurface zero-copy optimization | 3 | — |
-| 8 | Window management — drag, resize, lock, snap, persist layouts | 4 | — |
-| 9 | Grapple Hook, minimap, File Browser, Quick Open | 5 | — |
-| 10 | Theater Mode, Office Mode, Control Center | 6 | — |
-| 11 | Spaces (ASK→GARAGE) & Portal navigation | 7 | — |
-| 12 | Programmable hotkeys, virtual keyboard, screenshots, video recording | 8 | — |
-| 13 | Glass Material, Ornaments, Vibrancy, context menus | 9 | — |
-| 14 | Project file classification & live filesystem scanning | 10 | — |
-| 15 | UML Navigator — 3D architecture diagrams, node clouds, animated pipes | 11 | — |
-| 16 | AI agent orchestrator — spawn, diff viewer, approve/reject, dashboard | 12 | — |
-| 17 | Spatial audio, per-Window audio, ducking, notifications | 13 | — |
-| 18 | Multiplayer — window sharing, proximity resolution, pair programming | 14 | — |
-| 19 | quakeOS — native rendering, syntax highlighting, nano editor, focus mode | 15 | — |
-| 20 | Game modes — synchronized rounds (CODE→FRAG→TEST→RUN) | 16 | — |
-| 21 | Map skins, Office Mode styles, Volume baseplate | 17 | — |
-| 22 | Spatialized voice chat, multiplayer audio | 18 | — |
-| 23 | Session recording & async playback | 18 | — |
-| 24 | Custom Q3 map designed for 8 Spaces | 19 | — |
-| 25 | OpenClaw bot — fragging AI colleague with chat Window | 20 | — |
-| 26 | AI runtime geometry — props + structural mesh on top of BSP | 21 | — |
-| 27 | Browser-ready WASM port via Emscripten | 22 | — |
+| 7 | Window management — drag, resize, lock, snap, persist layouts | 3 | — |
+| 8 | Grapple Hook, minimap, File Browser, Quick Open | 4 | — |
+| 9 | Theater Mode, Office Mode, Control Center | 5 | — |
+| 10 | Spaces (ASK→GARAGE) & Portal navigation | 6 | — |
+| 11 | Programmable hotkeys, virtual keyboard, screenshots, video recording | 7 | — |
+| 12 | Ornaments, Vibrancy, context menus | 8 | — |
+| 13 | Project file classification & live filesystem scanning | 9 | — |
+| 14 | UML Navigator — 3D architecture diagrams, node clouds, animated pipes | 10 | — |
+| 15 | AI agent orchestrator — spawn, diff viewer, approve/reject, dashboard | 11 | — |
+| 16 | Spatial audio, per-Window audio, ducking, notifications | 12 | — |
+| 17 | Multiplayer — window sharing, proximity resolution, pair programming | 13 | — |
+| 18 | quakeOS — native rendering, syntax highlighting, nano editor, focus mode | 14 | — |
+| 19 | Game modes — synchronized rounds (CODE→FRAG→TEST→RUN) | 15 | — |
+| 20 | Map skins, Office Mode styles, Volume baseplate | 16 | — |
+| 21 | Spatialized voice chat, multiplayer audio | 17 | — |
+| 22 | Session recording & async playback | 17 | — |
+| 23 | Custom Q3 map designed for 8 Spaces | 18 | — |
+| 24 | OpenClaw bot — fragging AI colleague with chat Window | 19 | — |
+| 25 | AI runtime geometry — props + structural mesh on top of BSP | 20 | — |
+| 26 | Browser-ready WASM port via Emscripten | 21 | — |
 | VR | Swap engine adapter to VR Quake 3 fork | VR | — |
+
+See `PLACEMENT.md` for Stage 5.1–5.10 details. Each sub-stage = one Claude Code session. Git commit + manual testing between each.
 
 See [`plan/00-VISION.md`](./plan/00-VISION.md) for full roadmap.
 
@@ -242,9 +257,8 @@ All spatial UI follows [Apple VisionOS](https://developer.apple.com/visionos/) t
 
 | VisionOS | q3ide |
 |----------|-------|
-| Window | Live desktop panel (glass material, never opaque) |
+| Window | Live desktop panel — captured macOS window as in-world texture |
 | Ornament | Floating control strip attached to a Window edge |
-| Glass Material | Semi-transparent frosted panel background |
 | Hover Effect | Crosshair-aim glow and z-lift on interactive elements |
 | Shared Space | Multiplayer — everyone's Windows coexist |
 | Full Space | The Quake 3 map itself |
@@ -338,4 +352,4 @@ Six months from now, someone asks "where's the rate limiter?" Your brain doesn't
 
 ---
 
-*Glass, not solid. Depth, not flat. Spatial, not tabbed.*
+*Depth, not flat. Spatial, not tabbed.*
