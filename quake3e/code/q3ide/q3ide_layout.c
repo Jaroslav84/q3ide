@@ -15,7 +15,7 @@
 #include <string.h>
 
 #define Q3IDE_LAYOUT_SCAN_DIRS 24 /* every 15° */
-#define Q3IDE_WALL_OFFSET 2.0f
+#define Q3IDE_WALL_OFFSET 10.0f
 
 /* Compute horizontal right vector from a wall normal (inline from q3ide_geom.c) */
 static void q3ide_layout_right(const vec3_t normal, vec3_t right)
@@ -36,28 +36,51 @@ static void q3ide_layout_right(const vec3_t normal, vec3_t right)
 /* Measure one wall: fills right, width, floor_z, ceil_z.
  * Width is measured at contact height (always on the wall surface).
  * floor_z/ceil_z are used only for TV size calculation. */
-static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_wall_t *wall)
+static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_wall_t *wall, const vec3_t eye)
 {
 	trace_t tr;
 	vec3_t start, end;
 	static vec3_t mins = {0, 0, 0}, maxs = {0, 0, 0};
-	float right_dist, left_dist, ceil_dist, floor_dist, wall_h;
+	/* Small box for LOS: passes over very thin protrusions (< 4u) */
+	static vec3_t lmins = {-4, -4, -4}, lmaxs = {4, 4, 4};
+	float right_dist, left_dist, ceil_dist = 0, floor_dist = 0, wall_h;
 
 	VectorCopy(contact, wall->contact);
 	VectorCopy(normal, wall->normal);
 	q3ide_layout_right(normal, wall->right);
 
-	/* start: 2u off the wall at contact height (guaranteed on wall surface) */
+	/* start: 2u off the wall at contact height (eye level).
+	 * Measuring at contact[2] keeps the horizontal sweep truly horizontal so
+	 * BSP corners block the LOS check properly — diagonal sweeps at 2/3 height
+	 * slip past corner geometry and end up measuring into adjacent rooms. */
 	start[0] = contact[0] + normal[0] * Q3IDE_WALL_OFFSET;
 	start[1] = contact[1] + normal[1] * Q3IDE_WALL_OFFSET;
-	start[2] = contact[2] + normal[2] * Q3IDE_WALL_OFFSET;
+	start[2] = contact[2]; /* eye level — horizontal sweep */
+
+	/* Floor / ceil: measured separately for TV sizing (not for width sweep). */
+	{
+		trace_t htr;
+		vec3_t hend;
+		vec3_t hstart;
+		hstart[0] = start[0];
+		hstart[1] = start[1];
+		hstart[2] = contact[2];
+		hend[0] = hstart[0];
+		hend[1] = hstart[1];
+		hend[2] = hstart[2] + 512.0f;
+		CM_BoxTrace(&htr, hstart, hend, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+		wall->ceil_z = hstart[2] + htr.fraction * 512.0f;
+		hend[2] = hstart[2] - 512.0f;
+		CM_BoxTrace(&htr, hstart, hend, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+		wall->floor_z = hstart[2] - htr.fraction * 512.0f;
+	}
 
 	/* Width: find the continuous wall span in ±right.
-	 * Step outward; stop when LOS from start is blocked (corner) or wall gap found. */
+	 * Step outward; stop when player can no longer see the position (corner) OR wall is gone. */
 	{
 		const float step_sz = 16.0f;
 		const float max_reach = 512.0f;
-		float d, back_end[3];
+		float d, back_end[3], los_tgt[3];
 		trace_t btr, los;
 
 		right_dist = 0.0f;
@@ -65,17 +88,20 @@ static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_
 			end[0] = start[0] + wall->right[0] * d;
 			end[1] = start[1] + wall->right[1] * d;
 			end[2] = start[2];
-			/* Stop if a corner blocks LOS from the contact point */
-			CM_BoxTrace(&los, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
-			if (los.fraction < 0.95f)
-				break;
-			/* Stop if there is no wall behind this position */
-			back_end[0] = end[0] - wall->normal[0] * 24.0f;
-			back_end[1] = end[1] - wall->normal[1] * 24.0f;
+			/* LOS from player eye — stops at real corners (not thin protrusions) */
+			los_tgt[0] = end[0] + normal[0] * 4.0f;
+			los_tgt[1] = end[1] + normal[1] * 4.0f;
+			los_tgt[2] = end[2];
+			CM_BoxTrace(&los, eye, los_tgt, lmins, lmaxs, 0, CONTENTS_SOLID, qfalse);
+			if (!los.startsolid && los.fraction < 0.85f)
+				break; /* corner hides this spot from player */
+			/* Back-trace: confirm wall still exists here */
+			back_end[0] = end[0] - normal[0] * 24.0f;
+			back_end[1] = end[1] - normal[1] * 24.0f;
 			back_end[2] = end[2];
 			CM_BoxTrace(&btr, end, back_end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 			if (btr.fraction >= 1.0f)
-				break;
+				break; /* gap / doorway */
 			right_dist = d;
 		}
 
@@ -84,11 +110,14 @@ static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_
 			end[0] = start[0] - wall->right[0] * d;
 			end[1] = start[1] - wall->right[1] * d;
 			end[2] = start[2];
-			CM_BoxTrace(&los, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
-			if (los.fraction < 0.95f)
+			los_tgt[0] = end[0] + normal[0] * 4.0f;
+			los_tgt[1] = end[1] + normal[1] * 4.0f;
+			los_tgt[2] = end[2];
+			CM_BoxTrace(&los, eye, los_tgt, lmins, lmaxs, 0, CONTENTS_SOLID, qfalse);
+			if (!los.startsolid && los.fraction < 0.85f)
 				break;
-			back_end[0] = end[0] - wall->normal[0] * 24.0f;
-			back_end[1] = end[1] - wall->normal[1] * 24.0f;
+			back_end[0] = end[0] - normal[0] * 24.0f;
+			back_end[1] = end[1] - normal[1] * 24.0f;
 			back_end[2] = end[2];
 			CM_BoxTrace(&btr, end, back_end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 			if (btr.fraction >= 1.0f)
@@ -104,26 +133,14 @@ static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_
 	if (wall->width > 2048.0f)
 		wall->width = 2048.0f;
 
-	/* Height: trace ±Z for TV sizing */
-	end[0] = start[0];
-	end[1] = start[1];
-	end[2] = start[2] + 512.0f;
-	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
-	ceil_dist = tr.fraction * 512.0f;
-
-	end[2] = start[2] - 512.0f;
-	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
-	floor_dist = tr.fraction * 512.0f;
-
-	wall->ceil_z = start[2] + ceil_dist;
-	wall->floor_z = start[2] - floor_dist;
-
+	/* floor_z/ceil_z already measured in the preamble above. Sanity check. */
 	wall_h = wall->ceil_z - wall->floor_z;
 	if (wall_h < 48.0f) {
 		wall->floor_z = start[2] - 96.0f;
 		wall->ceil_z = start[2] + 96.0f;
 	}
-	/* contact[2] stays at actual scan height — placement uses this Z */
+	(void) ceil_dist;
+	(void) floor_dist;
 }
 
 void q3ide_room_scan(vec3_t eye, q3ide_room_t *out)
@@ -160,7 +177,7 @@ void q3ide_room_scan(vec3_t eye, q3ide_room_t *out)
 		if (dup)
 			continue;
 
-		q3ide_measure_wall(wp, wn, &out->walls[out->n]);
+		q3ide_measure_wall(wp, wn, &out->walls[out->n], eye);
 		Q3IDE_LOGI("wall[%d] w=%.0f(L=%.0f R=%.0f) floor=%.0f ceil=%.0f n=(%.2f,%.2f,%.2f)", out->n,
 		           out->walls[out->n].width, out->walls[out->n].left_dist,
 		           out->walls[out->n].width - out->walls[out->n].left_dist, out->walls[out->n].floor_z,
@@ -345,12 +362,44 @@ int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspect
 				Q3IDE_LOGE("layout: no wall at x_off=%.0f for id=%u — skipping", x_off, ids[ii]);
 				continue;
 			}
-			/* Snap pos to actual wall surface.
-			 * Always use center_z for non-horizontal surfaces so windows are
-			 * TV-mounted at wall mid-height regardless of surface angle. */
-			pos[0] = vtr.endpos[0] + wall->normal[0] * 2.0f;
-			pos[1] = vtr.endpos[1] + wall->normal[1] * 2.0f;
-			pos[2] = (fabsf(wall->normal[2]) < 0.7f) ? center_z : vtr.endpos[2] + wall->normal[2] * 2.0f;
+			/* Probe outward from wall surface to detect mounted objects (shelves, trim, etc.).
+			 * Trace a small box 48u into the room; if it hits something, clear it by 4u. */
+			{
+				vec3_t wall_surf, probe_end;
+				trace_t ptr;
+				static vec3_t pmins = {-4, -4, -4}, pmaxs = {4, 4, 4};
+				float clear;
+				wall_surf[0] = vtr.endpos[0];
+				wall_surf[1] = vtr.endpos[1];
+				wall_surf[2] = center_z;
+				probe_end[0] = wall_surf[0] + wall->normal[0] * 48.0f;
+				probe_end[1] = wall_surf[1] + wall->normal[1] * 48.0f;
+				probe_end[2] = wall_surf[2];
+				CM_BoxTrace(&ptr, wall_surf, probe_end, pmins, pmaxs, 0, CONTENTS_SOLID, qfalse);
+				clear = ptr.fraction * 48.0f + 4.0f; /* 4u past the obstruction */
+				if (clear < Q3IDE_WALL_OFFSET)
+					clear = Q3IDE_WALL_OFFSET;
+				pos[0] = vtr.endpos[0] + wall->normal[0] * clear;
+				pos[1] = vtr.endpos[1] + wall->normal[1] * clear;
+				pos[2] = (fabsf(wall->normal[2]) < 0.7f) ? center_z : vtr.endpos[2] + wall->normal[2] * clear;
+			}
+
+			/* LOS from player eye to window: skip if blocked (window is around a corner / outside room). */
+			{
+				vec3_t eye, los_tgt;
+				trace_t los_tr;
+				VectorCopy(cl.snap.ps.origin, eye);
+				eye[2] += cl.snap.ps.viewheight;
+				los_tgt[0] = pos[0] + wall->normal[0] * 4.0f;
+				los_tgt[1] = pos[1] + wall->normal[1] * 4.0f;
+				los_tgt[2] = pos[2];
+				CM_BoxTrace(&los_tr, eye, los_tgt, vmins, vmaxs, 0, CONTENTS_SOLID, qfalse);
+				if (!los_tr.startsolid && los_tr.fraction < 0.9f) {
+					Q3IDE_LOGE("layout: pos (%.0f,%.0f,%.0f) not visible from player — outside room", pos[0], pos[1],
+					           pos[2]);
+					continue;
+				}
+			}
 
 			if (is_display && is_display[ii]) {
 				if (!q3ide_wm.cap_start_disp ||

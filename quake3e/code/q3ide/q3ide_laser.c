@@ -122,11 +122,10 @@ void Q3IDE_DrawLasers(const void *refdef_ptr)
 	if (!g_laser_shader || !re.AddPolyToScene)
 		return;
 
-	/* Start beams 30u ahead of the eye so they are not degenerate
-	 * when viewed from the camera (beam-from == vieworg case). */
-	beam_start[0] = fd->vieworg[0] + fd->viewaxis[0][0] * 30.0f;
-	beam_start[1] = fd->vieworg[1] + fd->viewaxis[0][1] * 30.0f;
-	beam_start[2] = fd->vieworg[2] + fd->viewaxis[0][2] * 30.0f;
+	/* Start beams from the player's heart (body center, ~40u above feet). */
+	beam_start[0] = cl.snap.ps.origin[0];
+	beam_start[1] = cl.snap.ps.origin[1];
+	beam_start[2] = cl.snap.ps.origin[2] + 24.0f; /* +0.5m up */
 
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];

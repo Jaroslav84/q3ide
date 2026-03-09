@@ -44,6 +44,8 @@ static struct {
 	int last_health; /* detect respawn (health 0 → >0) */
 	/* portal teleport */
 	int portal_cooldown; /* frames left after teleport, 0 = ready */
+	/* grapple-to-window teleport */
+	int grapple_tele_cooldown; /* frames left after teleport, 0 = ready */
 } q3ide_state;
 
 /* ============================================================
@@ -252,6 +254,105 @@ static void Q3IDE_Cmd_f(void)
 		Com_Printf("q3ide laser: active=%d\n", q3ide_laser_active);
 	} else
 		Com_Printf("q3ide: unknown sub-command '%s'\n", sub);
+}
+
+/* ============================================================
+ *  Grapple-to-window teleport
+ * ============================================================ */
+
+/*
+ * q3ide_grapple_window_frame — teleport player in front of a window when
+ * the grapple hook attaches to its surface.
+ *
+ * Checks every frame if PMF_GRAPPLE_PULL is set and grapplePoint is on an
+ * active window plane.  On hit, issues a setviewpos command that snaps the
+ * player to the optimal viewing position facing the window.
+ *
+ * Viewing distance = max(world_w, world_h) * 0.9, clamped [120, 350] units.
+ * The player's z is set so the window center is near eye height (viewheight ~26u).
+ */
+static void q3ide_grapple_window_frame(void)
+{
+	int i;
+	q3ide_win_t *win;
+	vec3_t gp, diff, right;
+	float dist_to_plane, lx, ly, hw, hh, nx, ny, len, view_dist;
+	float best_dist;
+	int best_win;
+	char cmd[160];
+
+	if (cls.state != CA_ACTIVE)
+		return;
+
+	if (q3ide_state.grapple_tele_cooldown > 0) {
+		q3ide_state.grapple_tele_cooldown--;
+		return;
+	}
+
+	/* Only teleport when grapple hook is actively pulling */
+	if (!(cl.snap.ps.pm_flags & PMF_GRAPPLE_PULL))
+		return;
+
+	VectorCopy(cl.snap.ps.grapplePoint, gp);
+
+	/* Find the closest window whose surface contains grapplePoint */
+	best_dist = 48.0f; /* max tolerated distance from window plane */
+	best_win  = -1;
+
+	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+		win = &q3ide_wm.wins[i];
+		if (!win->active || win->status == Q3IDE_WIN_STATUS_INACTIVE)
+			continue;
+
+		/* Distance from grapplePoint to window plane */
+		VectorSubtract(gp, win->origin, diff);
+		dist_to_plane = fabsf(DotProduct(diff, win->normal));
+		if (dist_to_plane >= best_dist)
+			continue;
+
+		/* Build right vector perpendicular to normal in XY plane */
+		nx  = win->normal[0];
+		ny  = win->normal[1];
+		len = sqrtf(nx * nx + ny * ny);
+		if (len < 0.01f)
+			continue;
+		right[0] = -ny / len;
+		right[1]  = nx / len;
+		right[2]  = 0.0f;
+
+		/* Check if grapplePoint projects inside window bounds */
+		lx = DotProduct(diff, right);
+		ly = diff[2];
+		hw = win->world_w * 0.5f;
+		hh = win->world_h * 0.5f;
+
+		if (fabsf(lx) < hw && fabsf(ly) < hh) {
+			best_dist = dist_to_plane;
+			best_win  = i;
+		}
+	}
+
+	if (best_win < 0)
+		return;
+
+	win = &q3ide_wm.wins[best_win];
+
+	/* Optimal viewing distance: fit the whole window in typical ~90° FOV */
+	view_dist = (win->world_w > win->world_h ? win->world_w : win->world_h) * 0.9f;
+	if (view_dist < 120.0f) view_dist = 120.0f;
+	if (view_dist > 350.0f) view_dist = 350.0f;
+
+	/* Destination: stand in front of window.  Z: window center - viewheight so
+	 * the window center lands at eye level. */
+	float tx  = win->origin[0] + win->normal[0] * view_dist;
+	float ty  = win->origin[1] + win->normal[1] * view_dist;
+	float tz  = win->origin[2] - 26.0f; /* window center at eye level */
+	float yaw = atan2f(-win->normal[1], -win->normal[0]) * 180.0f / (float) M_PI;
+
+	Com_sprintf(cmd, sizeof(cmd), "setviewpos %.0f %.0f %.0f %.0f", tx, ty, tz, yaw);
+	Q3IDE_LOGI("grapple tele win[%d] view_dist=%.0f cmd=[%s]", best_win, view_dist, cmd);
+	CL_AddReliableCommand(cmd, qfalse);
+	q3ide_state.grapple_tele_cooldown = 120; /* 2s grace at 60fps */
 }
 
 /* ============================================================
@@ -491,6 +592,7 @@ void Q3IDE_Frame(void)
 		 * CL_WritePacket. Clearing it here would be too late. */
 
 		q3ide_portal_frame();
+		q3ide_grapple_window_frame();
 	}
 
 	Q3IDE_WM_PollFrames();

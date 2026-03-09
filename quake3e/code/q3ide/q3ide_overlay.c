@@ -12,6 +12,7 @@
 #include "q3ide_wm_internal.h"
 #include "q3ide_interaction.h"
 #include "../qcommon/qcommon.h"
+#include "../qcommon/cm_public.h"
 #include "../client/client.h"
 #include <string.h>
 
@@ -134,6 +135,20 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 				q3ide_ovl_str(labx, laby, labz, rx, ux, entries[i].label, 95, 95, 95);
 			}
 		}
+	}
+
+	/* Room/area display: cluster + area below the keybinding panel */
+	if (cls.state == CA_ACTIVE) {
+		int leafnum = CM_PointLeafnum(cl.snap.ps.origin);
+		int cluster  = CM_LeafCluster(leafnum);
+		int area     = CM_LeafArea(leafnum);
+		char room_buf[32];
+		float rx_off = n * OVL_LH + OVL_LH * 0.5f; /* one gap below last entry */
+		float rlx = ox - ux[0] * rx_off;
+		float rly = oy - ux[1] * rx_off;
+		float rlz = oz - ux[2] * rx_off;
+		Com_sprintf(room_buf, sizeof(room_buf), "area %d  cls %d", area, cluster);
+		q3ide_ovl_str(rlx, rly, rlz, rx, ux, room_buf, 100, 200, 255);
 	}
 
 	/* Hover label: show hovered window/entity name at top-right of left monitor */
