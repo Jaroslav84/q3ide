@@ -643,6 +643,28 @@ static void	RB_SetGL2D (void) {
 	{
 		width = glConfig.vidWidth;
 		height = glConfig.vidHeight;
+#ifdef USE_Q3IDE
+		/* Multi-monitor: constrain 2D (HUD/crosshair) to center screen only. */
+		if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) &&
+		     !ri.Cvar_VariableIntegerValue( "r_mmUIActive" ) ) {
+			int cx = ri.Cvar_VariableIntegerValue( "r_mmCenterX" );
+			int cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
+			int ch = ri.Cvar_VariableIntegerValue( "r_mmCenterH" );
+			if ( cw > 0 && ch > 0 ) {
+				qglViewport( cx, 0, cw, ch );
+				qglScissor( cx, 0, cw, ch );
+				Mat4Ortho( 0, cw, ch, 0, 0, 1, matrix );
+				GL_SetProjectionMatrix( matrix );
+				Mat4Identity( matrix );
+				GL_SetModelviewMatrix( matrix );
+				GL_State( GLS_DEPTHTEST_DISABLE | GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA );
+				GL_Cull( CT_TWO_SIDED );
+				backEnd.refdef.time = ri.Milliseconds();
+				backEnd.refdef.floatTime = backEnd.refdef.time * 0.001;
+				return;
+			}
+		}
+#endif
 	}
 
 	// set 2D virtual screen size

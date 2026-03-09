@@ -31,7 +31,7 @@ void q3ide_room_scan(vec3_t eye, q3ide_room_t *out);
 
 /* Compute layout and enqueue placements — does NOT call Attach yet.
  * Returns number of windows queued. */
-int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspects, int *is_display, int n);
+int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspects, const int *is_display, int n);
 
 /* Flush all pending placements (call before re-layout to discard stale positions). */
 void q3ide_layout_queue_reset(void);

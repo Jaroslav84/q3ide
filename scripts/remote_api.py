@@ -312,8 +312,24 @@ def _do_run_locked(args, agent_id, binary_info):
     engine_args = ['+set', 'vm_game', '0', '+set', 'sv_cheats', '1', '+set', 'g_grapple', '1'] + engine_args
     cmd = [str(binary)] + engine_args
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    # Clear all logs before each launch — fresh slate every run
+    logs_to_clear = [
+        LOG_DIR / 'engine.log',
+        LOG_DIR / 'q3ide.log',
+        LOG_DIR / 'q3ide_events.jsonl',
+        LOG_DIR / 'q3ide_multimon.log',
+        LOG_DIR / 'q3ide_capture.log',
+        Path.home() / 'Library' / 'Application Support' / 'Quake3e' / 'baseq3' / 'qconsole.log',
+    ]
+    for p in logs_to_clear:
+        try:
+            if p.exists():
+                p.write_text('')
+        except OSError:
+            pass
+
     engine_log = LOG_DIR / 'engine.log'
-    _trim_log(engine_log)
     log_fh = open(engine_log, 'a')
     separator = '═' * 60
     log_fh.write(f'\n{separator}\n'
@@ -432,7 +448,12 @@ def _queue_worker():
                 _queue_current = entry
 
             is_clean = '--clean' in entry['args']
-            timeout = 300 if is_clean else 60
+            if is_clean:
+                timeout = 300
+            elif '--engine-only' in entry['args']:
+                timeout = 180
+            else:
+                timeout = 120
             _build_timeout = timeout
 
             cmd = ['bash', str(BUILD_SCRIPT)] + entry['args']

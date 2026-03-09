@@ -3216,7 +3216,7 @@ void Com_AppendCDKey( const char *filename ) {
 }
 
 
-#ifndef DEDICATED // bk001204
+#if !defined(DEDICATED) && !defined(STANDALONE) // bk001204
 /*
 =================
 Com_WriteCDKey
@@ -4069,7 +4069,7 @@ Writes key bindings and archived cvars to config file if modified
 ===============
 */
 void Com_WriteConfiguration( void ) {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(STANDALONE)
 	const char *basegame;
 	const char *gamedir;
 #endif

@@ -1,17 +1,24 @@
 So u can place windows in air and on walls. Great. But our window placement on wall algorythm sucks. GArbage it. Create a custom class because this will be heavily used through out the whole project.
 
-Here is what I need: I need an algo that takes all the windows as input -> and arranges them super ncielly inside the room the player is. It must be arranged evenly on the walls ONLY! Pick window size so that it has a ratio of 66.% of the wall height. If shit sticks out of the wall then you need to take that into consideration. Windows should be placed like TV screens on the wall, u get it? But be carefull. If there is only  a few inch little thing hanging out of the wall then dont care about that. Just put the TV over it. And dont u dare to mkae super small TV's!!! The bigger the better.
 
-Also: if u know that a window is stuck to a wall then never render it's back. No need to ;) 
+- file naming is awfull :D
 
-- windows upgrade: if there is something in front of the window (parts of map, 3D object, other players, etc) then it should be in front of it. Right now I can see all my windows from any angle, from anywhere no matter what is in front of it. This needs to work pixel perfect. No cheats. A window is a normal 3D object like other things in the game world.
+- write and use tests!!!!
+- llm should have move/shoot/look/positions/etc actions. pff I guess queke has them implemented for easy testing. but llm should use that to test. And not ask me to press letter "K" to see if feature works. We also have a thing called 'events' which can be used to replay shit! bam. llm should use that instead :D
+
+
+- opengl2? vilkan? unreal4?
 - window spawn and die animation. One exception: I'm happy if own weapon is in an exclusion for better readibility (right now it works like so).
 
 - wow quake supports flying. toggle that with "-"
+- wtf: https://www.youtube.com/watch?v=N-veMFHqDVo - unreal
+- wtf2 quake 3 elite - https://mus1n.github.io/# https://www.youtube.com/watch?v=Jd4nMJoHB7k&t=2s
 
 allow to switch MAPS like projects
 ======================================
-sh ./scripts/build.sh --run --level 0 --execute 'q3ide attach all'
+
+# wow. what i eneed
+sh ./scripts/build.sh --run --level lun3dm5 --execute 'q3ide attach all'
 
  # Tron-like
 sh ./scripts/build.sh --run --level acid3dm12 --execute 'q3ide attach all'
@@ -23,7 +30,7 @@ sh ./scripts/build.sh --run --level ori_apt --execute 'q3ide attach all'
 sh ./scripts/build.sh --run --level q3ctfchnu01 --execute 'q3ide attach all'
 
 # QuadCTF (BSP name might be quadctf or QuadCTF — try both)
-sh ./scripts/build.sh --run --level quadctf --execute 'q3ide attach all'
+sh ./scripts/build.sh --run --level QuadCTF --execute 'q3ide attach all'
 
 # Quatrix
 sh ./scripts/build.sh --run --level quatrix --execute 'q3ide attach all'

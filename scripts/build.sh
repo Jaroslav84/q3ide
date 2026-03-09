@@ -94,17 +94,19 @@ if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
     UI_SRC="$IOQ3_DIR/code/q3_ui"
     UI_BUILD="$IOQ3_DIR/build_ui_q3ide"
     mkdir -p "$UI_BUILD"
+    # GameSpy/ranking files (ui_login, ui_rankings, ui_rankstatus, ui_signup,
+    # ui_specifyleague) omitted — require trap_CL_UI_Rank* stubs that don't
+    # exist in STANDALONE builds. Those screens are unreachable anyway.
     UI_SRCS="ui_main.c ui_atoms.c ui_connect.c ui_controls2.c ui_demo2.c
         ui_cdkey.c ui_ingame.c ui_loadconfig.c ui_menu.c ui_mfield.c
         ui_mods.c ui_network.c ui_options.c ui_playermodel.c ui_players.c
         ui_qmenu.c ui_saveconfig.c ui_serverinfo.c ui_servers2.c
-        ui_setup.c ui_sound.c ui_sparena.c ui_specifyleague.c ui_specifyserver.c
+        ui_setup.c ui_sound.c ui_sparena.c ui_specifyserver.c
         ui_splevel.c ui_sppostgame.c ui_spreset.c ui_spskill.c ui_startserver.c
         ui_team.c ui_teamorders.c ui_video.c
         ui_addbots.c ui_removebots.c ui_cinematics.c
-        ui_confirm.c ui_credits.c ui_display.c ui_gameinfo.c ui_login.c
-        ui_playersettings.c ui_preferences.c ui_rankings.c ui_rankstatus.c
-        ui_signup.c"
+        ui_confirm.c ui_credits.c ui_display.c ui_gameinfo.c
+        ui_playersettings.c ui_preferences.c"
     UIOBJS=""
     for f in $UI_SRCS; do
         obj="$UI_BUILD/$(basename ${f%.c}.o)"

@@ -59,4 +59,19 @@ void Q3IDE_UpdateEntityHover(void);
 /* Draw red laser beams from player eye to all active windows (hold K). */
 void Q3IDE_DrawLasers(const void *refdef_ptr);
 
+/* Internal frame state — shared between q3ide_hooks*.c TUs. */
+typedef struct {
+	qboolean initialized;
+	qboolean autoexec_done;
+	int autoexec_delay;
+	float last_yaw, last_pitch;
+	int raw_buttons;
+	int last_health;
+	int portal_cooldown;
+	int portal2_cooldown;
+	int grapple_tele_cooldown;
+	int stream_last_area;
+	int stream_cooldown;
+} q3ide_hooks_state_t;
+
 #endif /* Q3IDE_HOOKS_H */

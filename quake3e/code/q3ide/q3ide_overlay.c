@@ -51,8 +51,8 @@ static void q3ide_ovl_char(float ox, float oy, float oz, const float *rx, const 
 	float t0 = row / 16.0f, t1 = (row + 1.0f) / 16.0f;
 	static const float rsc[4] = {0.0f, OVL_CW, OVL_CW, 0.0f};
 	static const float usc[4] = {0.0f, 0.0f, -OVL_CH, -OVL_CH};
-	float uv_s[4] = {u0, u1, u1, u0};
-	float uv_t[4] = {t0, t0, t1, t1};
+	const float uv_s[4] = {u0, u1, u1, u0};
+	const float uv_t[4] = {t0, t0, t1, t1};
 	int i;
 
 	for (i = 0; i < 4; i++) {
@@ -88,8 +88,8 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 {
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
 	/* viewaxis[1] = LEFT in Q3; negate → right. viewaxis[2] = up. */
-	float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
-	float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
+	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
+	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
 	/* Far top-left: push left ~78% of 90° half-FOV, lift ~38% */
 	float right_off = -OVL_DIST * 0.78f;
 	float up_off = OVL_DIST * 0.38f;

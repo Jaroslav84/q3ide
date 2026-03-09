@@ -14,7 +14,7 @@ q3ide/border
     nopicmip
     {
         map $whiteimage
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -25,7 +25,7 @@ q3ide/win0
     nopicmip
     {
         map *scratch0
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -36,7 +36,7 @@ q3ide/win1
     nopicmip
     {
         map *scratch1
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -47,7 +47,7 @@ q3ide/win2
     nopicmip
     {
         map *scratch2
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -58,7 +58,7 @@ q3ide/win3
     nopicmip
     {
         map *scratch3
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -69,7 +69,7 @@ q3ide/win4
     nopicmip
     {
         map *scratch4
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -80,7 +80,7 @@ q3ide/win5
     nopicmip
     {
         map *scratch5
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -91,7 +91,7 @@ q3ide/win6
     nopicmip
     {
         map *scratch6
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -102,7 +102,7 @@ q3ide/win7
     nopicmip
     {
         map *scratch7
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -113,7 +113,7 @@ q3ide/win8
     nopicmip
     {
         map *scratch8
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -124,7 +124,7 @@ q3ide/win9
     nopicmip
     {
         map *scratch9
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -135,7 +135,7 @@ q3ide/win10
     nopicmip
     {
         map *scratch10
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -146,7 +146,7 @@ q3ide/win11
     nopicmip
     {
         map *scratch11
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -157,7 +157,7 @@ q3ide/win12
     nopicmip
     {
         map *scratch12
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -168,7 +168,7 @@ q3ide/win13
     nopicmip
     {
         map *scratch13
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -179,7 +179,7 @@ q3ide/win14
     nopicmip
     {
         map *scratch14
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -190,7 +190,7 @@ q3ide/win15
     nopicmip
     {
         map *scratch15
-        depthwrite
+        depthWrite
         rgbGen vertex
     }
 }
@@ -201,7 +201,7 @@ q3ide/laser
     nopicmip
     {
         map $whiteimage
-        blendfunc add
+        blendFunc add
         rgbGen vertex
         alphaGen vertex
     }
