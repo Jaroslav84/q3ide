@@ -27,12 +27,11 @@ while [[ $# -gt 0 ]]; do
         --api)          DO_API=1; shift ;;
         --engine-only)  DO_ENGINE_ONLY=1; shift ;;
         --music)
-            if [[ "${2:-}" =~ ^(0|1|true|false)$ ]]; then
-                [[ "$2" == "1" || "$2" == "true" ]] && MUSIC_ON=true || MUSIC_ON=false
-                shift 2
-            else
-                MUSIC_ON=true; shift
-            fi ;;
+            case "${2:-}" in
+                0|false) MUSIC_ON=false; shift 2 ;;
+                1|true)  MUSIC_ON=true;  shift 2 ;;
+                *)       MUSIC_ON=true;  shift ;;
+            esac ;;
         --level)        LEVEL="$2"; shift 2 ;;
         --execute)      EXECUTE="$2"; shift 2 ;;
         --bots)         BOTS="$2"; shift 2 ;;
@@ -294,8 +293,8 @@ if [ "$DO_RUN" = "1" ]; then
     ENGINE_NAME="$(basename "$ENGINE_BIN")"
 
     # Build command args
-    # vm_game 0 = native dylib (loads our patched qagame with grapple at spawn)
-    ENGINE_ARGS="+set vm_game 0"
+    # vm_game 0 = native dylib; vm_cgame 2 = standard QVM (native cgame is incompatible with quake3e)
+    ENGINE_ARGS="+set vm_game 0 +set vm_cgame 2 +set vm_ui 2"
 
     # --level: override the map
     if [ -n "$LEVEL" ]; then

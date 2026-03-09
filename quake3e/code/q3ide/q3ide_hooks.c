@@ -49,11 +49,9 @@ static struct {
 	int portal2_cooldown; /* frames left after portal2 fires */
 	/* grapple-to-window teleport */
 	int grapple_tele_cooldown; /* frames left after teleport, 0 = ready */
-	/* streaming placement — re-layout on room change */
-	vec3_t stream_origin; /* player pos at last layout (fallback for no-AAS) */
-	qboolean stream_armed; /* qtrue once first layout has fired */
-	int stream_last_area; /* AAS area at last layout */
-	int stream_cooldown; /* frames to wait before re-layout (debounce doorways) */
+	/* streaming placement */
+	int stream_last_area;   /* AAS area at last reflow — skip duplicate triggers */
+	int stream_cooldown;    /* debounce: frames before next reflow allowed */
 } q3ide_state;
 
 /* ============================================================
@@ -285,6 +283,82 @@ static void Q3IDE_Cmd_f(void)
 }
 
 /* ============================================================
+ *  Grapple type physics (engine-side, bypasses QVM)
+ * ============================================================ */
+
+/*
+ * g_grappleType: 0=hook (normal Q3), 1=rope (spring), 2=rail (instant teleport)
+ *
+ * Since native qagame is incompatible with quake3e's QVM ABI, grapple type
+ * physics are implemented here using cl.snap.ps (authoritative server state)
+ * and Cbuf commands with sv_cheats:
+ *
+ *   Rail  — on fresh hook attach, setviewpos teleports player to hook point.
+ *   Rope  — on fresh hook attach, store rest length; each frame apply
+ *            repulsion when closer than rest * 0.6 to simulate swing bounce.
+ *   Hook  — unmodified Q3 grapple (no engine intervention).
+ */
+static int  q3ide_grapple_was_pulling = 0;
+static float q3ide_rope_rest          = 0.0f;
+static int  q3ide_rope_bounce_frames  = 0;
+
+static void q3ide_grapple_type_frame(void)
+{
+	int   cur_pull, gtype;
+	vec3_t gp, diff;
+	float vlen;
+	char  cmd[256];
+
+	if (cls.state != CA_ACTIVE)
+		return;
+
+	cur_pull = (cl.snap.ps.pm_flags & PMF_GRAPPLE_PULL) ? 1 : 0;
+	gtype    = Cvar_VariableIntegerValue("g_grappleType");
+
+	/* Fresh attach */
+	if (cur_pull && !q3ide_grapple_was_pulling) {
+		VectorSubtract(cl.snap.ps.grapplePoint, cl.snap.ps.origin, diff);
+		q3ide_rope_rest = VectorLength(diff);
+
+		if (gtype == 2) {
+			/* Rail — teleport to hook point */
+			VectorCopy(cl.snap.ps.grapplePoint, gp);
+			Com_sprintf(cmd, sizeof(cmd),
+				"cmd setviewpos %.0f %.0f %.0f %.0f\n",
+				gp[0], gp[1], gp[2], cl.snap.ps.viewangles[1]);
+			Cbuf_AddText(cmd);
+			Com_Printf("q3ide: RAIL grapple — teleported\n");
+		} else if (gtype == 1) {
+			Com_Printf("q3ide: ROPE grapple — rest=%.0f\n", q3ide_rope_rest);
+		} else {
+			Com_Printf("q3ide: HOOK grapple\n");
+		}
+	}
+
+	/* Rope — bounce player back when too close (simulate slack) */
+	if (cur_pull && gtype == 1 && q3ide_rope_rest > 0.0f) {
+		VectorSubtract(cl.snap.ps.grapplePoint, cl.snap.ps.origin, diff);
+		vlen = VectorLength(diff);
+		if (vlen < q3ide_rope_rest * 0.4f && q3ide_rope_bounce_frames == 0) {
+			/* Player swung past centre — push them back with a jump */
+			Cbuf_AddText("+moveup\n");
+			q3ide_rope_bounce_frames = 8;
+		}
+	}
+	if (q3ide_rope_bounce_frames > 0) {
+		if (--q3ide_rope_bounce_frames == 0)
+			Cbuf_AddText("-moveup\n");
+	}
+
+	if (!cur_pull) {
+		q3ide_rope_rest         = 0.0f;
+		q3ide_rope_bounce_frames = 0;
+	}
+
+	q3ide_grapple_was_pulling = cur_pull;
+}
+
+/* ============================================================
  *  Grapple-to-window teleport
  * ============================================================ */
 
@@ -447,7 +521,7 @@ static void q3ide_shoot_frame(void)
 		vec3_t wall_pos, wall_normal;
 		if (Q3IDE_WM_TraceWall(eye, fwd, wall_pos, wall_normal)) {
 			wall_pos[2] = eye[2]; /* keep at eye height */
-			Q3IDE_WM_MoveWindow(q3ide_state.selected_win, wall_pos, wall_normal);
+			Q3IDE_WM_MoveWindow(q3ide_state.selected_win, wall_pos, wall_normal, qfalse); /* user-placed: clamp to fit */
 			Com_Printf("q3ide: moved [%d] to (%.0f,%.0f,%.0f)\n", q3ide_state.selected_win, wall_pos[0], wall_pos[1],
 			           wall_pos[2]);
 		} else {
@@ -459,7 +533,7 @@ static void q3ide_shoot_frame(void)
 			float_normal[0] = -fwd[0];
 			float_normal[1] = -fwd[1];
 			float_normal[2] = 0.0f;
-			Q3IDE_WM_MoveWindow(q3ide_state.selected_win, float_pos, float_normal);
+			Q3IDE_WM_MoveWindow(q3ide_state.selected_win, float_pos, float_normal, qfalse);
 			Com_Printf("q3ide: moved [%d] floating\n", q3ide_state.selected_win);
 		}
 		q3ide_state.select_time = Sys_Milliseconds(); /* restart 5s window — keep shooting to keep moving */
@@ -517,10 +591,8 @@ void Q3IDE_Frame(void)
 		if (++q3ide_state.autoexec_delay > 60) {
 			/* Always give grapple hook on every map load */
 			Cbuf_AddText("give grappling hook\nweapon 10\nq3ide attach all\n");
-			VectorCopy(cl.snap.ps.origin, q3ide_state.stream_origin);
 			q3ide_state.stream_last_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
-			q3ide_state.stream_cooldown = 60;
-			q3ide_state.stream_armed = qtrue;
+			q3ide_state.stream_cooldown = 60; /* 1s grace after initial attach */
 			cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
 			if (cmd && cmd->string[0]) {
 				Com_Printf("q3ide: auto: %s\n", cmd->string);
@@ -546,46 +618,31 @@ void Q3IDE_Frame(void)
 				pa[0] = -1152.0f;
 				pa[1] = -1100.0f;
 				pa[2] = ez;
+				/* DISABLED: portal placement
 				Q3IDE_WM_PlaceMirror(pa, n, 72.0f, 131.0f);
-				/* Portal B */
 				pb[0] = -1152.0f;
 				pb[1] = -1280.0f;
 				pb[2] = ez;
 				Q3IDE_WM_PlaceMirror2(pb, n, 72.0f, 131.0f);
-				q3ide_state.portal_cooldown = 90; /* 1.5s spawn grace */
+				q3ide_state.portal_cooldown = 90;
 				q3ide_state.portal2_cooldown = 90;
 				Q3IDE_LOGI("portals placed: A=(%.0f,%.0f,%.0f) B=(%.0f,%.0f,%.0f)", pa[0], pa[1], pa[2], pb[0], pb[1],
 				           pb[2]);
+				*/
 			}
 		}
 	}
 
-	/* Streaming placement: re-layout whenever the player enters a new AAS area.
-	 * Falls back to distance check when AAS is not loaded. */
-	if (q3ide_state.stream_armed && cls.state == CA_ACTIVE) {
+
+	/* Streaming placement: reflow whenever the player enters a new AAS area. */
+	if (q3ide_wm.num_active && cls.state == CA_ACTIVE) {
 		if (q3ide_state.stream_cooldown > 0) {
 			q3ide_state.stream_cooldown--;
-		} else {
-			qboolean do_layout = qfalse;
-			if (Q3IDE_AAS_IsLoaded()) {
-				int cur_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
-				if (cur_area > 0 && cur_area != q3ide_state.stream_last_area) {
-					q3ide_state.stream_last_area = cur_area;
-					do_layout = qtrue;
-				}
-			} else {
-				/* No AAS — fall back to distance threshold */
-				vec3_t delta;
-				float radius = Cvar_VariableValue("q3ide_placement_radius");
-				if (radius < 64.0f)
-					radius = 1200.0f;
-				VectorSubtract(cl.snap.ps.origin, q3ide_state.stream_origin, delta);
-				if (VectorLength(delta) > radius * 0.5f)
-					do_layout = qtrue;
-			}
-			if (do_layout) {
-				Cbuf_AddText("q3ide attach all\n");
-				VectorCopy(cl.snap.ps.origin, q3ide_state.stream_origin);
+		} else if (Q3IDE_AAS_IsLoaded()) {
+			int cur_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
+			if (cur_area > 0 && cur_area != q3ide_state.stream_last_area) {
+				q3ide_state.stream_last_area = cur_area;
+				Q3IDE_WM_Reflow();
 				q3ide_state.stream_cooldown = 30; /* 0.5s debounce — no thrash in doorways */
 			}
 		}
@@ -654,12 +711,15 @@ void Q3IDE_Frame(void)
 		 * (cl_input.c) via Q3IDE_ConsumesInput(), which runs before
 		 * CL_WritePacket. Clearing it here would be too late. */
 
-		q3ide_portal_frame();
+		/* q3ide_portal_frame(); */ /* DISABLED */
+		q3ide_grapple_type_frame();
 		q3ide_grapple_window_frame();
 	}
 
 	/* Drain one pending window placement per frame (staggered attach). */
 	q3ide_layout_tick();
+	/* Drain one pending reflow move per frame (staggered reposition). */
+	Q3IDE_WM_ReflowTick();
 	Q3IDE_WM_PollFrames();
 }
 

@@ -185,6 +185,16 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	win->scratch_slot = slot;
 	VectorCopy(origin, win->origin);
 	VectorCopy(normal, win->normal);
+	/* Force horizontal — zero Z, renormalize */
+	{
+		float len;
+		win->normal[2] = 0.0f;
+		len = sqrtf(win->normal[0] * win->normal[0] + win->normal[1] * win->normal[1]);
+		if (len > 0.001f) {
+			win->normal[0] /= len;
+			win->normal[1] /= len;
+		}
+	}
 	win->world_w = ww;
 	win->world_h = wh;
 	win->wall_mounted = skip_clamp;
@@ -199,7 +209,7 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	return qtrue;
 }
 
-void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal)
+void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_clamp)
 {
 	if (idx < 0 || idx >= Q3IDE_MAX_WIN)
 		return;
@@ -207,7 +217,19 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal)
 		return;
 	VectorCopy(origin, q3ide_wm.wins[idx].origin);
 	VectorCopy(normal, q3ide_wm.wins[idx].normal);
-	q3ide_clamp_window_size(&q3ide_wm.wins[idx]);
+	/* Force horizontal — zero Z, renormalize */
+	{
+		float len;
+		q3ide_wm.wins[idx].normal[2] = 0.0f;
+		len = sqrtf(q3ide_wm.wins[idx].normal[0] * q3ide_wm.wins[idx].normal[0] +
+		            q3ide_wm.wins[idx].normal[1] * q3ide_wm.wins[idx].normal[1]);
+		if (len > 0.001f) {
+			q3ide_wm.wins[idx].normal[0] /= len;
+			q3ide_wm.wins[idx].normal[1] /= len;
+		}
+	}
+	if (!skip_clamp)
+		q3ide_clamp_window_size(&q3ide_wm.wins[idx]);
 }
 
 int Q3IDE_WM_FindById(unsigned int cid)

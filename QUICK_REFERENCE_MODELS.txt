@@ -1,0 +1,200 @@
+╔════════════════════════════════════════════════════════════════════════════╗
+║            QUAKE 3 HD PLAYER MODELS - QUICK REFERENCE CARD                ║
+║                        March 9, 2026                                       ║
+╚════════════════════════════════════════════════════════════════════════════╝
+
+FASTEST WAY TO GET MODELS
+═══════════════════════════════════════════════════════════════════════════
+
+Option A: If you own Quake 3 on Steam
+  1. Go to: https://steamcommunity.com/workshop/filedetails/?id=1488263571
+  2. Click "Subscribe"
+  3. Done - Steam downloads automatically
+
+Option B: Download from ModDB (Recommended)
+  1. Go to: https://www.moddb.com/games/quake-iii-arena/addons/ql-playermodels-ioquake3
+  2. Click "Download" 
+  3. Extract to: /root/Projects/q3ide/baseq3/
+  4. Done
+
+Option C: Use Archive.org (Alternative)
+  1. Go to: https://archive.org/details/quake-3-includes-defrag-and-cpma
+  2. Find "Player Models qlive-teamarena.zip" (170 MB)
+  3. Click and download
+  4. Extract to baseq3/
+
+
+WHAT YOU'LL GET
+═══════════════════════════════════════════════════════════════════════════
+
+ModDB Quake Live Playermodels (180 MB):
+  ✓ 30+ Quake Live models
+  ✓ Team Arena models
+  ✓ Reaper, beta Sarge, beta Visor
+  ✓ Full bot support
+  ✓ Sport and Bright skin variants
+
+This gives you 50+ playable character variations.
+
+
+INSTALL AFTER DOWNLOAD
+═══════════════════════════════════════════════════════════════════════════
+
+cd /root/Projects/q3ide/baseq3/
+
+# If it's a .pk3 file:
+cp model_pack.pk3 .
+
+# If it's a .zip file:
+unzip model_pack.zip
+
+# Verify:
+ls models/players/
+
+
+START GAME WITH MODELS
+═══════════════════════════════════════════════════════════════════════════
+
+cd /root/Projects/q3ide
+sh ./scripts/build.sh --run --level 0
+
+# In-game:
+# Settings → Player → Model → [Pick character]
+
+
+POPULAR MODELS INCLUDED
+═══════════════════════════════════════════════════════════════════════════
+
+Original Q3 Characters:
+  • Sarge          • Visor           • Xaero
+  • Doom Guy       • Crash           • Grunt
+
+Quake Live:
+  • Anarki         • Badass          • Bjorn
+  • Hunter         • Keel            • Lucy
+  • Major          • Reaper          • Strogg
+  • + 20+ more
+
+Team Arena:
+  • Angel          • Grunt variants
+
+
+ALTERNATIVE SOURCES
+═══════════════════════════════════════════════════════════════════════════
+
+For 100+ models (with bots):
+  → CZ45's Q3A Mod Repository
+  → https://www.moddb.com/mods/cz45modbundle
+
+For individual models:
+  → LoneBullet (50+ models)
+  → https://www.lonebullet.com/models/g/quake-3-arena-models-6622.htm
+  
+  Examples:
+  • Bunker          (3.18 MB)
+  • Chloe           (3.88 MB)
+  • Cloud Strife    (3.24 MB)
+  • Dita            (5.72 MB)
+
+For anime-style models:
+  → Archive.org cel-shaded collection
+  → https://archive.org/details/anime_quake_3_models
+  
+  Models: Mezzo, Kite, Chobit, Mahoro, Akari, Henrietta, Nakoruru
+
+For HD textures AND models (full overhaul):
+  → Quake III Arena Remastered [Runo] Edition
+  → https://www.moddb.com/mods/quake-iii-arena-remastered-runo-edition
+
+
+TROUBLESHOOTING
+═══════════════════════════════════════════════════════════════════════════
+
+Models not showing up?
+  ✓ Make sure pk3 files are IN baseq3/ (not in subdirectories)
+  ✓ Restart the game engine
+  ✓ Check console for "couldn't load model" errors
+
+Can't download?
+  ✓ ModDB: Create free account if prompted
+  ✓ Archive.org: Use "Download Options" menu
+  ✓ Steam: Use Steam client, not browser
+
+Have a .7z file?
+  apt-get install p7zip-full
+  7z x myfile.7z -o/root/Projects/q3ide/baseq3/
+
+Have a .zip file?
+  cd /root/Projects/q3ide/baseq3/
+  unzip myfile.zip
+
+
+VERIFICATION COMMAND
+═══════════════════════════════════════════════════════════════════════════
+
+See what models are installed:
+
+  cd /root/Projects/q3ide/baseq3/
+  find . -type d -path "*/models/players/*" | sort
+
+
+CONSOLE COMMANDS (IN-GAME)
+═══════════════════════════════════════════════════════════════════════════
+
+/model sarge              — Switch to Sarge model
+/model <name>            — Switch to named model
+/cg_forceMyModel sarge   — Force all player models to Sarge
+/cg_forceEnemyModel red  — Force all enemy models to red
+/cg_forceColors          — Force player/enemy colors
+
+
+INTEGRATION WITH Q3IDE
+═══════════════════════════════════════════════════════════════════════════
+
+Models work seamlessly with Q3IDE:
+  ✓ Visible on all three monitors
+  ✓ Captured in window attachment screenshots
+  ✓ Load automatically from baseq3/
+  ✓ No engine modifications needed
+
+To test with Q3IDE:
+  q3ide attach all         — Attach all windows to walls
+  q3ide status             — Show current status with models visible
+
+
+KEY FILES FOR REFERENCE
+═══════════════════════════════════════════════════════════════════════════
+
+QUAKE3_MODELS_RESEARCH.md  — Full research summary
+QUAKE3_MODEL_URLS.txt      — Complete URL reference
+DOWNLOAD_MODELS_GUIDE.md   — Detailed installation guide
+QUICK_REFERENCE_MODELS.txt — This file
+
+
+DIRECT DOWNLOAD LINKS (TOP 3)
+═══════════════════════════════════════════════════════════════════════════
+
+1. ModDB - Quake Live Playermodels (RECOMMENDED)
+   https://www.moddb.com/games/quake-iii-arena/addons/ql-playermodels-ioquake3
+
+2. Archive.org - Quake 3 Collection (ALTERNATIVE)
+   https://archive.org/details/quake-3-includes-defrag-and-cpma
+
+3. Steam Workshop (AUTOMATIC)
+   https://steamcommunity.com/workshop/filedetails/?id=1488263571
+
+
+FINAL CHECKLIST
+═══════════════════════════════════════════════════════════════════════════
+
+□ Pick a source above
+□ Download model pack
+□ Extract to baseq3/
+□ Verify: find baseq3/ -path "*/models/players/*"
+□ Run: sh ./scripts/build.sh --run --level 0
+□ In-game: Select model from Player settings
+□ Enjoy!
+
+═══════════════════════════════════════════════════════════════════════════
+Questions? See DOWNLOAD_MODELS_GUIDE.md for detailed instructions
+═══════════════════════════════════════════════════════════════════════════

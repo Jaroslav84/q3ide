@@ -37,8 +37,9 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
  */
 int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir);
 
-/* Move an active window to a new position (shoot-to-move). */
-void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal);
+/* Move an active window to a new position (shoot-to-move).
+ * skip_clamp=qtrue: skip q3ide_clamp_window_size (use when size is already correct). */
+void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_clamp);
 
 /* Find slot index of a window by capture id; returns -1 if not found. */
 int Q3IDE_WM_FindById(unsigned int cid);
@@ -55,6 +56,12 @@ qboolean Q3IDE_WM_DetachById(unsigned int capture_id);
 void Q3IDE_WM_CmdAttach(void);
 void Q3IDE_WM_CmdDesktop(void);
 void Q3IDE_WM_CmdSnap(void);
+
+/* Reposition behind-windows to walls in front — zero stream cost. */
+void Q3IDE_WM_Reflow(void);
+
+/* Drain one pending reflow move per call. Returns qtrue if work was done. */
+qboolean Q3IDE_WM_ReflowTick(void);
 
 /* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_cmd.c) */
 void Q3IDE_WM_PollChanges(void);

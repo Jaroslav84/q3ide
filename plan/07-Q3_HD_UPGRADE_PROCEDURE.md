@@ -160,3 +160,30 @@ r_deluxeSpecular 1.5
 ```
 
 Then restart the game.
+
+---
+
+## Visual Upgrade Options (Models)
+
+### 1. Quake Live Player Models
+Slightly better than vanilla Q3 — smoother silhouettes, better proportions.
+Best available drop-in upgrade for player models.
+
+- **Download**: https://www.moddb.com/games/quake-iii-arena/addons/ql-playermodels-ioquake3
+- Needs browser (180MB, ModDB)
+- Drop the pk3 into `baseq3/`
+
+### 2. renderer2 (OpenGL2) + Normal Maps
+Same mesh as original, but looks dramatically better with proper lighting —
+normal maps, specular highlights, PBR. Already enabled in this project.
+
+```
+set cl_renderer opengl2
+```
+
+HD texture packs kick in automatically once enabled (see Quick Start above).
+
+### 3. Cel-Shading (Stylized Look)
+Makes low-poly intentional — anime/cartoon aesthetic.
+Archive.org has cel-shaded Q3 model packs:
+https://archive.org/details/anime_quake_3_models

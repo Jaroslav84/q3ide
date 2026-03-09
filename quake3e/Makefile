@@ -37,13 +37,13 @@ USE_SYSTEM_VORBIS = 0
 
 USE_VULKAN       = 1
 USE_OPENGL       = 1
-USE_OPENGL2      = 0
+USE_OPENGL2      = 1
 USE_OPENGL_API   = 1
 USE_VULKAN_API   = 1
 USE_RENDERER_DLOPEN = 1
 
 # valid options: opengl, vulkan, opengl2
-RENDERER_DEFAULT = opengl
+RENDERER_DEFAULT = opengl2
 
 CNAME            = quake3e
 DNAME            = quake3e.ded

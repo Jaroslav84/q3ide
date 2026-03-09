@@ -67,7 +67,7 @@ qboolean q3ide_layout_tick(void)
 	if (existing >= 0) {
 		q3ide_wm.wins[existing].world_w = p->world_w;
 		q3ide_wm.wins[existing].world_h = p->world_h;
-		Q3IDE_WM_MoveWindow(existing, p->pos, p->normal);
+		Q3IDE_WM_MoveWindow(existing, p->pos, p->normal, qtrue); /* layout already measured fit */
 		Q3IDE_LOGI("layout tick: moved id=%u pos=(%.0f,%.0f,%.0f)", p->id, p->pos[0], p->pos[1], p->pos[2]);
 		return qtrue;
 	}
@@ -224,6 +224,9 @@ void q3ide_room_scan(vec3_t eye, q3ide_room_t *out)
 			radius = 1200.0f; /* default ~30m */
 		for (i = 0; i < n && out->n < Q3IDE_LAYOUT_MAX_WALLS; i++) {
 			q3ide_wall_t *w = &out->walls[out->n];
+			vec3_t los_tgt;
+			trace_t los_tr;
+			static vec3_t lmins = {-4, -4, -4}, lmaxs = {4, 4, 4};
 			/* Skip walls outside the placement radius */
 			{
 				vec3_t _d;
@@ -231,6 +234,14 @@ void q3ide_room_scan(vec3_t eye, q3ide_room_t *out)
 				if (VectorLength(_d) > radius)
 					continue;
 			}
+			/* LOS check: trace from eye to a point 2u off the wall surface.
+			 * If blocked by solid geometry the wall is in a different room — skip. */
+			los_tgt[0] = aas_walls[i].centroid[0] + aas_walls[i].normal[0] * 2.0f;
+			los_tgt[1] = aas_walls[i].centroid[1] + aas_walls[i].normal[1] * 2.0f;
+			los_tgt[2] = aas_walls[i].centroid[2];
+			CM_BoxTrace(&los_tr, eye, los_tgt, lmins, lmaxs, 0, CONTENTS_SOLID, qfalse);
+			if (!los_tr.startsolid && los_tr.fraction < 0.9f)
+				continue; /* occluded — not in our room */
 			VectorCopy(aas_walls[i].centroid, w->contact);
 			VectorCopy(aas_walls[i].normal, w->normal);
 			VectorCopy(aas_walls[i].right, w->right);
@@ -304,6 +315,27 @@ static void q3ide_sort_walls_by_facing(q3ide_room_t *room, float yaw)
 	}
 }
 
+/* TV area score if `k` windows are placed on `wall`.
+ * Returns the area (w*h) of each TV — larger is better.
+ * Used by the size-maximizing greedy assignment. */
+static float q3ide_tv_score(const q3ide_wall_t *wall, int k, float aspect)
+{
+	const float margin = 24.0f, gap = 16.0f;
+	float wall_h = wall->ceil_z - wall->floor_z;
+	float usable = wall->width - 2.0f * margin;
+	float u_per_win = (k > 1) ? (usable - (float)(k - 1) * gap) / (float)k : usable;
+	float tv_h = wall_h * 0.85f;
+	float tv_w;
+	if (tv_h < 70.0f)
+		tv_h = 70.0f;
+	tv_w = tv_h * aspect;
+	if (u_per_win > 0.0f && tv_w > u_per_win) {
+		tv_w = u_per_win;
+		tv_h = (aspect > 0.0f) ? tv_w / aspect : tv_w;
+	}
+	return tv_w * tv_h;
+}
+
 int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspects, int *is_display, int n)
 {
 	/* Assignment arrays: which items go on which wall */
@@ -324,35 +356,43 @@ int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspect
 
 	memset(assigned_cnt, 0, sizeof(assigned_cnt));
 
-	/* Greedy assignment sorted by player facing.
-	 * Wall capacity = how many TVs fit at 85% of wall height (min 70u).
-	 * Walls that can't fit even one 70u-tall TV are skipped. */
+	/* Optimal greedy: assign each window to the wall that gives the largest TV.
+	 * Score = TV area if we add this window to that wall.
+	 * Walls too short (height < 96u) or too narrow are skipped.
+	 * Max slots per wall = usable_width / (70u + gap). */
 	{
 		const float margin = 24.0f, gap = 16.0f;
-		float remaining[Q3IDE_LAYOUT_MAX_WALLS];
 		int max_slots[Q3IDE_LAYOUT_MAX_WALLS];
 
 		for (wi = 0; wi < sorted_room.n; wi++) {
+			float wall_h = sorted_room.walls[wi].ceil_z - sorted_room.walls[wi].floor_z;
 			float usable = sorted_room.walls[wi].width - 2.0f * margin;
-			remaining[wi] = usable;
-			/* Minimum slot: 48u wide + gap. Always at least 1 per wall. */
-			max_slots[wi] = (usable > 0.0f) ? (int) (usable / (48.0f + gap)) : 0;
+			if (wall_h < 96.0f || usable < 48.0f) {
+				max_slots[wi] = 0;
+				continue;
+			}
+			max_slots[wi] = (int)(usable / (70.0f + gap));
 			if (max_slots[wi] < 1)
 				max_slots[wi] = 1;
 		}
 
 		for (i = 0; i < n; i++) {
 			int best = -1;
+			float best_score = -1.0f;
+			float asp = (aspects && aspects[i] > 0.0f) ? aspects[i] : 16.0f / 9.0f;
 			for (wi = 0; wi < sorted_room.n; wi++) {
+				float score;
 				if (assigned_cnt[wi] >= max_slots[wi])
 					continue;
-				if (best < 0 || remaining[wi] > remaining[best])
+				score = q3ide_tv_score(&sorted_room.walls[wi], assigned_cnt[wi] + 1, asp);
+				if (score > best_score) {
+					best_score = score;
 					best = wi;
+				}
 			}
 			if (best < 0)
 				break;
 			assigned[best][assigned_cnt[best]++] = i;
-			remaining[best] -= (sorted_room.walls[best].width - 2.0f * margin) / (float) max_slots[best];
 		}
 	}
 

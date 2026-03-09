@@ -395,6 +395,26 @@ int Q3IDE_AAS_GetAreaWalls(const vec3_t point, q3ide_aas_wall_t *walls, int maxw
 				continue;
 		}
 
+		/* Trace vertically from the face centroid (2u off wall) to find the actual
+		 * room floor and ceiling — face vertex Z extents are just the face strip
+		 * height (often 8-16u) and don't reflect the real room height. */
+		{
+			vec3_t hstart, hend;
+			trace_t htr;
+			static vec3_t hmins = {0, 0, 0}, hmaxs = {0, 0, 0};
+			hstart[0] = centroid[0] + normal[0] * 2.0f;
+			hstart[1] = centroid[1] + normal[1] * 2.0f;
+			hstart[2] = centroid[2];
+			hend[0] = hstart[0];
+			hend[1] = hstart[1];
+			hend[2] = hstart[2] + 512.0f;
+			CM_BoxTrace(&htr, hstart, hend, hmins, hmaxs, 0, CONTENTS_SOLID, qfalse);
+			max_z = hstart[2] + htr.fraction * 512.0f;
+			hend[2] = hstart[2] - 512.0f;
+			CM_BoxTrace(&htr, hstart, hend, hmins, hmaxs, 0, CONTENTS_SOLID, qfalse);
+			min_z = hstart[2] - htr.fraction * 512.0f;
+		}
+
 		walls[nwalls].centroid[0] = centroid[0];
 		walls[nwalls].centroid[1] = centroid[1];
 		walls[nwalls].centroid[2] = centroid[2];

@@ -11,6 +11,8 @@ Also: if u know that a window is stuck to a wall then never render it's back. No
 
 allow to switch MAPS like projects
 ======================================
+sh ./scripts/build.sh --run --level 0 --execute 'q3ide attach all'
+
  # Tron-like
 sh ./scripts/build.sh --run --level acid3dm12 --execute 'q3ide attach all'
 
