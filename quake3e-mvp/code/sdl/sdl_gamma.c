@@ -31,25 +31,6 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #if defined(USE_Q3IDE) && defined(MACOS_X)
 #include <CoreGraphics/CoreGraphics.h>
-/* Broadcast gamma ramp to every connected display.
- * SDL_SetWindowGammaRamp only touches the display the SDL window lives on;
- * side monitors in the spanning window receive no correction and appear darker. */
-static void Q3IDE_SetGammaAllDisplays( Uint16 table[3][256] )
-{
-	CGDirectDisplayID displays[32];
-	uint32_t count, i, j;
-	CGGammaValue r[256], g[256], b[256];
-
-	if ( CGGetOnlineDisplayList( 32, displays, &count ) != kCGErrorSuccess )
-		return;
-	for ( j = 0; j < 256; j++ ) {
-		r[j] = table[0][j] / 65535.0f;
-		g[j] = table[1][j] / 65535.0f;
-		b[j] = table[2][j] / 65535.0f;
-	}
-	for ( i = 0; i < count; i++ )
-		CGSetDisplayTransferByTable( displays[i], 256, r, g, b );
-}
 #endif
 
 static Uint16 r[256];
@@ -136,8 +117,28 @@ void GLimp_SetGamma( unsigned char red[256], unsigned char green[256], unsigned 
 	}
 
 #if defined(USE_Q3IDE) && defined(MACOS_X)
+	/* SDL_SetWindowGammaRamp only touches the display the window is on.
+	 * In multi-monitor mode, broadcast the same LUT to all active displays
+	 * so side monitors match the center monitor's brightness. */
 	if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) )
-		Q3IDE_SetGammaAllDisplays( table );
+	{
+		CGGammaValue gr[256], gg[256], gb[256];
+		CGDirectDisplayID displays[16];
+		uint32_t count, di, j;
+
+		for ( j = 0; j < 256; j++ )
+		{
+			gr[j] = table[0][j] / 65535.0f;
+			gg[j] = table[1][j] / 65535.0f;
+			gb[j] = table[2][j] / 65535.0f;
+		}
+
+		if ( CGGetActiveDisplayList( 16, displays, &count ) == kCGErrorSuccess )
+		{
+			for ( di = 0; di < count; di++ )
+				CGSetDisplayTransferByTable( displays[di], 256, gr, gg, gb );
+		}
+	}
 #endif
 }
 
@@ -147,5 +148,10 @@ void GLimp_SetGamma( unsigned char red[256], unsigned char green[256], unsigned 
 */
 void GLW_RestoreGamma( void )
 {
-	// automatically handled by SDL?
+#if defined(USE_Q3IDE) && defined(MACOS_X)
+	/* Restore all displays to their macOS ICC color calibration on app exit.
+	 * SDL restores the primary display's gamma automatically on window close,
+	 * but we explicitly call this to ensure ICC profiles are re-enabled. */
+	CGDisplayRestoreColorSyncSettings();
+#endif
 }

@@ -1097,7 +1097,13 @@ void SV_InitGameProgs( void ) {
 	}
 
 	// load the dll or bytecode
+	// USE_Q3IDE: always load native dylib (our patched qagame with grapple at spawn).
+	// vm_game cvar is CVAR_PROTECTED and gets restored to 2 by q3config.cfg, so we bypass it.
+#ifdef USE_Q3IDE
+	gvm = VM_Create( VM_GAME, SV_GameSystemCalls, SV_DllSyscall, VMI_NATIVE );
+#else
 	gvm = VM_Create( VM_GAME, SV_GameSystemCalls, SV_DllSyscall, Cvar_VariableIntegerValue( "vm_game" ) );
+#endif
 	if ( !gvm ) {
 		Com_Error( ERR_DROP, "VM_Create on game failed" );
 	}

@@ -961,6 +961,31 @@ RB_SetGL2D
 void RB_SetGL2D( void ) {
 	backEnd.projection2D = qtrue;
 
+#ifdef USE_Q3IDE
+	/* Multi-monitor: constrain 2D to center screen only when UI/console is NOT active.
+	 * When ESC menu or console is open, use full-screen 2D so menus render correctly. */
+	if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) &&
+	     !ri.Cvar_VariableIntegerValue( "r_mmUIActive" ) ) {
+		int cx = ri.Cvar_VariableIntegerValue( "r_mmCenterX" );
+		int cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
+		int ch = ri.Cvar_VariableIntegerValue( "r_mmCenterH" );
+		if ( cw > 0 && ch > 0 ) {
+			qglViewport( cx, 0, cw, ch );
+			qglScissor( cx, 0, cw, ch );
+			qglMatrixMode( GL_PROJECTION );
+			qglLoadMatrixf( GL_Ortho( 0, cw, ch, 0, 0, 1 ) );
+			qglMatrixMode( GL_MODELVIEW );
+			qglLoadIdentity();
+			GL_State( GLS_DEPTHTEST_DISABLE | GLS_SRCBLEND_SRC_ALPHA | GLS_DSTBLEND_ONE_MINUS_SRC_ALPHA );
+			GL_Cull( CT_TWO_SIDED );
+			qglDisable( GL_CLIP_PLANE0 );
+			backEnd.refdef.time = ri.Milliseconds();
+			backEnd.refdef.floatTime = (double)backEnd.refdef.time * 0.001;
+			return;
+		}
+	}
+#endif
+
 	// set 2D virtual screen size
 	qglViewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
 	qglScissor( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
@@ -1013,7 +1038,7 @@ void RE_StretchRaw( int x, int y, int w, int h, int cols, int rows, byte *data, 
 		ri.Error (ERR_DROP, "Draw_StretchRaw: size not a power of 2: %i by %i", cols, rows);
 	}
 
-	RE_UploadCinematic( w, h, cols, rows, data, client, dirty );
+	RE_UploadCinematic( w, h, cols, rows, data, client, dirty, 0x1908 /* GL_RGBA */ );
 
 	if ( r_speeds->integer ) {
 		end = ri.Milliseconds();
@@ -1025,7 +1050,7 @@ void RE_StretchRaw( int x, int y, int w, int h, int cols, int rows, byte *data, 
 }
 
 
-void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty ) {
+void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty, unsigned int format ) {
 
 	image_t *image;
 
@@ -1042,7 +1067,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 	if ( cols != image->width || rows != image->height ) {
 		image->width = image->uploadWidth = cols;
 		image->height = image->uploadHeight = rows;
-		qglTexImage2D( GL_TEXTURE_2D, 0, image->internalFormat, cols, rows, 0, GL_RGBA, GL_UNSIGNED_BYTE, data );
+		qglTexImage2D( GL_TEXTURE_2D, 0, image->internalFormat, cols, rows, 0, format, GL_UNSIGNED_BYTE, data );
 		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_clamp_mode );
@@ -1050,7 +1075,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 	} else if ( dirty ) {
 		// otherwise, just subimage upload it so that drivers can tell we are going to be changing
 		// it and don't try and do a texture compression
-		qglTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, cols, rows, GL_RGBA, GL_UNSIGNED_BYTE, data );
+		qglTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, cols, rows, format, GL_UNSIGNED_BYTE, data );
 	}
 }
 

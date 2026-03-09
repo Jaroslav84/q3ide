@@ -1,7 +1,6 @@
 # clang-format config for q3ide/ only.
 # Placed here so Quake3e files (which search upward) never pick this up.
 BasedOnStyle: LLVM
-Language: C
 
 # Tabs, K&R style — matches Quake3e convention
 UseTab: ForIndentation
@@ -25,3 +24,12 @@ SpaceAfterCStyleCast: true
 
 # Keep include order as-is (don't reorder Quake3e headers)
 SortIncludes: false
+
+# Allow up to 2 consecutive blank lines (avoids spurious errors after edits)
+MaxEmptyLinesToKeep: 2
+
+# Allow aligned macro definitions (e.g. #define FOO    value)
+AlignConsecutiveMacros:
+  Enabled: true
+  AcrossEmptyLines: false
+  AcrossComments: false

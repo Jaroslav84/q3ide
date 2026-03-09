@@ -27,7 +27,9 @@ void Q3IDE_WM_AddPolys(void);
 
 /* Primitives used by command handlers in q3ide_hooks.c */
 qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out_normal);
-qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start);
+/* skip_clamp=qtrue: layout engine already measured fit; skip q3ide_clamp_window_size */
+qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start,
+                         qboolean skip_clamp);
 
 /*
  * Ray-test all active windows; returns index of closest hit or -1.
@@ -35,8 +37,12 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
  */
 int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir);
 
-/* Move an active window to a new position (shoot-to-move). */
-void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal);
+/* Move an active window to a new position (shoot-to-move).
+ * skip_clamp=qtrue: skip q3ide_clamp_window_size (use when size is already correct). */
+void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_clamp);
+
+/* Find slot index of a window by capture id; returns -1 if not found. */
+int Q3IDE_WM_FindById(unsigned int cid);
 
 /* Simple commands (in q3ide_wm.c) */
 void Q3IDE_WM_CmdList(void);
@@ -49,5 +55,38 @@ qboolean Q3IDE_WM_DetachById(unsigned int capture_id);
 /* Complex commands (in q3ide_cmd.c) */
 void Q3IDE_WM_CmdAttach(void);
 void Q3IDE_WM_CmdDesktop(void);
+void Q3IDE_WM_CmdSnap(void);
+
+/* Reposition behind-windows to walls in front — zero stream cost. */
+void Q3IDE_WM_Reflow(void);
+
+/* Drain one pending reflow move per call. Returns qtrue if work was done. */
+qboolean Q3IDE_WM_ReflowTick(void);
+
+/* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_cmd.c) */
+void Q3IDE_WM_PollChanges(void);
+/* Drain change list fetched by background poll thread — call from main thread. */
+void Q3IDE_WM_DrainPendingChanges(void);
+
+/* Called from Q3IDE_Frame with current player eye position */
+void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz);
+
+/* Standalone mirror portal (real Q3 recursive rendering, no capture needed) */
+void Q3IDE_WM_PlaceMirror(vec3_t origin, vec3_t normal, float ww, float wh);
+void Q3IDE_WM_ClearMirror(void);
+qboolean Q3IDE_WM_MirrorActive(void);
+void Q3IDE_WM_GetMirrorOrigin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h);
+
+/* Second portal (return trip) */
+void Q3IDE_WM_PlaceMirror2(vec3_t origin, vec3_t normal, float ww, float wh);
+void Q3IDE_WM_ClearMirror2(void);
+qboolean Q3IDE_WM_Mirror2Active(void);
+void Q3IDE_WM_GetMirror2Origin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h);
+
+/* Update hover state for a specific window (called from interaction system) */
+void Q3IDE_WM_SetHover(int idx, float hover_t);
+
+/* Set the display label for a window (called after attach). */
+void Q3IDE_WM_SetLabel(unsigned int capture_id, const char *label);
 
 #endif /* Q3IDE_WM_H */

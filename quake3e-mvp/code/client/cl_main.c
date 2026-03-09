@@ -3209,6 +3209,20 @@ static void CL_InitRenderer( void ) {
 	// this sets up the renderer and calls R_Init
 	re.BeginRegistration( &cls.glconfig );
 
+#ifdef USE_Q3IDE
+	/* Multi-monitor: 2D UI (console, menus, HUD) lives on the center screen only.
+	 * Override vidWidth/vidHeight to center monitor dims so cls.scale, cls.biasX,
+	 * and g_console_field_width are computed for one screen, not the spanning window. */
+	if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+		int cw = Cvar_VariableIntegerValue( "r_mmCenterW" );
+		int ch = Cvar_VariableIntegerValue( "r_mmCenterH" );
+		if ( cw > 0 && ch > 0 ) {
+			cls.glconfig.vidWidth  = cw;
+			cls.glconfig.vidHeight = ch;
+		}
+	}
+#endif
+
 	// load character sets
 	cls.charSetShader = re.RegisterShader( "gfx/2d/bigchars" );
 	cls.whiteShader = re.RegisterShader( "white" );

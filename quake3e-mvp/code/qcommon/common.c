@@ -3216,7 +3216,7 @@ void Com_AppendCDKey( const char *filename ) {
 }
 
 
-#ifndef DEDICATED // bk001204
+#if !defined(DEDICATED) && !defined(STANDALONE) // bk001204
 /*
 =================
 Com_WriteCDKey
@@ -4069,7 +4069,7 @@ Writes key bindings and archived cvars to config file if modified
 ===============
 */
 void Com_WriteConfiguration( void ) {
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(STANDALONE)
 	const char *basegame;
 	const char *gamedir;
 #endif
@@ -4086,7 +4086,7 @@ void Com_WriteConfiguration( void ) {
 
 	Com_WriteConfigToFile( Q3CONFIG_CFG );
 
-#ifndef DEDICATED
+#if !defined(DEDICATED) && !defined(STANDALONE)
 	gamedir = FS_GetCurrentGameDir();
 	basegame = FS_GetBaseGameDir();
 	if ( UI_usesUniqueCDKey() && gamedir[0] && Q_stricmp( basegame, gamedir ) ) {

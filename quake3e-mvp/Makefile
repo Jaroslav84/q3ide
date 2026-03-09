@@ -37,7 +37,7 @@ USE_SYSTEM_VORBIS = 0
 
 USE_VULKAN       = 1
 USE_OPENGL       = 1
-USE_OPENGL2      = 0
+USE_OPENGL2      = 1
 USE_OPENGL_API   = 1
 USE_VULKAN_API   = 1
 USE_RENDERER_DLOPEN = 1
@@ -304,7 +304,7 @@ ifeq ($(ARCH),ppc64)
   HAVE_VM_COMPILED = true
 endif
 
-BASE_CFLAGS =
+BASE_CFLAGS = -DSTANDALONE
 
 ifeq ($(USE_SYSTEM_JPEG),1)
   BASE_CFLAGS += -DUSE_SYSTEM_JPEG
@@ -487,6 +487,7 @@ ifeq ($(COMPILE_PLATFORM),darwin)
   BASE_CFLAGS += -Wno-unused-result
 
   BASE_CFLAGS += -DMACOS_X
+  BASE_CFLAGS += -DUSE_ICON
   USE_Q3IDE=1
   BASE_CFLAGS += -DUSE_Q3IDE
 
@@ -787,7 +788,8 @@ endif
 makedirs:
 	@if [ ! -d $(BUILD_DIR) ];then $(MKDIR) $(BUILD_DIR);fi
 	@if [ ! -d $(B) ];then $(MKDIR) $(B);fi
-	@if [ ! -d $(B)/client ];then $(MKDIR) $(B)/client/qvm;fi
+	@if [ ! -d $(B)/client ];then $(MKDIR) $(B)/client;fi
+	@if [ ! -d $(B)/client/qvm ];then $(MKDIR) $(B)/client/qvm;fi
 	@if [ ! -d $(B)/client/jpeg ];then $(MKDIR) $(B)/client/jpeg;fi
 ifeq ($(USE_SYSTEM_OGG),0)
 	@if [ ! -d $(B)/client/ogg ];then $(MKDIR) $(B)/client/ogg;fi
@@ -800,7 +802,8 @@ endif
 	@if [ ! -d $(B)/rend2/glsl ];then $(MKDIR) $(B)/rend2/glsl;fi
 	@if [ ! -d $(B)/rendv ];then $(MKDIR) $(B)/rendv;fi
 ifneq ($(BUILD_SERVER),0)
-	@if [ ! -d $(B)/ded ];then $(MKDIR) $(B)/ded/qvm;fi
+	@if [ ! -d $(B)/ded ];then $(MKDIR) $(B)/ded;fi
+	@if [ ! -d $(B)/ded/qvm ];then $(MKDIR) $(B)/ded/qvm;fi
 endif
 
 #############################################################################
@@ -1136,10 +1139,43 @@ Q3OBJ = \
 
 ifdef USE_Q3IDE
 Q3OBJ += \
-  $(B)/client/q3ide_hooks.o \
+  $(B)/client/q3ide_portal.o \
+  $(B)/client/q3ide_console.o \
+  $(B)/client/q3ide_engine.o \
+  $(B)/client/q3ide_frame.o \
+  $(B)/client/q3ide_hooks_input.o \
+  $(B)/client/q3ide_hooks_grapple.o \
   $(B)/client/q3ide_wm.o \
+  $(B)/client/q3ide_mirror.o \
+  $(B)/client/q3ide_scene.o \
+  $(B)/client/q3ide_poll.o \
   $(B)/client/q3ide_cmd.o \
-  $(B)/client/q3ide_render.o
+  $(B)/client/q3ide_cmd_attach.o \
+  $(B)/client/q3ide_cmd_reflow.o \
+  $(B)/client/q3ide_cmd_query.o \
+  $(B)/client/q3ide_render.o \
+  $(B)/client/q3ide_interaction.o \
+  $(B)/client/q3ide_interaction_frame.o \
+  $(B)/client/q3ide_distance.o \
+  $(B)/client/q3ide_geom.o \
+  $(B)/client/q3ide_geom_clamp.o \
+  $(B)/client/q3ide_log.o \
+  $(B)/client/q3ide_overlay.o \
+  $(B)/client/q3ide_aas.o \
+  $(B)/client/q3ide_aas_query.o \
+  $(B)/client/q3ide_aas_face.o \
+  $(B)/client/q3ide_aas_walls.o \
+  $(B)/client/q3ide_placement.o \
+  $(B)/client/q3ide_wall_measure.o \
+  $(B)/client/q3ide_room_scan.o \
+  $(B)/client/q3ide_wall_score.o \
+  $(B)/client/q3ide_room_layout.o \
+  $(B)/client/q3ide_entity.o \
+  $(B)/client/q3ide_laser.o \
+  $(B)/client/q3ide_rope.o \
+  $(B)/client/q3ide_effects.o \
+  $(B)/client/q3ide_teleport.o \
+  $(B)/client/q3ide_spawn.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1442,18 +1478,120 @@ $(B)/client/vorbis/%.o: $(VORBISDIR)/lib/%.c
 $(B)/client/%.o: $(SDLDIR)/%.c
 	$(DO_CC)
 
-$(B)/client/q3ide_hooks.o: $(Q3IDEDIR)/q3ide_hooks.c
+$(B)/client/q3ide_portal.o: $(Q3IDEDIR)/q3ide_portal.c
+	$(DO_CC)
+
+$(B)/client/q3ide_console.o: $(Q3IDEDIR)/q3ide_console.c
+	$(DO_CC)
+
+$(B)/client/q3ide_engine.o: $(Q3IDEDIR)/q3ide_engine.c
+	$(DO_CC)
+
+$(B)/client/q3ide_frame.o: $(Q3IDEDIR)/q3ide_frame.c
+	$(DO_CC)
+
+$(B)/client/q3ide_hooks_input.o: $(Q3IDEDIR)/q3ide_hooks_input.c
+	$(DO_CC)
+
+$(B)/client/q3ide_hooks_grapple.o: $(Q3IDEDIR)/q3ide_hooks_grapple.c
 	$(DO_CC)
 
 $(B)/client/q3ide_wm.o: $(Q3IDEDIR)/q3ide_wm.c
 	$(DO_CC)
 
+$(B)/client/q3ide_mirror.o: $(Q3IDEDIR)/q3ide_mirror.c
+	$(DO_CC)
+
+$(B)/client/q3ide_scene.o: $(Q3IDEDIR)/q3ide_scene.c
+	$(DO_CC)
+
+$(B)/client/q3ide_poll.o: $(Q3IDEDIR)/q3ide_poll.c
+	$(DO_CC)
+
 $(B)/client/q3ide_cmd.o: $(Q3IDEDIR)/q3ide_cmd.c
 	$(DO_CC)
 
+$(B)/client/q3ide_cmd_attach.o: $(Q3IDEDIR)/q3ide_cmd_attach.c
+	$(DO_CC)
+
+$(B)/client/q3ide_cmd_reflow.o: $(Q3IDEDIR)/q3ide_cmd_reflow.c
+	$(DO_CC)
+
+$(B)/client/q3ide_cmd_query.o: $(Q3IDEDIR)/q3ide_cmd_query.c
+	$(DO_CC)
+
+$(B)/client/q3ide_interaction.o: $(Q3IDEDIR)/q3ide_interaction.c
+	$(DO_CC)
+
+$(B)/client/q3ide_interaction_frame.o: $(Q3IDEDIR)/q3ide_interaction_frame.c
+	$(DO_CC)
+
+$(B)/client/q3ide_distance.o: $(Q3IDEDIR)/q3ide_distance.c
+	$(DO_CC)
+
+$(B)/client/q3ide_geom.o: $(Q3IDEDIR)/q3ide_geom.c
+	$(DO_CC)
+
+$(B)/client/q3ide_geom_clamp.o: $(Q3IDEDIR)/q3ide_geom_clamp.c
+	$(DO_CC)
+
+$(B)/client/q3ide_log.o: $(Q3IDEDIR)/q3ide_log.c
+	$(DO_CC)
 
 $(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c
 	$(DO_CC)
+
+$(B)/client/q3ide_overlay.o: $(Q3IDEDIR)/q3ide_overlay.c
+	$(DO_CC)
+
+$(B)/client/q3ide_aas.o: $(Q3IDEDIR)/q3ide_aas.c
+	$(DO_CC)
+
+$(B)/client/q3ide_aas_query.o: $(Q3IDEDIR)/q3ide_aas_query.c
+	$(DO_CC)
+
+$(B)/client/q3ide_aas_face.o: $(Q3IDEDIR)/q3ide_aas_face.c
+	$(DO_CC)
+
+$(B)/client/q3ide_aas_walls.o: $(Q3IDEDIR)/q3ide_aas_walls.c
+	$(DO_CC)
+
+$(B)/client/q3ide_placement.o: $(Q3IDEDIR)/q3ide_placement.c
+	$(DO_CC)
+
+$(B)/client/q3ide_wall_measure.o: $(Q3IDEDIR)/q3ide_wall_measure.c
+	$(DO_CC)
+
+$(B)/client/q3ide_room_scan.o: $(Q3IDEDIR)/q3ide_room_scan.c
+	$(DO_CC)
+
+$(B)/client/q3ide_layout_place.o: $(Q3IDEDIR)/q3ide_layout_place.c
+	$(DO_CC)
+
+$(B)/client/q3ide_wall_score.o: $(Q3IDEDIR)/q3ide_wall_score.c
+	$(DO_CC)
+
+$(B)/client/q3ide_room_layout.o: $(Q3IDEDIR)/q3ide_room_layout.c
+	$(DO_CC)
+
+$(B)/client/q3ide_entity.o: $(Q3IDEDIR)/q3ide_entity.c
+	$(DO_CC)
+
+$(B)/client/q3ide_laser.o: $(Q3IDEDIR)/q3ide_laser.c
+	$(DO_CC)
+
+$(B)/client/q3ide_rope.o: $(Q3IDEDIR)/q3ide_rope.c
+	$(DO_CC)
+
+$(B)/client/q3ide_effects.o: $(Q3IDEDIR)/q3ide_effects.c
+	$(DO_CC)
+
+$(B)/client/q3ide_teleport.o: $(Q3IDEDIR)/q3ide_teleport.c
+	$(DO_CC)
+
+$(B)/client/q3ide_spawn.o: $(Q3IDEDIR)/q3ide_spawn.c
+	$(DO_CC)
+
 $(B)/rend1/%.o: $(R1DIR)/%.c
 	$(DO_REND_CC)
 
