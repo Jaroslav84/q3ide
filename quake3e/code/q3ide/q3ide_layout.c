@@ -53,21 +53,26 @@ static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_
 	start[2] = contact[2] + normal[2] * Q3IDE_WALL_OFFSET;
 
 	/* Width: find the continuous wall span in ±right.
-	 * Step outward and back-trace each position; stop at the first gap. */
+	 * Step outward; stop when LOS from start is blocked (corner) or wall gap found. */
 	{
 		const float step_sz = 16.0f;
 		const float max_reach = 512.0f;
 		float d, back_end[3];
-		trace_t btr;
+		trace_t btr, los;
 
 		right_dist = 0.0f;
 		for (d = step_sz; d <= max_reach; d += step_sz) {
-			back_end[0] = start[0] + wall->right[0] * d - wall->normal[0] * 24.0f;
-			back_end[1] = start[1] + wall->right[1] * d - wall->normal[1] * 24.0f;
-			back_end[2] = start[2];
 			end[0] = start[0] + wall->right[0] * d;
 			end[1] = start[1] + wall->right[1] * d;
 			end[2] = start[2];
+			/* Stop if a corner blocks LOS from the contact point */
+			CM_BoxTrace(&los, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+			if (los.fraction < 0.95f)
+				break;
+			/* Stop if there is no wall behind this position */
+			back_end[0] = end[0] - wall->normal[0] * 24.0f;
+			back_end[1] = end[1] - wall->normal[1] * 24.0f;
+			back_end[2] = end[2];
 			CM_BoxTrace(&btr, end, back_end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 			if (btr.fraction >= 1.0f)
 				break;
@@ -76,12 +81,15 @@ static void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_
 
 		left_dist = 0.0f;
 		for (d = step_sz; d <= max_reach; d += step_sz) {
-			back_end[0] = start[0] - wall->right[0] * d - wall->normal[0] * 24.0f;
-			back_end[1] = start[1] - wall->right[1] * d - wall->normal[1] * 24.0f;
-			back_end[2] = start[2];
 			end[0] = start[0] - wall->right[0] * d;
 			end[1] = start[1] - wall->right[1] * d;
 			end[2] = start[2];
+			CM_BoxTrace(&los, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+			if (los.fraction < 0.95f)
+				break;
+			back_end[0] = end[0] - wall->normal[0] * 24.0f;
+			back_end[1] = end[1] - wall->normal[1] * 24.0f;
+			back_end[2] = end[2];
 			CM_BoxTrace(&btr, end, back_end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 			if (btr.fraction >= 1.0f)
 				break;
@@ -216,30 +224,16 @@ int q3ide_room_layout(const q3ide_room_t *room, unsigned int *ids, float *aspect
 	 * Walls that can't fit even one 70u-tall TV are skipped. */
 	{
 		const float margin = 24.0f, gap = 16.0f;
-		const float min_tv_h = 70.0f;
 		float remaining[Q3IDE_LAYOUT_MAX_WALLS];
 		int max_slots[Q3IDE_LAYOUT_MAX_WALLS];
 
 		for (wi = 0; wi < sorted_room.n; wi++) {
-			const q3ide_wall_t *wall = &sorted_room.walls[wi];
-			float wall_h = wall->ceil_z - wall->floor_z;
-			float tv_h_nom = wall_h * 0.85f;
-			float tv_w_nom;
-			float slot, usable;
-			if (tv_h_nom < min_tv_h)
-				tv_h_nom = min_tv_h;
-			tv_w_nom = tv_h_nom * 1.78f; /* 16:9 nominal */
-			slot = tv_w_nom + gap;
-			usable = wall->width - 2.0f * margin;
+			float usable = sorted_room.walls[wi].width - 2.0f * margin;
 			remaining[wi] = usable;
-			/* Skip wall if even one TV at min size won't fit */
-			if (usable < min_tv_h * 1.78f) {
-				max_slots[wi] = 0;
-			} else {
-				max_slots[wi] = (slot > 0.0f) ? (int) (usable / slot) : 0;
-				if (max_slots[wi] < 1)
-					max_slots[wi] = 1;
-			}
+			/* Minimum slot: 48u wide + gap. Always at least 1 per wall. */
+			max_slots[wi] = (usable > 0.0f) ? (int) (usable / (48.0f + gap)) : 0;
+			if (max_slots[wi] < 1)
+				max_slots[wi] = 1;
 		}
 
 		for (i = 0; i < n; i++) {

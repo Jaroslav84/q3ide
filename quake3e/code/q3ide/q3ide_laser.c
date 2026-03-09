@@ -17,7 +17,7 @@
 #include <math.h>
 #include <string.h>
 
-#define LASER_HALF_W 0.5f /* half-width of laser ribbon (world units) */
+#define LASER_HALF_W 0.1f /* half-width of laser ribbon (world units) */
 
 static qhandle_t g_laser_shader;
 

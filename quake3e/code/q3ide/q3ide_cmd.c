@@ -146,19 +146,14 @@ void Q3IDE_WM_CmdAttach(void)
 			Com_Printf("q3ide: no walls found — placing floating\n");
 		}
 
-		/* Float any items the wall layout couldn't fit ergonomically.
-		 * Each overflow window fans out at increasing angles around the player. */
+		/* Float exactly 1 overflow window directly in front of the player.
+		 * Wall layout takes priority — only the first unattached item floats. */
 		if (n_wall_placed < item_n) {
-			float base_yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
-			int float_n = 0;
+			float yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+			vec3_t pos, norm;
 			for (i = 0; i < item_n; i++) {
-				float yaw, fy;
-				vec3_t pos, norm;
 				if (q3ide_is_attached(items[i].id))
-					continue; /* already on a wall */
-				/* Spread overflow: 0°, ±45°, ±90°, ±135°, 180° from forward */
-				fy = base_yaw + (float) (((float_n & 1) ? 1 : -1) * ((float_n + 1) / 2)) * (float) M_PI / 4.0f;
-				yaw = fy;
+					continue;
 				pos[0] = eye[0] + cosf(yaw) * 220.0f;
 				pos[1] = eye[1] + sinf(yaw) * 220.0f;
 				pos[2] = eye[2];
@@ -166,9 +161,8 @@ void Q3IDE_WM_CmdAttach(void)
 				norm[1] = -sinf(yaw);
 				norm[2] = 0.0f;
 				Q3IDE_WM_Attach(items[i].id, pos, norm, 160.0f, 90.0f, qtrue, qfalse);
-				Com_Printf("q3ide: float[%d] id=%u at angle=%.0f\n", float_n, items[i].id,
-				           fy * 180.0f / (float) M_PI);
-				float_n++;
+				Com_Printf("q3ide: float id=%u in front\n", items[i].id);
+				break; /* only 1 floating window */
 			}
 		}
 
