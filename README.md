@@ -69,35 +69,123 @@ See [`plan/00-VISION.md`](./plan/00-VISION.md) for full roadmap.
 ---
 
 
-## Run
-Add quake pack files into `/.baseq3` and then
-```
-./scripts/build.sh
+## Quick Start
+
+Add Quake 3 pack files into `/baseq3/` then:
+
+```bash
+sh ./scripts/build.sh --run --level 0 --execute 'q3ide attach all'
 ```
 
-## Run with flags 
+---
+
+## `build.sh` Options
+
 ```
-./scripts/build.sh --run --level 0 --execute 'q3ide attach all'
+sh ./scripts/build.sh [options]
 ```
 
-Big up if u port this to Linux or Windblows. Nah scratch that, Linux only!
+| Flag | Description |
+|------|-------------|
+| `--run` | Launch the game after a successful build |
+| `--clean` | Run `make clean` before building (full rebuild) |
+| `--engine-only` | Skip Rust dylib build — only recompile the engine (faster iteration). **Never combine with `--clean`** — clean deletes the dylib and engine-only won't copy it back. |
+| `--api` | Start the Remote API server (`scripts/remote_api.py`) in the background before launching |
+| `--level <map>` | Map to load. Shorthand: `0`→`q3dm0`, `7`→`q3dm7`, or full name like `q3dm17`. Default: whatever is in `autoexec.cfg` |
+| `--execute '<cmd>'` | Console command(s) to run after the map loads (~60 frames after spawn). Supports semicolons: `'q3ide attach all; set cg_drawFPS 1'` |
+| `--bots <n>` | Add N bots to the game (sets `bot_minplayers` to N+1) |
+| `--music` | Enable random background music track on q3dm0 |
 
-## Manual build
+### Examples
+
+```bash
+# Full build + run on q3dm0, attach all macOS windows to walls
+sh ./scripts/build.sh --run --level 0 --execute 'q3ide attach all'
+
+# Engine-only rebuild (skip Rust, fast) + run
+sh ./scripts/build.sh --engine-only --run
+
+# Clean full rebuild
+sh ./scripts/build.sh --clean --run --level 7
+
+# Build + start API + run with bots
+sh ./scripts/build.sh --run --api --level 0 --bots 3
+
+# Mirror macOS displays into the 3 game monitors
+sh ./scripts/build.sh --run --level 0 --execute 'q3ide desktop'
+```
+
+---
+
+## Remote API (`scripts/remote_api.py`)
+
+Run on macOS: `python3 scripts/remote_api.py` (or use `--api` flag above).
+
+Agents / Claude Code call it from Docker at `http://host.docker.internal:6666`.
+
+### Endpoints
+
+| Method | Path | Body / Params | Description |
+|--------|------|---------------|-------------|
+| `POST` | `/build` | `{"args": [...]}` | Queue a build. Same flags as `build.sh` (e.g. `["--engine-only"]`) |
+| `GET` | `/build/status` | — | Current build status + queue depth |
+| `GET` | `/queue` | — | Full build queue (pending + history) |
+| `DELETE`| `/queue` | — | Cancel pending builds + kill running build |
+| `POST` | `/run` | `{"args": [...]}` | Launch the game. Optional `build.sh` args. Kills any running instance first (lock-protected — never spawns two). |
+| `POST` | `/stop` | — | Kill the running game process |
+| `POST` | `/kill` | — | Alias for `/stop` |
+| `GET` | `/status` | — | Game running state, PID, uptime |
+| `POST` | `/console` | `{"cmd": "..."}` | Send RCON command, returns response |
+| `GET` | `/logs` | `?file=engine&n=100` | Tail log file. `file`: `engine`, `q3ide`, `capture`, `build`, `multimon` |
+| `GET` | `/events` | — | Last 100 structured events (JSON lines) |
+| `POST` | `/lint` | — | Run `scripts/lint.sh`, returns output |
+| `GET` | `/lint` | — | Same |
+| `WebSocket` | `/ws` | `?logs=engine,q3ide` | Stream log lines + status heartbeat (5s). Send `{"cmd":"..."}` for RCON. Receives `game_stopped` event when game exits. |
+
+### Examples
+
+```bash
+# Build engine only
+curl -X POST http://localhost:6666/build -H "Content-Type: application/json" \
+  -d '{"args":["--engine-only"]}'
+
+# Launch game on q3dm7 with 2 bots
+curl -X POST http://localhost:6666/run -H "Content-Type: application/json" \
+  -d '{"args":["--level","7","--bots","2"]}'
+
+# Run RCON command
+curl -X POST http://localhost:6666/console -H "Content-Type: application/json" \
+  -d '{"cmd":"q3ide status"}'
+
+# Tail last 50 lines of game log
+curl "http://localhost:6666/logs?file=engine&n=50"
+
+# Kill the game
+curl -X POST http://localhost:6666/stop
+```
+
+---
+
+## In-Game Console Commands
+
+Open with `~`. Single `q3ide` dispatcher:
+
+| Command | Description |
+|---------|-------------|
+| `q3ide list` | List all capturable macOS windows |
+| `q3ide attach all` | Attach iTerm2 / Terminal / browser windows to walls |
+| `q3ide desktop` | Mirror each macOS display onto its corresponding game monitor |
+| `q3ide detach` | Detach all windows |
+| `q3ide status` | Show active windows, capture status, dylib info |
+| `q3ide snap` | Snap mirror portal into the q3dm0 teleporter arch |
+
+---
+
+## Manual Build
 
 ```bash
 cd capture && cargo build --release    # Rust capture dylib
 cd quake3e && make ARCH=x86_64         # or arm64
-```
-
-## Console Commands
-
-Single `q3ide` dispatcher (type in game console with `~`):
-
-```
-q3ide list           - list capturable windows
-q3ide attach <name>  - attach window to nearest wall
-q3ide detach         - detach all windows
-q3ide status         - show active windows + dylib status
 ```
 
 ## Platform Requirements

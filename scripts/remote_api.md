@@ -134,10 +134,10 @@ print(f"Attached {e['attached']}/{e['total']} windows")
 
 ```python
 # Tail last N lines of a log
-api('GET', '/logs?file=q3ide&n=50')   # q3ide structured log (levelled, timestamped)
-api('GET', '/logs?file=engine&n=100') # raw engine log
-api('GET', '/logs?file=build&n=40')   # build output
-api('GET', '/logs?file=capture&n=50') # Rust capture dylib log
+api('GET', '/logs?file=q3ide&n=400')   # q3ide structured log (levelled, timestamped)
+api('GET', '/logs?file=engine&n=400') # raw engine log
+api('GET', '/logs?file=build&n=400')  # build output
+api('GET', '/logs?file=capture&n=400') # Rust capture dylib log
 ```
 
 Log file aliases: `engine`, `multimon`, `capture`, `build`, `q3ide`
@@ -208,11 +208,11 @@ curl -s -X POST http://$HOST:6666/console \
   -d '{"cmd":"q3ide status"}'
 
 # Tail log (last 50 lines)
-curl -s 'http://$HOST:6666/logs?file=q3ide&n=50'
-curl -s 'http://$HOST:6666/logs?file=engine&n=50'
+curl -s 'http://$HOST:6666/logs?file=q3ide&n=400'
+curl -s 'http://$HOST:6666/logs?file=engine&n=400'
 
 # Recent events
-curl -s 'http://$HOST:6666/events?n=50'
+curl -s 'http://$HOST:6666/events?n=400'
 curl -s 'http://$HOST:6666/events?type=attach_done'
 ```
 

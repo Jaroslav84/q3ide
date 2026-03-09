@@ -10,18 +10,22 @@
 #include "q3ide_hooks.h"
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
+#include "q3ide_interaction.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
+#include <string.h>
 
-/* Character cell — small and slick */
-#define OVL_CW 5.0f     /* char width  */
-#define OVL_CH 7.0f     /* char height */
-#define OVL_LH 9.5f     /* line pitch  */
-#define OVL_GAP 8.0f    /* gap between key col and label col */
-#define OVL_KEY_W 20.0f /* fixed key column width (4 chars * OVL_CW) */
+/* Character cell — sized for OVL_DIST units from camera at 90° FOV.
+ * Rule: apparent_px = OVL_CW / OVL_DIST * screen_half_px.
+ * At D=10, OVL_CW=0.35 → ~33px per char on 1920px. */
+#define OVL_CW 0.14f    /* char width  */
+#define OVL_CH 0.20f    /* char height */
+#define OVL_LH 0.30f    /* line pitch  */
+#define OVL_GAP 0.22f   /* gap between key col and label col */
+#define OVL_KEY_W 0.56f /* fixed key column (4 chars * OVL_CW) */
 
-/* Panel distance from camera */
-#define OVL_DIST 300.0f
+/* Very close to camera so polys are always in front of walls */
+#define OVL_DIST 10.0f
 
 static qhandle_t g_ovl_chars;
 
@@ -84,9 +88,9 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 	/* viewaxis[1] = LEFT in Q3; negate → right. viewaxis[2] = up. */
 	float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
 	float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
-	/* Far top-left: push left ~80% of 90° half-FOV, lift ~40% */
-	float right_off = -OVL_DIST * 0.80f;
-	float up_off = OVL_DIST * 0.40f;
+	/* Far top-left: push left ~78% of 90° half-FOV, lift ~38% */
+	float right_off = -OVL_DIST * 0.78f;
+	float up_off = OVL_DIST * 0.38f;
 	float ox, oy, oz;
 	int i;
 
@@ -129,6 +133,34 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 				float labz = lz + rx[2] * (OVL_KEY_W + OVL_GAP);
 				q3ide_ovl_str(labx, laby, labz, rx, ux, entries[i].label, 95, 95, 95);
 			}
+		}
+	}
+
+	/* Hover label: show hovered window/entity name at top-right of left monitor */
+	{
+		const char *lbl = NULL;
+		int fw = q3ide_interaction.focused_win;
+		if (fw >= 0 && fw < Q3IDE_MAX_WIN && q3ide_wm.wins[fw].active && q3ide_wm.wins[fw].label[0])
+			lbl = q3ide_wm.wins[fw].label;
+		else if (q3ide_interaction.hovered_entity_name[0])
+			lbl = q3ide_interaction.hovered_entity_name;
+		if (lbl) {
+			int len = (int) strlen(lbl);
+			float r2 = OVL_DIST * 0.78f;
+			float hx =
+			    fd->vieworg[0] + fd->viewaxis[0][0] * OVL_DIST - fd->viewaxis[1][0] * r2 + fd->viewaxis[2][0] * up_off;
+			float hy =
+			    fd->vieworg[1] + fd->viewaxis[0][1] * OVL_DIST - fd->viewaxis[1][1] * r2 + fd->viewaxis[2][1] * up_off;
+			float hz =
+			    fd->vieworg[2] + fd->viewaxis[0][2] * OVL_DIST - fd->viewaxis[1][2] * r2 + fd->viewaxis[2][2] * up_off;
+			hx -= rx[0] * OVL_CW * len;
+			hy -= rx[1] * OVL_CW * len;
+			hz -= rx[2] * OVL_CW * len;
+			/* amber for game entities, warm white for windows */
+			if (q3ide_interaction.hovered_entity_name[0] && lbl == q3ide_interaction.hovered_entity_name)
+				q3ide_ovl_str(hx, hy, hz, rx, ux, lbl, 255, 220, 80);
+			else
+				q3ide_ovl_str(hx, hy, hz, rx, ux, lbl, 220, 200, 120);
 		}
 	}
 }

@@ -71,7 +71,7 @@ _Q3_MUSIC_TRACKS = [
 ]
 
 def _build_engine_args(args):
-    """Convert API args list (['--level','0','--music','--execute','q3ide attach all']) to engine args."""
+    """Convert API args list (['--level','0','--music','--execute','q3ide attach all; give grappling hook; weapon 10']) to engine args."""
     import random
     engine_args = []
     level = None
@@ -84,7 +84,7 @@ def _build_engine_args(args):
             level = str(args[i + 1])
             if level.isdigit() or (len(level) <= 2 and level.lstrip('-').isdigit()):
                 level = f'q3dm{level}'
-            engine_args += ['+map', level]
+            engine_args += ['+devmap', level]
             i += 2
         elif a == '--bots' and i + 1 < len(args):
             bots = int(args[i + 1])
@@ -121,14 +121,32 @@ LOG_ALIASES = {
     "capture": LOG_DIR / "q3ide_capture.log",
     "build":   LOG_DIR / "build.log",
     "q3ide":   LOG_DIR / "q3ide.log",
+    # Q3 in-game console log (set logfile 2 in autoexec.cfg)
+    "console": Path.home() / "Library" / "Application Support" / "Quake3e" / "baseq3" / "qconsole.log",
 }
 EVENTS_LOG = LOG_DIR / "q3ide_events.jsonl"
 
 _game_proc = None
 _game_start = None
 _build_proc = None
+_run_lock = threading.Lock()
 _build_start = None
 _build_timeout = 120  # seconds; set per-build based on --clean
+
+# ── websocket broadcast registry ──────────────────────────────────────────────
+_ws_clients = []          # list of send(obj) callables, one per active WS session
+_ws_clients_lock = threading.Lock()
+
+
+def _ws_broadcast(obj):
+    """Send obj to all connected WebSocket clients."""
+    with _ws_clients_lock:
+        targets = list(_ws_clients)
+    for send_fn in targets:
+        try:
+            send_fn(obj)
+        except Exception:
+            pass
 
 # ── build queue ───────────────────────────────────────────────────────────────
 # Each entry: {id, agent_id, args, run_args, auto_run, queued_at,
@@ -272,17 +290,26 @@ def _do_run(args=None, agent_id=''):
     """Launch the game binary. Returns dict with ok/pid/error."""
     global _game_proc, _game_start
     if args is None:
-        args = ['--level', '0', '--execute', 'q3ide attach all']
-    if _game_running():
-        _kill_game()
-        time.sleep(1)
-    binary, build_dir = _q3_binary()
+        args = ['--level', '0', '--execute', 'q3ide attach all; give grappling hook; weapon 10']
+    with _run_lock:
+        if _game_running():
+            _kill_game()
+            time.sleep(1)
+        return _do_run_locked(args, agent_id, _q3_binary())
+
+
+def _do_run_locked(args, agent_id, binary_info):
+    """Inner launch — called only while _run_lock is held."""
+    global _game_proc, _game_start
+    binary, build_dir = binary_info
     if binary is None:
         return {'ok': False, 'error': 'quake3e binary not found — build first'}
     engine_args = _build_engine_args(args)
     # Disable tty console to prevent backspace/cursor noise in logs
     if '+set' not in ' '.join(engine_args) or 'ttycon' not in ' '.join(engine_args):
         engine_args = ['+set', 'ttycon', '0'] + engine_args
+    # Prepend before map loads: native VM (loads our patched qagame dylib), cheats + grapple
+    engine_args = ['+set', 'vm_game', '0', '+set', 'sv_cheats', '1', '+set', 'g_grapple', '1'] + engine_args
     cmd = [str(binary)] + engine_args
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     engine_log = LOG_DIR / 'engine.log'
@@ -300,7 +327,9 @@ def _do_run(args=None, agent_id=''):
                                       cwd=str(build_dir))
         _game_start = time.time()
         PID_FILE.write_text(str(_game_proc.pid))
-        threading.Thread(target=_tee_output, args=(_game_proc, log_fh, '[game] '),
+        threading.Thread(target=_tee_output,
+                         args=(_game_proc, log_fh, '[game] '),
+                         kwargs={'on_exit': lambda: _on_game_exit(agent_id)},
                          daemon=True).start()
         return {'ok': True, 'pid': _game_proc.pid, 'log': str(engine_log)}
     except Exception as e:
@@ -319,7 +348,23 @@ def _strip_ctrl(text):
     return _CTRL_RE.sub('', text)
 
 
-def _tee_output(proc, log_fh, prefix=''):
+def _on_game_exit(agent_id):
+    """Called when game process ends. Clears state and notifies all WS clients."""
+    global _game_proc, _game_start
+    uptime = int(time.time() - _game_start) if _game_start else None
+    _game_proc = None
+    _game_start = None
+    PID_FILE.unlink(missing_ok=True)
+    print(f'[game] stopped  agent={agent_id or "unknown"}  uptime={uptime}s', flush=True)
+    _ws_broadcast({
+        'type': 'game_stopped',
+        'agent_id': agent_id or 'unknown',
+        'uptime_s': uptime,
+        'ts': time.strftime('%Y-%m-%dT%H:%M:%S'),
+    })
+
+
+def _tee_output(proc, log_fh, prefix='', on_exit=None):
     """Read proc stdout/stderr, strip tty noise, write to log_fh and sys.stdout."""
     try:
         for line in proc.stdout:
@@ -334,6 +379,8 @@ def _tee_output(proc, log_fh, prefix=''):
         pass
     finally:
         log_fh.close()
+        if on_exit:
+            on_exit()
 
 
 def _enqueue_build(args, run_args, auto_run, agent_id=''):
@@ -564,29 +611,38 @@ def _run_ws_session(sock, log_names):
     threading.Thread(target=status_loop, daemon=True).start()
 
     # ── recv loop (RCON commands) ─────────────────────────────────────────────
+    with _ws_clients_lock:
+        _ws_clients.append(send)
     send({'type': 'hello', 'logs': log_names, 'rcon_port': RCON_PORT})
-    while alive[0]:
-        data = _ws_recv(sock)
-        if data is None:
-            break
-        try:
-            msg = json.loads(data)
-        except json.JSONDecodeError:
-            continue
-        cmd = msg.get('cmd', '').strip()
-        if cmd:
-            if not _game_running():
-                send({'type': 'rcon', 'cmd': cmd, 'error': 'game not running'})
-            else:
-                resp = _send_rcon(cmd)
-                send({'type': 'rcon', 'cmd': cmd,
-                      'response': resp, 'ok': resp is not None})
-
-    alive[0] = False
     try:
-        sock.close()
-    except OSError:
-        pass
+        while alive[0]:
+            data = _ws_recv(sock)
+            if data is None:
+                break
+            try:
+                msg = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+            cmd = msg.get('cmd', '').strip()
+            if cmd:
+                if not _game_running():
+                    send({'type': 'rcon', 'cmd': cmd, 'error': 'game not running'})
+                else:
+                    resp = _send_rcon(cmd)
+                    send({'type': 'rcon', 'cmd': cmd,
+                          'response': resp, 'ok': resp is not None})
+
+    finally:
+        alive[0] = False
+        with _ws_clients_lock:
+            try:
+                _ws_clients.remove(send)
+            except ValueError:
+                pass
+        try:
+            sock.close()
+        except OSError:
+            pass
 
 
 # ── HTTP request handler ──────────────────────────────────────────────────────
@@ -752,6 +808,8 @@ class Handler(BaseHTTPRequestHandler):
             queue_result = _clear_queue()
             print(f'[api] kill: game={game_killed} {queue_result}', flush=True)
             self._send(200, {'ok': True, 'game_killed': game_killed, **queue_result})
+        elif path == '/build_game':
+            self._handle_build_game()
         elif path == '/console':
             self._handle_console(body)
         elif path == '/applescript':
@@ -761,7 +819,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_build(self, body):
         args = body.get('args', [])
-        run_args = body.get('run_args', ['--level', '0', '--execute', 'q3ide attach all'])
+        run_args = body.get('run_args', ['--level', '0', '--execute', 'q3ide attach all; give grappling hook; weapon 10'])
         auto_run = body.get('auto_run', True)
         agent_id = body.get('agent_id', '')
         entry = _enqueue_build(args, run_args, auto_run, agent_id)
@@ -852,13 +910,33 @@ class Handler(BaseHTTPRequestHandler):
         return out
 
     def _handle_run(self, body):
-        args = body.get('args', ['--level', '0', '--execute', 'q3ide attach all'])
+        args = body.get('args', ['--level', '0', '--execute', 'q3ide attach all; give grappling hook; weapon 10'])
         agent_id = body.get('agent_id', '')
         result = _do_run(args, agent_id=agent_id)
         if result.get('ok'):
             self._send(200, result)
         else:
             self._send(500, result)
+
+    def _handle_build_game(self):
+        """POST /build_game — build qagame dylib from ioquake3 source with grapple enabled."""
+        script = ROOT / 'scripts' / 'build_game.sh'
+        log_path = LOG_DIR / 'build_game.log'
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        try:
+            with open(log_path, 'w') as lf:
+                result = subprocess.run(
+                    ['sh', str(script)],
+                    stdout=lf, stderr=subprocess.STDOUT,
+                    cwd=str(ROOT), timeout=600
+                )
+            output = _tail_log(log_path, 60) or ''
+            ok = result.returncode == 0
+            self._send(200 if ok else 500, {'ok': ok, 'returncode': result.returncode, 'log': output})
+        except subprocess.TimeoutExpired:
+            self._send(504, {'error': 'build_game timeout (600s)'})
+        except Exception as e:
+            self._send(500, {'error': str(e)})
 
     def _handle_stop(self):
         if not _game_running():

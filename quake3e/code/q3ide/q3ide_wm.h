@@ -27,7 +27,9 @@ void Q3IDE_WM_AddPolys(void);
 
 /* Primitives used by command handlers in q3ide_hooks.c */
 qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out_normal);
-qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start);
+/* skip_clamp=qtrue: layout engine already measured fit; skip q3ide_clamp_window_size */
+qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start,
+                         qboolean skip_clamp);
 
 /*
  * Ray-test all active windows; returns index of closest hit or -1.
@@ -58,12 +60,15 @@ void Q3IDE_WM_PollChanges(void);
 void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz);
 
 /* Standalone mirror portal (real Q3 recursive rendering, no capture needed) */
-void     Q3IDE_WM_PlaceMirror(vec3_t origin, vec3_t normal, float ww, float wh);
-void     Q3IDE_WM_ClearMirror(void);
+void Q3IDE_WM_PlaceMirror(vec3_t origin, vec3_t normal, float ww, float wh);
+void Q3IDE_WM_ClearMirror(void);
 qboolean Q3IDE_WM_MirrorActive(void);
-void     Q3IDE_WM_GetMirrorOrigin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h);
+void Q3IDE_WM_GetMirrorOrigin(vec3_t out_origin, vec3_t out_normal, float *out_w, float *out_h);
 
 /* Update hover state for a specific window (called from interaction system) */
 void Q3IDE_WM_SetHover(int idx, float hover_t);
+
+/* Set the display label for a window (called after attach). */
+void Q3IDE_WM_SetLabel(unsigned int capture_id, const char *label);
 
 #endif /* Q3IDE_WM_H */

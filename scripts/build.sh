@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-# Source cargo if available
+# Source cargo if available (use . for POSIX sh compatibility)
 if [ -f "$HOME/.cargo/env" ]; then
-    source "$HOME/.cargo/env"
+    . "$HOME/.cargo/env"
 fi
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -51,7 +51,16 @@ esac
 
 echo "=== Detected arch: $Q3E_ARCH ==="
 
-# 1. Build the capture dylib (skip with --engine-only)
+# 1. Build qagame with grapple — once, if not already built from source
+# Runs automatically the first time (ioq3/ not cloned yet). Skipped on --engine-only.
+if [ "$DO_ENGINE_ONLY" -eq 0 ] && [ ! -d "$ROOT/ioq3" ]; then
+    echo "=== Building qagame with grapple (first time, ~60s) ==="
+    sh "$ROOT/scripts/build_game.sh"
+else
+    [ -d "$ROOT/ioq3" ] && echo "=== qagame already built (ioq3/ exists) ===" || true
+fi
+
+# 2. Build the capture dylib (skip with --engine-only)
 if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
     echo "=== Building capture dylib ==="
     cd "$ROOT/capture"
@@ -60,7 +69,7 @@ else
     echo "=== Skipping capture dylib (--engine-only) ==="
 fi
 
-# 2. Build the engine
+# 3. Build the engine
 echo "=== Building Quake3e engine ==="
 cd "$ROOT/quake3e"
 if [ "$DO_CLEAN" -eq 1 ]; then
@@ -213,11 +222,15 @@ if [ "$DO_RUN" = "0" ]; then
 fi
 
 if [ "$DO_RUN" = "1" ]; then
+    # Kill any running instance before launching a new one
+    pkill -f "quake3e\." 2>/dev/null && sleep 1 || true
+
     cd "$BUILD_DIR"
     ENGINE_NAME="$(basename "$ENGINE_BIN")"
 
     # Build command args
-    ENGINE_ARGS=""
+    # vm_game 0 = native dylib (loads our patched qagame with grapple at spawn)
+    ENGINE_ARGS="+set vm_game 0"
 
     # --level: override the map
     if [ -n "$LEVEL" ]; then
@@ -225,7 +238,7 @@ if [ "$DO_RUN" = "1" ]; then
         case "$LEVEL" in
             [0-9]|[0-9][0-9]) LEVEL="q3dm${LEVEL}" ;;
         esac
-        ENGINE_ARGS="$ENGINE_ARGS +map $LEVEL"
+        ENGINE_ARGS="$ENGINE_ARGS +devmap $LEVEL"
     fi
 
     # --bots: set minimum player count so engine adds N bots

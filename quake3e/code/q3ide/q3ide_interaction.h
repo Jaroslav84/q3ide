@@ -23,14 +23,15 @@ typedef enum {
 /* Per-frame state (updated by Q3IDE_Interaction_Frame) */
 typedef struct {
 	q3ide_interaction_mode_t mode;
-	int focused_win;         /* wins[] index under crosshair, -1=none */
-	float focused_uv[2];     /* UV coords on focused window */
-	float focused_dist;      /* distance to focused window */
-	vec3_t focused_hit_pos;  /* 3D world position of crosshair hit on window */
-	float dwell_start_ms;    /* when dwell began (-1 = not dwelling) */
-	float hover_t;           /* 0..1 eased hover progress */
-	float pointer_uv[2];     /* current pointer position in UV [0..1] */
-	sfxHandle_t pain_sfx[3]; /* Sarge pain sounds for window hits */
+	int focused_win;              /* wins[] index under crosshair, -1=none */
+	float focused_uv[2];          /* UV coords on focused window */
+	float focused_dist;           /* distance to focused window */
+	vec3_t focused_hit_pos;       /* 3D world position of hit */
+	float dwell_start_ms;         /* when dwell began (-1 = not dwelling) */
+	float hover_t;                /* 0..1 eased hover progress */
+	float pointer_uv[2];          /* current pointer position in UV [0..1] */
+	sfxHandle_t pain_sfx[3];      /* Sarge pain sounds for window hits */
+	char hovered_entity_name[64]; /* name of game entity under crosshair, "" = none */
 } q3ide_interaction_state_t;
 
 #define Q3IDE_DWELL_MS 150.0f          /* ms to activate hover */

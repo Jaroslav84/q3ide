@@ -116,9 +116,12 @@ typedef struct {
 	/* Batch 2: Interaction */
 	int hover_active; /* 1 = crosshair dwelling on this window */
 	float hover_t;    /* 0..1 hover animation progress */
+	char label[128];  /* display name: window title or "Display N" */
 	/* Hit effect: blood splat on window surface */
 	unsigned long long hit_time_ms; /* Sys_Milliseconds() at last bullet impact; 0=none */
 	vec3_t hit_pos;                 /* world position of hit point */
+	/* Layout: wall-mounted windows skip back-face rendering */
+	qboolean wall_mounted; /* qtrue = placed by room layout engine on a wall */
 } q3ide_win_t;
 
 /* ── Global window manager state (defined in q3ide_wm.c) ──────── */
@@ -149,13 +152,13 @@ typedef struct {
 	unsigned int slot_mask; /* bit N = scratch slot N is in use */
 	byte *fbuf;
 	int fbuf_size;
-	qhandle_t border_shader;  /* *white for hover border strips */
-	qhandle_t portal_shader;  /* teleporter energy glow for first mirror */
+	qhandle_t border_shader; /* *white for hover border strips */
+	qhandle_t portal_shader; /* teleporter energy glow for first mirror */
 	/* Standalone Q3 mirror portal (real recursive rendering, no capture) */
-	qboolean  mirror_active;
-	vec3_t    mirror_origin;
-	vec3_t    mirror_normal;
-	float     mirror_w, mirror_h;
+	qboolean mirror_active;
+	vec3_t mirror_origin;
+	vec3_t mirror_normal;
+	float mirror_w, mirror_h;
 	qhandle_t mirror_shader;        /* q3ide/mirror — sort portal */
 	qhandle_t mirror_energy_shader; /* energy glow overlay */
 } q3ide_wm_t;

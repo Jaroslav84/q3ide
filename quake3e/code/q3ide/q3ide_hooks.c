@@ -20,6 +20,10 @@
 #include "../client/client.h"
 #include <math.h>
 
+/* Direct server playerState access — bypasses game module, no sv_cheats required.
+ * SV_GameClientNum returns pointer to game's authoritative playerState_t for client N. */
+extern playerState_t *SV_GameClientNum(int num);
+
 #define Q3IDE_REPOSITION_MS 5000 /* ms to shoot destination after selecting */
 
 /* ============================================================
@@ -37,6 +41,7 @@ static struct {
 	float last_yaw, last_pitch; /* for mouse delta calculation */
 	/* raw button state saved before BUTTON_ATTACK suppression */
 	int raw_buttons;
+	int last_health; /* detect respawn (health 0 → >0) */
 	/* portal teleport */
 	int portal_cooldown; /* frames left after teleport, 0 = ready */
 } q3ide_state;
@@ -46,20 +51,20 @@ static struct {
  * ============================================================ */
 
 /*
- * q3ide_portal_frame — proximity teleport for wins[0] when snapped.
+ * q3ide_portal_frame — walk-through teleport.
  *
- * Fires setviewpos when the player steps within 48 units of the portal
- * plane and is within the portal bounds. Destination set via cvars:
- *   q3ide_tele_x/y/z/yaw  (defaults put you back in the open map area)
- * 3-second cooldown prevents instant re-trigger on arrival.
+ * Fires when player enters the portal's trigger volume (96u deep, portal-sized).
+ * Teleports by directly writing the server-authoritative playerState — bypasses
+ * the game module entirely (no sv_cheats dependency).
+ * EF_TELEPORT_BIT toggle signals cgame to skip position interpolation.
+ * Destination overrideable via cvars: q3ide_tele_x/y/z/yaw.
  */
 static void q3ide_portal_frame(void)
 {
-	vec3_t pos, diff, origin, normal;
+	vec3_t pos, diff, origin, normal, right;
 	float dist, lx, ly, hw, hh, nx, ny, len, ww, wh;
-	vec3_t right;
+	int in_bounds;
 	cvar_t *tx, *ty, *tz, *tyaw;
-	char cmd[128];
 
 	if (!Q3IDE_WM_MirrorActive() || cls.state != CA_ACTIVE)
 		return;
@@ -71,12 +76,11 @@ static void q3ide_portal_frame(void)
 
 	Q3IDE_WM_GetMirrorOrigin(origin, normal, &ww, &wh);
 
-	/* Player feet position */
 	VectorCopy(cl.snap.ps.origin, pos);
 	VectorSubtract(pos, origin, diff);
 	dist = DotProduct(diff, normal);
 
-	/* Compute lateral offset in portal plane */
+	/* Build right vector perpendicular to normal in XY plane */
 	nx = normal[0];
 	ny = normal[1];
 	len = sqrtf(nx * nx + ny * ny);
@@ -89,22 +93,26 @@ static void q3ide_portal_frame(void)
 		right[1] = 0.0f;
 		right[2] = 0.0f;
 	}
-	lx = DotProduct(diff, right);
-	ly = diff[2]; /* up is always Z */
 
+	lx = DotProduct(diff, right);
+	ly = diff[2];
 	hw = ww * 0.5f;
 	hh = wh * 0.5f;
+	/* Fire when player's body intersects the portal face (dist < 24 = player half-width).
+	 * in_bounds uses portal face dimensions so only the energy visual triggers, not the air around it. */
+	in_bounds = (fabsf(lx) < hw && fabsf(ly) < hh + 24.0f);
 
-	/* Trigger: player within 48 units in front of portal, inside bounds */
-	if (dist >= 0.0f && dist < 48.0f && fabsf(lx) < hw && fabsf(ly) < hh + 24.0f) {
-		tx = Cvar_Get("q3ide_tele_x", "-1152", 0);
-		ty = Cvar_Get("q3ide_tele_y", "800", 0);
-		tz = Cvar_Get("q3ide_tele_z", "16", 0);
-		tyaw = Cvar_Get("q3ide_tele_yaw", "270", 0);
-		Com_sprintf(cmd, sizeof(cmd), "setviewpos %.0f %.0f %.0f %.0f\n", tx->value, ty->value, tz->value, tyaw->value);
-		Cbuf_AddText(cmd);
+	if (fabsf(dist) < 24.0f && in_bounds) {
+		char cmd[128];
+		tx   = Cvar_Get("q3ide_tele_x",   "188",  0);
+		ty   = Cvar_Get("q3ide_tele_y",   "-360", 0);
+		tz   = Cvar_Get("q3ide_tele_z",   "20",   0);
+		tyaw = Cvar_Get("q3ide_tele_yaw", "90",   0);
+		Com_sprintf(cmd, sizeof(cmd), "setviewpos %.0f %.0f %.0f %.0f",
+		            tx->value, ty->value, tz->value, tyaw->value);
+		Q3IDE_LOGI("portal FIRE dist=%.1f cmd=[%s]", dist, cmd);
+		CL_AddReliableCommand(cmd, qfalse);
 		q3ide_state.portal_cooldown = 180; /* 3s at 60fps */
-		Com_Printf("q3ide: portal teleport! dest=(%.0f,%.0f,%.0f)\n", tx->value, ty->value, tz->value);
 	}
 }
 
@@ -154,6 +162,94 @@ static void Q3IDE_Cmd_f(void)
 		} else {
 			Com_Printf("  reposition: idle\n");
 		}
+	} else if (!Q_stricmp(sub, "entities")) {
+		/* List BSP entities within 640 units (20m) of current player position */
+		const char *es = CM_EntityString();
+		const char *p = es;
+		const char *tok, *val;
+		vec3_t ppos;
+		char classname[64], model[64];
+		float ox, oy, oz, dx, dy, dz, d;
+		int found = 0, in_ent = 0;
+
+		if (cls.state != CA_ACTIVE) {
+			Com_Printf("q3ide: not in game\n");
+			return;
+		}
+		VectorCopy(cl.snap.ps.origin, ppos);
+		Com_Printf("q3ide: entities within 640u of (%.0f,%.0f,%.0f):\n", ppos[0], ppos[1], ppos[2]);
+		classname[0] = model[0] = '\0';
+		ox = oy = oz = 0.0f;
+
+		while ((tok = COM_ParseExt(&p, qtrue)) != NULL && tok[0]) {
+			if (tok[0] == '{') {
+				in_ent = 1;
+				classname[0] = model[0] = '\0';
+				ox = oy = oz = 0.0f;
+			} else if (tok[0] == '}' && in_ent) {
+				if (classname[0]) {
+					dx = ox - ppos[0];
+					dy = oy - ppos[1];
+					dz = oz - ppos[2];
+					d = sqrtf(dx * dx + dy * dy + dz * dz);
+					if (d < 640.0f) {
+						Com_Printf("  [%.0fu] %-32s (%.0f,%.0f,%.0f)%s%s\n", (int) d, classname, ox, oy, oz,
+						           model[0] ? " " : "", model[0] ? model : "");
+						found++;
+					}
+				}
+				in_ent = 0;
+			} else if (in_ent) {
+				val = COM_ParseExt(&p, qtrue);
+				if (!val || !val[0])
+					break;
+				if (!Q_stricmp(tok, "classname"))
+					Q_strncpyz(classname, val, sizeof(classname));
+				else if (!Q_stricmp(tok, "model"))
+					Q_strncpyz(model, val, sizeof(model));
+				else if (!Q_stricmp(tok, "origin"))
+					sscanf(val, "%f %f %f", &ox, &oy, &oz);
+			}
+		}
+		Com_Printf("q3ide: %d entities found\n", found);
+	} else if (!Q_stricmp(sub, "portal")) {
+		/* Show mirror/portal state and player proximity */
+		if (!Q3IDE_WM_MirrorActive()) {
+			Com_Printf("q3ide portal: NOT ACTIVE (mirror not placed yet)\n");
+		} else {
+			vec3_t origin, normal, pos, diff, right;
+			float ww, wh, dist, lx, ly, nx, ny, len;
+			Q3IDE_WM_GetMirrorOrigin(origin, normal, &ww, &wh);
+			Com_Printf("q3ide portal: origin=(%.0f,%.0f,%.0f) normal=(%.2f,%.2f,%.2f) size=%.0fx%.0f\n", origin[0],
+			           origin[1], origin[2], normal[0], normal[1], normal[2], ww, wh);
+			if (cls.state == CA_ACTIVE) {
+				VectorCopy(cl.snap.ps.origin, pos);
+				VectorSubtract(pos, origin, diff);
+				dist = DotProduct(diff, normal);
+				nx = normal[0];
+				ny = normal[1];
+				len = sqrtf(nx * nx + ny * ny);
+				if (len > 0.01f) {
+					right[0] = -ny / len;
+					right[1] = nx / len;
+					right[2] = 0.0f;
+				} else {
+					right[0] = 1.0f;
+					right[1] = 0.0f;
+					right[2] = 0.0f;
+				}
+				lx = DotProduct(diff, right);
+				ly = diff[2];
+				Com_Printf("  player=(%.0f,%.0f,%.0f) dist=%.1f lx=%.1f ly=%.1f hw=%.0f hh=%.0f\n", pos[0], pos[1],
+				           pos[2], dist, lx, ly, ww * 0.5f, wh * 0.5f);
+				Com_Printf("  in_bounds=%d trigger=%d cooldown=%d\n",
+				           (fabsf(lx) < ww * 0.5f && fabsf(ly) < wh * 0.5f + 24.0f), (fabsf(dist) < 24.0f),
+				           q3ide_state.portal_cooldown);
+			}
+		}
+	} else if (!Q_stricmp(sub, "laser")) {
+		extern qboolean q3ide_laser_active;
+		Com_Printf("q3ide laser: active=%d\n", q3ide_laser_active);
 	} else
 		Com_Printf("q3ide: unknown sub-command '%s'\n", sub);
 }
@@ -270,6 +366,9 @@ void Q3IDE_Init(void)
 void Q3IDE_OnVidRestart(void)
 {
 	Q3IDE_WM_InvalidateShaders();
+	/* Re-arm autoexec so the post-map sequence fires on every level load */
+	q3ide_state.autoexec_done = qfalse;
+	q3ide_state.autoexec_delay = 0;
 }
 
 void Q3IDE_Frame(void)
@@ -280,6 +379,8 @@ void Q3IDE_Frame(void)
 	/* Fire nextdemo + auto-place mirror after map settles (~60 frames) */
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
 		if (++q3ide_state.autoexec_delay > 60) {
+			/* Always give grapple hook on every map load */
+			Cbuf_AddText("give grappling hook\nweapon 10\n");
 			cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
 			if (cmd && cmd->string[0]) {
 				Com_Printf("q3ide: auto: %s\n", cmd->string);
@@ -289,9 +390,9 @@ void Q3IDE_Frame(void)
 			}
 			q3ide_state.autoexec_done = qtrue;
 
-			/* Auto-place mirror 250 units in front of player at spawn */
+			/* Place portal on the wall the player is facing — walk into the glow to teleport */
 			{
-				vec3_t eye, fwd_v, wall_pos, wall_normal;
+				vec3_t eye, fwd_v, right_v, wall_pos, wall_normal;
 				float p, y;
 				VectorCopy(cl.snap.ps.origin, eye);
 				eye[2] += cl.snap.ps.viewheight;
@@ -300,23 +401,28 @@ void Q3IDE_Frame(void)
 				fwd_v[0] = cosf(p) * cosf(y);
 				fwd_v[1] = cosf(p) * sinf(y);
 				fwd_v[2] = -sinf(p);
-				if (Q3IDE_WM_TraceWall(eye, fwd_v, wall_pos, wall_normal)) {
-					/* Place on nearest wall in front */
-					Q3IDE_WM_PlaceMirror(wall_pos, wall_normal, 160.0f, 220.0f);
-					Com_Printf("q3ide: mirror placed on wall at (%.0f,%.0f,%.0f)\n",
-					           wall_pos[0], wall_pos[1], wall_pos[2]);
-				} else {
-					/* Float it 250 units forward */
-					wall_pos[0] = eye[0] + fwd_v[0] * 250.0f;
-					wall_pos[1] = eye[1] + fwd_v[1] * 250.0f;
+				/* Right vector (player's right, XY-plane) */
+				right_v[0] = sinf(y);
+				right_v[1] = -cosf(y);
+				right_v[2] = 0.0f;
+				/* Trace to the wall; if no wall found, float 120u ahead */
+				if (!Q3IDE_WM_TraceWall(eye, fwd_v, wall_pos, wall_normal)) {
+					wall_pos[0] = eye[0] + fwd_v[0] * 120.0f;
+					wall_pos[1] = eye[1] + fwd_v[1] * 120.0f;
 					wall_pos[2] = eye[2];
 					wall_normal[0] = -fwd_v[0];
 					wall_normal[1] = -fwd_v[1];
 					wall_normal[2] = 0.0f;
-					Q3IDE_WM_PlaceMirror(wall_pos, wall_normal, 160.0f, 220.0f);
-					Com_Printf("q3ide: mirror placed floating at (%.0f,%.0f,%.0f)\n",
-					           wall_pos[0], wall_pos[1], wall_pos[2]);
 				}
+				/* Eye height + 4u right + 48u off wall toward player */
+				wall_pos[2] = eye[2];
+				wall_pos[0] += right_v[0] * 4.0f + wall_normal[0] * 48.0f;
+				wall_pos[1] += right_v[1] * 4.0f + wall_normal[1] * 48.0f;
+				/* 72 wide x 131 tall (40cm/16u shorter) */
+				Q3IDE_WM_PlaceMirror(wall_pos, wall_normal, 72.0f, 131.0f);
+				q3ide_state.portal_cooldown = 90; /* 1.5s grace — don't fire at spawn */
+				Q3IDE_LOGI("portal placed on wall at (%.0f,%.0f,%.0f) n=(%.2f,%.2f) size=72x131", wall_pos[0],
+				           wall_pos[1], wall_pos[2], wall_normal[0], wall_normal[1]);
 			}
 		}
 	}
@@ -331,6 +437,14 @@ void Q3IDE_Frame(void)
 		VectorCopy(cl.snap.ps.origin, eye);
 		eye[2] += cl.snap.ps.viewheight;
 		Q3IDE_WM_UpdatePlayerPos(eye[0], eye[1], eye[2]);
+
+		/* Auto-equip grapple on respawn (health 0→>0) */
+		{
+			int hp = cl.snap.ps.stats[STAT_HEALTH];
+			if (hp > 0 && q3ide_state.last_health <= 0)
+				Cbuf_AddText("give grappling hook\nweapon 10\n");
+			q3ide_state.last_health = hp;
+		}
 
 		/* Compute mouse delta from angle changes */
 		cur_yaw = cl.snap.ps.viewangles[YAW];
@@ -361,8 +475,9 @@ void Q3IDE_Frame(void)
 		if (lock_key)
 			Cvar_Set("q3ide_lock", "0");
 
-		/* Update interaction state */
+		/* Update interaction state + entity hover name */
 		Q3IDE_Interaction_Frame(attacking, use_key, escape, lock_key, mouse_dx, mouse_dy);
+		Q3IDE_UpdateEntityHover();
 
 		/* Only call shoot_frame if interaction doesn't consume input.
 		 * shoot_frame() manages last_attack internally.
@@ -400,10 +515,17 @@ void Q3IDE_SaveRawButtons(int buttons)
 	q3ide_state.raw_buttons = buttons;
 }
 
+qboolean q3ide_laser_active = qfalse;
+
 qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 {
 	if (!q3ide_state.initialized)
 		return qfalse;
+	/* K hold = laser beams; never consumed so game still gets the key */
+	if (key == 'k' || key == 'K') {
+		q3ide_laser_active = down;
+		Com_Printf("q3ide: laser %s (key=%d)\n", down ? "ON" : "OFF", key);
+	}
 	return Q3IDE_Interaction_OnKeyEvent(key, down);
 }
 

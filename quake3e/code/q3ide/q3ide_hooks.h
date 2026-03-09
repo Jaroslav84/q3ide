@@ -52,4 +52,11 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr);
  */
 void Q3IDE_DrawLeftOverlay(const void *refdef_ptr);
 
+/* Scan snapshot entities for the one under the crosshair; writes name into
+ * q3ide_interaction.hovered_entity_name ("" when nothing found). */
+void Q3IDE_UpdateEntityHover(void);
+
+/* Draw red laser beams from player eye to all active windows (hold K). */
+void Q3IDE_DrawLasers(const void *refdef_ptr);
+
 #endif /* Q3IDE_HOOKS_H */

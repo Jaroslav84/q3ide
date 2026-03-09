@@ -962,8 +962,10 @@ void RB_SetGL2D( void ) {
 	backEnd.projection2D = qtrue;
 
 #ifdef USE_Q3IDE
-	/* Multi-monitor: constrain 2D rendering to the center screen only. */
-	if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+	/* Multi-monitor: constrain 2D to center screen only when UI/console is NOT active.
+	 * When ESC menu or console is open, use full-screen 2D so menus render correctly. */
+	if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) &&
+	     !ri.Cvar_VariableIntegerValue( "r_mmUIActive" ) ) {
 		int cx = ri.Cvar_VariableIntegerValue( "r_mmCenterX" );
 		int cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
 		int ch = ri.Cvar_VariableIntegerValue( "r_mmCenterH" );
