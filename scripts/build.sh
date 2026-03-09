@@ -89,8 +89,8 @@ if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
     cp "$Q3IDE_BUILD/qagame${ARCH}.dylib" "$ROOT/baseq3/qagame${ARCH}.dylib"
     cp "$Q3IDE_BUILD/qagame${ARCH}.dylib" "$ROOT/baseq3/qagame.dylib"
 
-    # Build ui (accent color #FF34DD)
-    echo "=== Building ui (accent #FF34DD) ==="
+    # Build ui (ui dylib)
+    echo "=== Building ui ==="
     UI_SRC="$IOQ3_DIR/code/q3_ui"
     UI_BUILD="$IOQ3_DIR/build_ui_q3ide"
     mkdir -p "$UI_BUILD"
@@ -219,9 +219,13 @@ echo "  In-game console (~):"
 	echo "    q3ide detach         - detach all windows"
 	echo "    q3ide status         - show active windows"
 	echo ""
-	echo "  Logs:"
-	echo "    $BUILD_DIR/logs/q3ide.log"
-	echo "    $BUILD_DIR/logs/q3ide_capture.log"
+	echo "  Logs (tail via remote API: GET /logs?file=<alias>&n=400):"
+	echo "    q3ide     → logs/q3ide.log           (q3ide structured, levelled)"
+	echo "    engine    → logs/engine.log           (raw Quake3e + q3ide output)"
+	echo "    multimon  → logs/q3ide_multimon.log   (multi-monitor renderer)"
+	echo "    capture   → logs/q3ide_capture.log    (Rust capture dylib)"
+	echo "    build     → logs/build.log            (last build output)"
+	echo "    events    → logs/q3ide_events.jsonl   (structured JSON events)"
 	echo ""
 	echo "  Usage: build.sh [--run] [--api] [--level 0] [--bots 1] [--execute 'q3ide desktop']"
 echo "========================================"
@@ -288,8 +292,12 @@ if [ "$DO_RUN" = "0" ]; then
 fi
 
 if [ "$DO_RUN" = "1" ]; then
-    # Kill any running instance before launching a new one
-    pkill -f "quake3e\." 2>/dev/null && sleep 1 || true
+    # Kill any running quake3e and wait for it to actually exit
+    pkill -f "quake3e\." 2>/dev/null || true
+    for _i in 1 2 3 4 5 6 7 8; do
+        pgrep -f "quake3e\." >/dev/null 2>&1 || break
+        sleep 0.5
+    done
 
     cd "$BUILD_DIR"
     ENGINE_NAME="$(basename "$ENGINE_BIN")"

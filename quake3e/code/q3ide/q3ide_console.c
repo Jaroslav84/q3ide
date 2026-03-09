@@ -67,7 +67,7 @@ void Q3IDE_Cmd_f(void)
 		const char *tok, *val;
 		vec3_t ppos;
 		char classname[64], model[64];
-		float ox, oy, oz, dx, dy, dz, d;
+		float ox, oy, oz;
 		int found = 0, in_ent = 0;
 
 		if (cls.state != CA_ACTIVE) {
@@ -86,10 +86,10 @@ void Q3IDE_Cmd_f(void)
 				ox = oy = oz = 0.0f;
 			} else if (tok[0] == '}' && in_ent) {
 				if (classname[0]) {
-					dx = ox - ppos[0];
-					dy = oy - ppos[1];
-					dz = oz - ppos[2];
-					d = sqrtf(dx * dx + dy * dy + dz * dz);
+					float dx = ox - ppos[0];
+					float dy = oy - ppos[1];
+					float dz = oz - ppos[2];
+					float d = sqrtf(dx * dx + dy * dy + dz * dz);
 					if (d < 640.0f) {
 						Com_Printf("  [%du] %-32s (%.0f,%.0f,%.0f)%s%s\n", (int) d, classname, ox, oy, oz,
 						           model[0] ? " " : "", model[0] ? model : "");
@@ -114,13 +114,15 @@ void Q3IDE_Cmd_f(void)
 		if (!Q3IDE_WM_MirrorActive()) {
 			Com_Printf("q3ide portal: NOT ACTIVE\n");
 		} else {
-			vec3_t origin, normal, pos, diff, right;
-			float ww, wh, dist, lx, ly, nx, ny, len;
+			vec3_t origin, normal, diff;
+			float ww, wh;
 			Q3IDE_WM_GetMirrorOrigin(origin, normal, &ww, &wh);
 			Com_Printf("q3ide portal: origin=(%.0f,%.0f,%.0f) normal=(%.2f,%.2f,%.2f)"
 			           " size=%.0fx%.0f\n",
 			           origin[0], origin[1], origin[2], normal[0], normal[1], normal[2], ww, wh);
 			if (cls.state == CA_ACTIVE) {
+				vec3_t pos, right;
+				float dist, lx, ly, nx, ny, len;
 				VectorCopy(cl.snap.ps.origin, pos);
 				VectorSubtract(pos, origin, diff);
 				dist = DotProduct(diff, normal);

@@ -40,9 +40,7 @@ static int q3ide_rope_attached = 0;     /* 1=hook currently engaged */
 void q3ide_grapple_type_frame(void)
 {
 	int cur_pull, gtype;
-	vec3_t gp, diff;
-	float vlen;
-	char cmd[256];
+	vec3_t diff;
 
 	if (cls.state != CA_ACTIVE)
 		return;
@@ -59,6 +57,8 @@ void q3ide_grapple_type_frame(void)
 
 		if (gtype == 2) {
 			/* Rail — snap player to hook point */
+			vec3_t gp;
+			char cmd[256];
 			VectorCopy(cl.snap.ps.grapplePoint, gp);
 			Com_sprintf(cmd, sizeof(cmd), "cmd setviewpos %.0f %.0f %.0f %.0f\n", gp[0], gp[1], gp[2],
 			            cl.snap.ps.viewangles[1]);
@@ -75,6 +75,7 @@ void q3ide_grapple_type_frame(void)
 	/* ── Rope pendulum logic ────────────────────────────────────────── */
 	if (gtype == 1) {
 		if (cur_pull && q3ide_rope_attached && q3ide_rope_rest > 0.0f) {
+			float vlen;
 			VectorSubtract(cl.snap.ps.grapplePoint, cl.snap.ps.origin, diff);
 			vlen = VectorLength(diff);
 			/* Release when player is within 50% of rest — simulate slack */
@@ -117,7 +118,6 @@ void q3ide_grapple_window_frame(void)
 	float dist_to_plane, lx, ly, hw, hh, nx, ny, len, view_dist;
 	float best_dist;
 	int best_win;
-	char cmd[160];
 
 	if (cls.state != CA_ACTIVE)
 		return;
@@ -177,6 +177,7 @@ void q3ide_grapple_window_frame(void)
 		view_dist = 350.0f;
 
 	{
+		char cmd[160];
 		float tx = win->origin[0] + win->normal[0] * view_dist;
 		float ty = win->origin[1] + win->normal[1] * view_dist;
 		float tz = win->origin[2] - 26.0f;

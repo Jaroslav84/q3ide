@@ -6,20 +6,28 @@
 #   quake3e/ — modified files: USE_Q3IDE guard coverage only (no style checks)
 #   capture/ — Rust: no unsafe outside lib.rs, limit .unwrap()
 #
-# Works in Docker (auto-installs tools via apt if available) and macOS.
+# Works in Docker (clang-format-14 at /usr/local/bin/clang-format) and macOS.
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 Q3IDE_DIR="$ROOT/quake3e/code/q3ide"
 
 ERRORS=0
 WARNINGS=0
+FILES_CHECKED=0
+# Accumulate error file list for summary (newline-separated)
+ERROR_FILES=""
 
-err()  { printf 'ERROR  %s\n' "$*"; ERRORS=$((ERRORS+1)); }
-warn() { printf 'WARN   %s\n' "$*"; WARNINGS=$((WARNINGS+1)); }
-ok()   { printf 'ok     %s\n' "$*"; }
-info() { printf '       %s\n' "$*"; }
+err()  {
+    printf '[ERR]  %s\n' "$*"
+    ERRORS=$((ERRORS+1))
+}
+warn() { printf '[WRN]  %s\n' "$*"; WARNINGS=$((WARNINGS+1)); }
+ok()   { printf '[ OK ] %s\n' "$*"; }
+info() { printf '[   ]  %s\n' "$*"; }
 
 rel() { echo "${1#$ROOT/}"; }
+# Strip leading/trailing whitespace (for wc -l output on macOS)
+trim() { echo "$1" | tr -d ' \t'; }
 
 # ─── tool bootstrap ───────────────────────────────────────────────────────────
 
@@ -57,15 +65,18 @@ run_clang_format() {
     for f in "$Q3IDE_DIR"/*.c "$Q3IDE_DIR"/*.h; do
         [ -f "$f" ] || continue
         any=1
+        FILES_CHECKED=$((FILES_CHECKED+1))
         local r; r="$(rel "$f")"
+        local lines; lines=$(trim "$(wc -l < "$f")")
         # --dry-run prints what would change, --Werror makes it exit non-zero
         local out
         out="$(clang-format --dry-run --Werror "$f" 2>&1)"
         if [ -n "$out" ]; then
-            err "$r: clang-format violations (run: clang-format -i $r)"
+            err "$r [${lines}L]: clang-format violations (fix: clang-format -i $r)"
             echo "$out" | head -5 | while IFS= read -r line; do info "  $line"; done
+            ERROR_FILES="${ERROR_FILES}  clang-format: $r\n"
         else
-            ok "$r"
+            ok "$r [${lines}L]"
         fi
     done
     [ "$any" -eq 0 ] && info "no C files found"
@@ -101,20 +112,17 @@ run_cppcheck() {
         return
     fi
 
-    # Count errors vs warnings
+    # Print all cppcheck output as info lines (note: lines are context, not separate issues)
+    echo "$out" | while IFS= read -r line; do info "cppcheck: $line"; done
+
+    # Count only real issues (not note: context lines) — use wc -l to avoid macOS grep -c exit-1 bug
     local nerr nwarn
-    nerr="$(echo "$out" | grep -c "^.*: error:" || true)"
-    nwarn="$(echo "$out" | grep -c "^.*: \(warning\|style\|performance\):" || true)"
-
-    echo "$out" | while IFS= read -r line; do
-        case "$line" in
-            *": error:"*)   err "cppcheck: $line" ;;
-            *)              warn "cppcheck: $line" ;;
-        esac
-    done
-
+    nerr=$(echo "$out" | grep ": error:" | wc -l | tr -d ' ')
+    nwarn=$(echo "$out" | grep -E ": (warning|style|performance):" | wc -l | tr -d ' ')
     ERRORS=$((ERRORS + nerr))
     WARNINGS=$((WARNINGS + nwarn))
+    [ "${nerr:-0}" -gt 0 ] && err "cppcheck: ${nerr} error(s)" && ERROR_FILES="${ERROR_FILES}  cppcheck: ${nerr} error(s) in q3ide/\n"
+    [ "${nwarn:-0}" -gt 0 ] && warn "cppcheck: ${nwarn} issue(s)"
 }
 
 # ─── basic checks: file length + prefix (q3ide/ only) ────────────────────────
@@ -123,18 +131,21 @@ run_basic_checks() {
     echo ""
     echo "-- basic checks (q3ide/ only) --"
 
-    local found=0
+    local found=0 any_issues=0
     for f in "$Q3IDE_DIR"/*.c "$Q3IDE_DIR"/*.h; do
         [ -f "$f" ] || continue
         found=1
         local r; r="$(rel "$f")"
-        local lines; lines="$(wc -l < "$f")"
+        local lines; lines=$(trim "$(wc -l < "$f")")
 
-        # File length
+        # File length — line count already shown in clang-format section, only flag thresholds
         if [ "$lines" -gt 400 ]; then
             err "$r: $lines lines (max 400 — split this file)"
+            ERROR_FILES="${ERROR_FILES}  too-long: $r (${lines}L)\n"
+            any_issues=1
         elif [ "$lines" -gt 200 ]; then
             warn "$r: $lines lines (sweet-spot 200)"
+            any_issues=1
         fi
 
         # Public symbols must use q3ide_/Q3IDE_ prefix
@@ -147,6 +158,7 @@ run_basic_checks() {
             done
     done
     [ "$found" -eq 0 ] && info "no files"
+    [ "$any_issues" -eq 0 ] && [ "$found" -gt 0 ] && ok "all files within size limits"
 }
 
 # ─── USE_Q3IDE guard check (modified Quake3e files only) ─────────────────────
@@ -170,7 +182,7 @@ run_guard_checks() {
         quake3e/code/renderercommon/tr_public.h
     "
 
-    local found=0
+    local found=0 any_issues=0
     for rel_path in $MODIFIED; do
         local f="$ROOT/$rel_path"
         [ -f "$f" ] || continue
@@ -205,9 +217,12 @@ run_guard_checks() {
         if [ "${unguarded:-0}" -gt 0 ]; then
             err "$rel_path: ${unguarded} Q3IDE reference(s) outside #ifdef USE_Q3IDE"
             while IFS= read -r line; do info "  $line"; done < /tmp/q3ide_lint_guards
+            ERROR_FILES="${ERROR_FILES}  guard: $rel_path\n"
+            any_issues=1
         fi
     done
     [ "$found" -eq 0 ] && info "no files"
+    [ "$any_issues" -eq 0 ] && [ "$found" -gt 0 ] && ok "all guards in place"
 }
 
 # ─── Rust basic checks (capture/) ────────────────────────────────────────────
@@ -216,7 +231,7 @@ run_rust_checks() {
     echo ""
     echo "-- capture/ Rust (basic) --"
 
-    local found=0
+    local found=0 any_issues=0
     for f in "$ROOT"/capture/src/*.rs; do
         [ -f "$f" ] || continue
         found=1
@@ -227,7 +242,11 @@ run_rust_checks() {
         if [ "$base" != "lib.rs" ]; then
             local nu
             nu="$(grep -c "\bunsafe\b" "$f" 2>/dev/null || true)"
-            [ "${nu:-0}" -gt 0 ] && warn "$r: ${nu} unsafe block(s) outside C-ABI boundary (lib.rs)"
+            if [ "${nu:-0}" -gt 0 ]; then
+                err "$r: ${nu} unsafe block(s) outside C-ABI boundary (lib.rs)"
+                ERROR_FILES="${ERROR_FILES}  unsafe: $r\n"
+                any_issues=1
+            fi
         fi
 
         # excess .unwrap()
@@ -236,6 +255,7 @@ run_rust_checks() {
         [ "${u:-0}" -gt 3 ] && warn "$r: ${u} .unwrap() calls — prefer ? or .expect()"
     done
     [ "$found" -eq 0 ] && info "no files"
+    [ "$any_issues" -eq 0 ] && [ "$found" -gt 0 ] && ok "no unsafe outside lib.rs"
 }
 
 # ─── main ─────────────────────────────────────────────────────────────────────
@@ -250,5 +270,10 @@ run_guard_checks
 run_rust_checks
 
 echo ""
-echo "=== ${ERRORS} error(s), ${WARNINGS} warning(s) ==="
+if [ "$ERRORS" -gt 0 ]; then
+    echo "=== ${ERRORS} error(s), ${WARNINGS} warning(s) — files to fix: ==="
+    printf '%b' "$ERROR_FILES"
+else
+    echo "=== ${ERRORS} error(s), ${WARNINGS} warning(s) ==="
+fi
 [ "$ERRORS" -eq 0 ]

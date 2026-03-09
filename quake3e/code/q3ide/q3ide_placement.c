@@ -17,7 +17,7 @@
 #include <string.h>
 
 /* Minimum clearance from wall surface (after object probe). */
-#define Q3IDE_WALL_OFFSET 4.0f
+#define Q3IDE_WALL_OFFSET 3.0f
 
 /* ── Placement queue — filled by q3ide_room_layout, drained 1/frame ── */
 typedef struct {

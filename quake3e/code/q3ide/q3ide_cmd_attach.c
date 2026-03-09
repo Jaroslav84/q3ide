@@ -9,9 +9,6 @@
 #include <math.h>
 #include <string.h>
 
-extern const char *q3ide_terminal_apps[];
-extern const char *q3ide_browser_apps[];
-extern qboolean q3ide_match(const char *app, const char **list);
 extern qboolean q3ide_is_attached(unsigned int id);
 
 typedef struct {
@@ -25,7 +22,7 @@ void Q3IDE_WM_CmdAttach(void)
 {
 	q3ide_attach_item_t items[Q3IDE_MAX_WIN];
 	int item_n = 0;
-	int i, j;
+	int i;
 	vec3_t eye;
 
 	if (!q3ide_wm.cap || !q3ide_wm.cap_list_wins) {
@@ -35,18 +32,18 @@ void Q3IDE_WM_CmdAttach(void)
 
 	q3ide_layout_queue_reset();
 
-	/* Collect app windows (terminal + browser) */
+	/* Collect all app windows — size-filtered, no app whitelist */
 	{
 		Q3ideWindowList wlist = q3ide_wm.cap_list_wins(q3ide_wm.cap);
 		if (wlist.windows && wlist.count) {
-			for (i = 0; i < (int) wlist.count && item_n < Q3IDE_MAX_WIN; i++) {
+			for (i = 0; i < (int) wlist.count; i++) {
 				const Q3ideWindowInfo *w = &wlist.windows[i];
 				qboolean dupe = qfalse;
+				if (item_n >= Q3IDE_MAX_WIN)
+					break;
 				if ((int) w->width < Q3IDE_MIN_WIN_W || (int) w->height < Q3IDE_MIN_WIN_H)
 					continue;
-				if (!q3ide_match(w->app_name, q3ide_terminal_apps) && !q3ide_match(w->app_name, q3ide_browser_apps))
-					continue;
-				for (j = 0; j < item_n; j++)
+				for (int j = 0; j < item_n; j++)
 					if (items[j].id == w->window_id) {
 						dupe = qtrue;
 						break;
@@ -120,8 +117,6 @@ void Q3IDE_WM_CmdAttach(void)
 		memset(ids, 0, sizeof(ids));
 		memset(aspects, 0, sizeof(aspects));
 		memset(is_disp, 0, sizeof(is_disp));
-		int n_wall_placed = 0;
-
 		q3ide_room_scan(eye, &room);
 		if (room.n) {
 			for (i = 0; i < item_n; i++) {
@@ -129,42 +124,9 @@ void Q3IDE_WM_CmdAttach(void)
 				aspects[i] = items[i].aspect;
 				is_disp[i] = items[i].is_display ? 1 : 0;
 			}
-			n_wall_placed = q3ide_room_layout(&room, ids, aspects, is_disp, item_n);
+			q3ide_room_layout(&room, ids, aspects, is_disp, item_n);
 		} else {
-			Com_Printf("q3ide: no walls found — placing floating\n");
-		}
-
-		/* Float all overflow windows in a fan — angular step derived from window
-		 * width at the placement distance so windows never overlap each other. */
-		if (n_wall_placed < item_n) {
-			float base_yaw = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
-			float cur_angle = 0.0f; /* accumulated angle from forward (alternating sign) */
-			int side = 1;           /* +1 right, -1 left — alternate */
-			vec3_t pos, norm;
-			for (i = 0; i < item_n; i++) {
-				float aspect, ww, wh, dist, a, half_angle;
-				if (q3ide_is_attached(items[i].id))
-					continue;
-				aspect = items[i].aspect > 0.0f ? items[i].aspect : 16.0f / 9.0f;
-				wh = 90.0f;
-				ww = wh * aspect;
-				dist = 220.0f;
-				/* Angular half-width of window at this distance + small gap */
-				half_angle = atanf((ww * 0.5f + 8.0f) / dist);
-				cur_angle += half_angle;
-				a = base_yaw + cur_angle * (float) side;
-				pos[0] = eye[0] + cosf(a) * dist;
-				pos[1] = eye[1] + sinf(a) * dist;
-				pos[2] = eye[2];
-				norm[0] = -cosf(a);
-				norm[1] = -sinf(a);
-				norm[2] = 0.0f;
-				Q3IDE_WM_Attach(items[i].id, pos, norm, ww, wh, qtrue, qfalse);
-				Com_Printf("q3ide: float id=%u a=%.1frad\n", items[i].id, a);
-				/* Next window: step past this one, then alternate side */
-				cur_angle += half_angle;
-				side = -side;
-			}
+			Com_Printf("q3ide: no walls found\n");
 		}
 
 		for (i = 0; i < item_n; i++)

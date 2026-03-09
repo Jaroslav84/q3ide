@@ -73,7 +73,9 @@ void Q3IDE_WM_PollFrames(void)
 		return;
 	now_ms = Sys_Milliseconds();
 
-	if (now_ms - q3ide_wm.last_scan_ms >= 2000) {
+	/* Only poll window changes when auto_attach is active — enumerating all
+	 * windows via SCShareableContent blocks the main thread briefly each call. */
+	if (q3ide_wm.auto_attach && now_ms - q3ide_wm.last_scan_ms >= 5000) {
 		Q3IDE_WM_PollChanges();
 		q3ide_wm.last_scan_ms = now_ms;
 	}
@@ -104,9 +106,15 @@ void Q3IDE_WM_PollFrames(void)
 		}
 
 		if (win->tex_w > 0 && ((int) frame.width != win->tex_w || (int) frame.height != win->tex_h)) {
-			win->world_h = win->world_w * ((float) frame.height / (float) frame.width);
-			Com_Printf("q3ide: win %u resized to %dx%d (world %.0fx%.0f)\n", win->capture_id, (int) frame.width,
-			           (int) frame.height, win->world_w, win->world_h);
+			float frame_asp = (frame.height > 0) ? (float) frame.width / (float) frame.height : 1.0f;
+			win->world_w = win->world_h * frame_asp;
+			Com_Printf("q3ide: win %u resized %dx%d -> %dx%d (world %.0fx%.0f)\n", win->capture_id, win->tex_w,
+			           win->tex_h, (int) frame.width, (int) frame.height, win->world_w, win->world_h);
+		}
+		/* First frame: correct world_w to match actual capture aspect ratio. */
+		if (win->frames == 0 && frame.height > 0) {
+			float frame_asp = (float) frame.width / (float) frame.height;
+			win->world_w = win->world_h * frame_asp;
 		}
 		q3ide_upload_frame(win, &frame);
 		win->frames++;

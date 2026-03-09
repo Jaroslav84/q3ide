@@ -103,18 +103,19 @@ void Q3IDE_WM_CmdList(void)
 
 void Q3IDE_WM_CmdDetachAll(void)
 {
-	int i;
+	int i, n = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];
-		if (!w->active)
+		if (!w->active || !w->is_tunnel)
 			continue;
 		if (q3ide_wm.cap_stop)
 			q3ide_wm.cap_stop(q3ide_wm.cap, w->capture_id);
-		q3ide_wm.slot_mask &= ~(1u << w->scratch_slot);
+		q3ide_wm.slot_mask &= ~(1ULL << w->scratch_slot);
 		memset(w, 0, sizeof(q3ide_win_t));
+		q3ide_wm.num_active--;
+		n++;
 	}
-	q3ide_wm.num_active = 0;
-	Com_Printf("q3ide: all windows detached\n");
+	Com_Printf("q3ide: %d tunnel(s) detached\n", n);
 }
 
 void Q3IDE_WM_CmdStatus(void)

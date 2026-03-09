@@ -77,6 +77,14 @@ public func initializeCoreGraphics() {
     _ = CGMainDisplayID()
 }
 
+/// Check if screen recording permission is already granted (non-blocking, no dialog).
+/// Returns true if the app has permission, false otherwise.
+/// Use this before any SCShareableContent call to avoid the 15-second TCC abort.
+@_cdecl("sc_check_screen_recording_permission")
+public func checkScreenRecordingPermission() -> Bool {
+    return CGPreflightScreenCaptureAccess()
+}
+
 // MARK: - Error Types
 
 /// Strongly typed errors for the ScreenCaptureKit bridge
@@ -146,6 +154,27 @@ func errorWithCodeToCString(_ error: Error) -> UnsafeMutablePointer<CChar>? {
     let message = error.localizedDescription
     let formatted = "\(code):\(message)"
     return strdup(formatted)
+}
+
+// MARK: - Thread-safe result holder for async→sync bridging
+
+/// Thread-safe box used to pass a result from an async Task to a waiting semaphore caller.
+/// The Task writes `value` or `error`, then calls `semaphore.signal()`.
+/// The caller reads after `semaphore.wait()` returns — the semaphore provides the happens-before.
+class ResultHolder<T> {
+    private let lock = NSLock()
+    private var _value: T?
+    private var _error: String?
+
+    var value: T? {
+        get { lock.lock(); defer { lock.unlock() }; return _value }
+        set { lock.lock(); defer { lock.unlock() }; _value = newValue }
+    }
+
+    var error: String? {
+        get { lock.lock(); defer { lock.unlock() }; return _error }
+        set { lock.lock(); defer { lock.unlock() }; _error = newValue }
+    }
 }
 
 // MARK: - Memory Management

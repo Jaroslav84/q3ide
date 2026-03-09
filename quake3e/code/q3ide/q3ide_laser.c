@@ -10,6 +10,7 @@
  */
 
 #include "q3ide_hooks.h"
+#include "q3ide_params.h"
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
 #include "../qcommon/qcommon.h"
@@ -17,7 +18,10 @@
 #include <math.h>
 #include <string.h>
 
-#define LASER_HALF_W 0.1f /* half-width of laser ribbon (world units) */
+/* q3ide_params singleton — input/keyboard must never write to this. */
+const q3ide_params_t q3ide_params = {
+    .laserPointerWidth = 2.0f, /* ~2 px at typical viewing distance */
+};
 
 static qhandle_t g_laser_shader;
 
@@ -36,8 +40,6 @@ static void q3ide_draw_beam(const vec3_t from, const vec3_t to, const vec3_t vie
 {
 	vec3_t beam_dir, mid, to_cam, perp, perp2, up = {0.0f, 0.0f, 1.0f};
 	float len;
-	polyVert_t v[4];
-	int i;
 
 	VectorSubtract(to, from, beam_dir);
 	len = VectorLength(beam_dir);
@@ -68,17 +70,18 @@ static void q3ide_draw_beam(const vec3_t from, const vec3_t to, const vec3_t vie
 			len = VectorLength(perp);
 		}
 	}
-	VectorScale(perp, LASER_HALF_W / len, perp);
+	VectorScale(perp, (q3ide_params.laserPointerWidth * 0.5f) / len, perp);
 
 	/* Second ribbon perpendicular to first (cross shape for full visibility) */
 	CrossProduct(beam_dir, perp, perp2);
 	len = VectorLength(perp2);
 	if (len > 0.1f)
-		VectorScale(perp2, LASER_HALF_W / len, perp2);
+		VectorScale(perp2, (q3ide_params.laserPointerWidth * 0.5f) / len, perp2);
 
 	/* Helper: emit one ribbon quad with given offset vector */
 	{
-		int q;
+		int q, i;
+		polyVert_t v[4];
 		for (q = 0; q < 2; q++) {
 			vec3_t *pv = (q == 0) ? &perp : &perp2;
 			if (VectorLength(*pv) < 0.01f)

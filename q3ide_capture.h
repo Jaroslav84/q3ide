@@ -149,6 +149,8 @@ typedef struct Q3ideCGPoint {
     double y;
 } Q3ideCGPoint;
 
+extern bool sc_check_screen_recording_permission(void);
+
 /**
  * Initialize the capture system. Returns an opaque handle.
  * Returns NULL on failure (check stderr/logs for details).

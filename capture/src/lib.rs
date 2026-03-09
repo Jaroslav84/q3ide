@@ -12,6 +12,16 @@ mod ringbuf;
 mod screencapturekit;
 mod window;
 
+extern "C" {
+    fn sc_check_screen_recording_permission() -> bool;
+}
+
+/// Safe wrapper — callable from any module without repeating the unsafe block.
+pub(crate) fn has_screen_recording_permission() -> bool {
+    // SAFETY: Swift @_cdecl function with no invariants, always safe to call.
+    unsafe { sc_check_screen_recording_permission() }
+}
+
 use std::ffi::{CStr, CString};
 use std::os::raw::{c_char, c_float, c_int, c_uint};
 use std::ptr;
@@ -132,6 +142,17 @@ pub extern "C" fn q3ide_init() -> *mut Q3ideCapture {
     }
 
     log::info!("q3ide_init: starting capture system");
+
+    // Check screen recording permission before any SCK calls.
+    // Without this, the first SCShareableContent::get() call triggers a TCC dialog.
+    // On fullscreen apps the dialog is hidden; macOS aborts the process after ~15s.
+    if !has_screen_recording_permission() {
+        log::warn!(
+            "q3ide: SCREEN RECORDING PERMISSION NOT GRANTED.\n  \
+             Go to: System Settings → Privacy & Security → Screen Recording\n  \
+             Enable the Quake3e entry, then relaunch the game."
+        );
+    }
 
     let backend = match SCKBackend::new() {
         Ok(b) => b,

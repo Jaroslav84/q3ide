@@ -4,24 +4,6 @@ import CoreGraphics
 import Foundation
 import ScreenCaptureKit
 
-// MARK: - Thread-safe result holder
-
-private class ResultHolder<T> {
-    private let lock = NSLock()
-    private var _value: T?
-    private var _error: String?
-
-    var value: T? {
-        get { lock.lock(); defer { lock.unlock() }; return _value }
-        set { lock.lock(); defer { lock.unlock() }; _value = newValue }
-    }
-
-    var error: String? {
-        get { lock.lock(); defer { lock.unlock() }; return _error }
-        set { lock.lock(); defer { lock.unlock() }; _error = newValue }
-    }
-}
-
 // MARK: - ShareableContent: Content Discovery
 
 /// Synchronous blocking call to get shareable content
@@ -83,7 +65,7 @@ public func getShareableContentSync(
     return nil
 }
 
-/// Gets shareable content asynchronously
+/// Gets shareable content synchronously (with 5-second timeout).
 /// - Parameters:
 ///   - callback: Called with content pointer or error message
 ///   - userData: User data passed through to callback
@@ -93,21 +75,46 @@ public func getShareableContent(
     userData: UnsafeMutableRawPointer?
 ) {
     let userDataValue = userData
+    let semaphore = DispatchSemaphore(value: 0)
+    let holder = ResultHolder<SCShareableContent>()
+
     Task {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 false,
                 onScreenWindowsOnly: false
             )
-            callback(retain(content), nil, userDataValue)
+            holder.value = content
         } catch {
-            let bridgeError = SCBridgeError.contentUnavailable(error.localizedDescription)
-            bridgeError.description.withCString { callback(nil, $0, userDataValue) }
+            holder.error = SCBridgeError.contentUnavailable(error.localizedDescription).description
         }
+        semaphore.signal()
     }
+
+    if semaphore.wait(timeout: .now() + 5.0) == .timedOut {
+        "Timeout waiting for SCShareableContent".withCString { ptr in callback(nil, ptr, userDataValue) }
+        return
+    }
+
+    if let error = holder.error {
+        error.withCString { ptr in callback(nil, ptr, userDataValue) }
+        return
+    }
+
+    if let content = holder.value {
+        callback(retain(content), nil, userDataValue)
+        return
+    }
+
+    "Unknown error".withCString { ptr in callback(nil, ptr, userDataValue) }
 }
 
-/// Gets shareable content with options asynchronously
+/// Gets shareable content with options synchronously (with 5-second timeout).
+///
+/// Uses DispatchSemaphore to bound the wait. If SCShareableContent.excludingDesktopWindows
+/// hangs (e.g. waiting for a hidden TCC dialog in a fullscreen app), the semaphore times
+/// out after 5 seconds and the error callback is fired so the caller is never blocked forever.
+///
 /// - Parameters:
 ///   - excludeDesktopWindows: Whether to exclude desktop windows
 ///   - onScreenWindowsOnly: Whether to only include on-screen windows
@@ -120,20 +127,45 @@ public func getShareableContentWithOptions(
     callback: @escaping @convention(c) (OpaquePointer?, UnsafePointer<CChar>?, UnsafeMutableRawPointer?) -> Void,
     userData: UnsafeMutableRawPointer?
 ) {
-    // Capture userData as a raw value to avoid Sendable issues
     let userDataValue = userData
+    let semaphore = DispatchSemaphore(value: 0)
+    let holder = ResultHolder<SCShareableContent>()
+
     Task {
         do {
             let content = try await SCShareableContent.excludingDesktopWindows(
                 excludeDesktopWindows,
                 onScreenWindowsOnly: onScreenWindowsOnly
             )
-            callback(retain(content), nil, userDataValue)
+            holder.value = content
         } catch {
-            let bridgeError = SCBridgeError.contentUnavailable(error.localizedDescription)
-            bridgeError.description.withCString { callback(nil, $0, userDataValue) }
+            holder.error = SCBridgeError.contentUnavailable(error.localizedDescription).description
         }
+        semaphore.signal()
     }
+
+    // Wait with 5-second timeout. If SCK shows a hidden TCC dialog in a fullscreen app,
+    // macOS sends SIGABRT after ~15 s — this timeout cuts the wait short and lets us recover.
+    let timedOut = semaphore.wait(timeout: .now() + 5.0)
+
+    if timedOut == .timedOut {
+        "Timeout waiting for SCShareableContent (TCC dialog?)".withCString { ptr in
+            callback(nil, ptr, userDataValue)
+        }
+        return
+    }
+
+    if let error = holder.error {
+        error.withCString { ptr in callback(nil, ptr, userDataValue) }
+        return
+    }
+
+    if let content = holder.value {
+        callback(retain(content), nil, userDataValue)
+        return
+    }
+
+    "Unknown error: no content or error set".withCString { ptr in callback(nil, ptr, userDataValue) }
 }
 
 /// Gets shareable content with windows below a reference window

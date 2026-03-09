@@ -288,8 +288,12 @@ impl SCKBackend {
     }
 }
 
+
 impl CaptureBackend for SCKBackend {
     fn list_windows(&self) -> Result<Vec<WindowInfo>> {
+        if !crate::has_screen_recording_permission() {
+            return Err(CaptureError::PermissionDenied);
+        }
         let content = SCShareableContent::get()
             .map_err(|e| CaptureError::Platform(format!("SCShareableContent: {e}")))?;
 
@@ -314,6 +318,9 @@ impl CaptureBackend for SCKBackend {
     }
 
     fn list_displays(&self) -> Result<Vec<DisplayInfo>> {
+        if !crate::has_screen_recording_permission() {
+            return Err(CaptureError::PermissionDenied);
+        }
         let content = SCShareableContent::get()
             .map_err(|e| CaptureError::Platform(format!("SCShareableContent: {e}")))?;
 
@@ -336,6 +343,9 @@ impl CaptureBackend for SCKBackend {
     fn start_capture(&mut self, window_id: u32, _target_fps: u32) -> Result<()> {
         if self.window_sessions.contains_key(&window_id) {
             return Err(CaptureError::AlreadyCapturing(window_id));
+        }
+        if !crate::has_screen_recording_permission() {
+            return Err(CaptureError::PermissionDenied);
         }
 
         let content = SCShareableContent::get()
@@ -405,6 +415,9 @@ impl CaptureBackend for SCKBackend {
         if self.desktop_capture.is_some() {
             return Err(CaptureError::AlreadyCapturing(DESKTOP_CAPTURE_ID));
         }
+        if !crate::has_screen_recording_permission() {
+            return Err(CaptureError::PermissionDenied);
+        }
 
         let content = SCShareableContent::get()
             .map_err(|e| CaptureError::Platform(format!("SCShareableContent: {e}")))?;
@@ -467,6 +480,9 @@ impl CaptureBackend for SCKBackend {
     fn start_display_capture(&mut self, display_id: u32, _target_fps: u32) -> Result<()> {
         if self.window_sessions.contains_key(&display_id) {
             return Err(CaptureError::AlreadyCapturing(display_id));
+        }
+        if !crate::has_screen_recording_permission() {
+            return Err(CaptureError::PermissionDenied);
         }
 
         let content = SCShareableContent::get()

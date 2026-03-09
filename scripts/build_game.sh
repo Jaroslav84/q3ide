@@ -81,7 +81,7 @@ fi
 cp "$BUILD_OUT" "$OUT_DIR/qagame${ARCH}.dylib"
 cp "$BUILD_OUT" "$OUT_DIR/qagame.dylib"
 
-# ── 5. Build ui dylib (accent color #FF34DD) ──────────────────────────────────
+# ── 5. Build ui dylib (ui dylib) ──────────────────────────────────
 echo "--- Compiling ui with clang..."
 UI_SRC="$IOQ3_DIR/code/q3_ui"
 UI_BUILD_DIR="$IOQ3_DIR/build_ui_q3ide"
@@ -113,12 +113,12 @@ clang -dynamiclib -arch ${ARCH} -undefined suppress -flat_namespace \
     $UI_OBJS -o "$UI_OUT" 2>&1 && {
     cp "$UI_OUT" "$OUT_DIR/ui${ARCH}.dylib"
     cp "$UI_OUT" "$OUT_DIR/ui.dylib"
-    echo "    $OUT_DIR/ui${ARCH}.dylib (accent #FF34DD)"
+    echo "    $OUT_DIR/ui${ARCH}.dylib"
 } || echo "WARN: ui link failed — keeping existing ui.dylib"
 
 echo ""
 echo "=== Done ==="
 echo "    $OUT_DIR/qagame${ARCH}.dylib"
 echo ""
-echo "Grapple hook + accent color #FF34DD applied."
+echo "Grapple hook + ui dylib applied."
 echo "Restart the game to apply."

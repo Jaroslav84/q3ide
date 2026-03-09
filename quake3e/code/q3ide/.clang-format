@@ -1,7 +1,6 @@
 # clang-format config for q3ide/ only.
 # Placed here so Quake3e files (which search upward) never pick this up.
 BasedOnStyle: LLVM
-Language: C
 
 # Tabs, K&R style — matches Quake3e convention
 UseTab: ForIndentation

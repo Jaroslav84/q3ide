@@ -42,9 +42,9 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	orig_hw = hw = win->world_w * 0.5f;
 	orig_hh = hh = win->world_h * 0.5f;
 
-	start[0] = win->origin[0] + win->normal[0] * 2.0f;
-	start[1] = win->origin[1] + win->normal[1] * 2.0f;
-	start[2] = win->origin[2] + win->normal[2] * 2.0f;
+	start[0] = win->origin[0] + win->normal[0] * 3.0f;
+	start[1] = win->origin[1] + win->normal[1] * 3.0f;
+	start[2] = win->origin[2] + win->normal[2] * 3.0f;
 
 	/* +right */
 	end[0] = start[0] + right[0] * hw;
@@ -107,10 +107,21 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 
 	win->world_w = orig_hw * 2.0f * r;
 	win->world_h = orig_hh * 2.0f * r;
-	if (win->world_w < 32.0f)
-		win->world_w = 32.0f;
-	if (win->world_h < 32.0f)
-		win->world_h = 32.0f;
+	/* Minimum size: scale both dims uniformly so neither drops below 32. */
+	{
+		float min_scale = 1.0f;
+		if (win->world_w > 0.0f && win->world_w < 32.0f)
+			min_scale = 32.0f / win->world_w;
+		if (win->world_h > 0.0f && win->world_h < 32.0f) {
+			float ms = 32.0f / win->world_h;
+			if (ms > min_scale)
+				min_scale = ms;
+		}
+		if (min_scale > 1.0f) {
+			win->world_w *= min_scale;
+			win->world_h *= min_scale;
+		}
+	}
 }
 
 int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)
@@ -165,7 +176,7 @@ int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)
 }
 
 #define Q3IDE_WALL_DIST 512.0f
-#define Q3IDE_WALL_OFFSET 2.0f
+#define Q3IDE_WALL_OFFSET 3.0f
 
 qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out_normal)
 {

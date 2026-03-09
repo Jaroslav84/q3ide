@@ -629,7 +629,9 @@ impl SCStream {
     pub fn start_capture(&self) -> Result<(), SCError> {
         let (completion, context) = UnitCompletion::new();
         unsafe { ffi::sc_stream_start_capture(self.ptr, context, UnitCompletion::callback) };
-        completion.wait().map_err(SCError::CaptureStartFailed)
+        completion
+            .wait_for(std::time::Duration::from_secs(15))
+            .map_err(SCError::CaptureStartFailed)
     }
 
     /// Stop capturing screen content
@@ -642,7 +644,9 @@ impl SCStream {
     pub fn stop_capture(&self) -> Result<(), SCError> {
         let (completion, context) = UnitCompletion::new();
         unsafe { ffi::sc_stream_stop_capture(self.ptr, context, UnitCompletion::callback) };
-        completion.wait().map_err(SCError::CaptureStopFailed)
+        completion
+            .wait_for(std::time::Duration::from_secs(15))
+            .map_err(SCError::CaptureStopFailed)
     }
 
     /// Update the stream configuration
@@ -665,7 +669,9 @@ impl SCStream {
                 UnitCompletion::callback,
             );
         }
-        completion.wait().map_err(SCError::StreamError)
+        completion
+            .wait_for(std::time::Duration::from_secs(15))
+            .map_err(SCError::StreamError)
     }
 
     /// Update the content filter
@@ -685,7 +691,9 @@ impl SCStream {
                 UnitCompletion::callback,
             );
         }
-        completion.wait().map_err(SCError::StreamError)
+        completion
+            .wait_for(std::time::Duration::from_secs(15))
+            .map_err(SCError::StreamError)
     }
 
     /// Get the synchronization clock for this stream (macOS 13.0+)

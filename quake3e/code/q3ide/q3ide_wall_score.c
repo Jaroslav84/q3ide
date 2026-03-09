@@ -17,23 +17,21 @@
 extern void q3ide_queue_push(unsigned int id, const vec3_t pos, const vec3_t normal, float ww, float wh,
                              qboolean is_display);
 
-#define Q3IDE_WALL_OFFSET 4.0f
+#define Q3IDE_WALL_OFFSET 3.0f
 
 void q3ide_sort_walls_by_facing(q3ide_room_t *room, float yaw)
 {
 	float scores[Q3IDE_LAYOUT_MAX_WALLS];
 	float fx = cosf(yaw), fy = sinf(yaw);
-	int i, j;
-	q3ide_wall_t tmp;
-	float ts;
+	int i;
 
 	for (i = 0; i < room->n; i++)
 		scores[i] = -(room->walls[i].normal[0] * fx + room->walls[i].normal[1] * fy);
 
 	for (i = 1; i < room->n; i++) {
-		tmp = room->walls[i];
-		ts = scores[i];
-		j = i - 1;
+		q3ide_wall_t tmp = room->walls[i];
+		float ts = scores[i];
+		int j = i - 1;
 		while (j >= 0 && scores[j] < ts) {
 			room->walls[j + 1] = room->walls[j];
 			scores[j + 1] = scores[j];

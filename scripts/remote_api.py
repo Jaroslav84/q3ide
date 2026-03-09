@@ -128,10 +128,20 @@ EVENTS_LOG = LOG_DIR / "q3ide_events.jsonl"
 
 _game_proc = None
 _game_start = None
+_last_crash = None   # last game_crashed event dict, or None
 _build_proc = None
 _run_lock = threading.Lock()
 _build_start = None
 _build_timeout = 120  # seconds; set per-build based on --clean
+
+_SIGNAL_NAMES = {2: 'SIGINT', 3: 'SIGQUIT', 4: 'SIGILL', 6: 'SIGABRT',
+                 8: 'SIGFPE', 9: 'SIGKILL', 11: 'SIGSEGV', 13: 'SIGPIPE', 15: 'SIGTERM'}
+
+
+def _signal_name(sig_num):
+    if sig_num is None:
+        return None
+    return _SIGNAL_NAMES.get(sig_num, f'SIG{sig_num}')
 
 # ── websocket broadcast registry ──────────────────────────────────────────────
 _ws_clients = []          # list of send(obj) callables, one per active WS session
@@ -290,11 +300,13 @@ def _do_run(args=None, agent_id=''):
     """Launch the game binary. Returns dict with ok/pid/error."""
     global _game_proc, _game_start
     if args is None:
-        args = ['--level', '0', '--execute', 'q3ide attach all; give grappling hook; weapon 10']
+        args = ['--level', '0']
     with _run_lock:
-        if _game_running():
-            _kill_game()
-            time.sleep(1)
+        # Always kill any existing quake3e before launching — prevents double instances
+        # when game was started outside the API (e.g. build.sh --run).
+        _kill_game()
+        subprocess.run(['pkill', '-xf', 'quake3e.*'], capture_output=True)
+        time.sleep(1)
         return _do_run_locked(args, agent_id, _q3_binary())
 
 
@@ -345,7 +357,7 @@ def _do_run_locked(args, agent_id, binary_info):
         PID_FILE.write_text(str(_game_proc.pid))
         threading.Thread(target=_tee_output,
                          args=(_game_proc, log_fh, '[game] '),
-                         kwargs={'on_exit': lambda: _on_game_exit(agent_id)},
+                         kwargs={'on_exit': lambda rc: _on_game_exit(agent_id, rc)},
                          daemon=True).start()
         return {'ok': True, 'pid': _game_proc.pid, 'log': str(engine_log)}
     except Exception as e:
@@ -364,20 +376,37 @@ def _strip_ctrl(text):
     return _CTRL_RE.sub('', text)
 
 
-def _on_game_exit(agent_id):
+def _on_game_exit(agent_id, returncode=0):
     """Called when game process ends. Clears state and notifies all WS clients."""
-    global _game_proc, _game_start
+    global _game_proc, _game_start, _last_crash
     uptime = int(time.time() - _game_start) if _game_start else None
     _game_proc = None
     _game_start = None
     PID_FILE.unlink(missing_ok=True)
-    print(f'[game] stopped  agent={agent_id or "unknown"}  uptime={uptime}s', flush=True)
-    _ws_broadcast({
+    print(f'[game] stopped  agent={agent_id or "unknown"}  uptime={uptime}s  rc={returncode}', flush=True)
+    ts = time.strftime('%Y-%m-%dT%H:%M:%S')
+    event = {
         'type': 'game_stopped',
         'agent_id': agent_id or 'unknown',
         'uptime_s': uptime,
-        'ts': time.strftime('%Y-%m-%dT%H:%M:%S'),
-    })
+        'returncode': returncode,
+        'ts': ts,
+    }
+    # Detect crash: non-zero exit or killed by signal (negative returncode on Unix)
+    is_crash = returncode is not None and returncode != 0
+    if is_crash:
+        sig_num = (-returncode) if returncode < 0 else None
+        sig_name = _signal_name(sig_num)
+        crash = {
+            **event,
+            'type': 'game_crashed',
+            'signal': sig_num,
+            'signal_name': sig_name,
+        }
+        _last_crash = crash
+        print(f'[game] CRASH  signal={sig_num}({sig_name})  rc={returncode}  uptime={uptime}s', flush=True)
+        _ws_broadcast(crash)
+    _ws_broadcast(event)
 
 
 def _tee_output(proc, log_fh, prefix='', on_exit=None):
@@ -396,7 +425,7 @@ def _tee_output(proc, log_fh, prefix='', on_exit=None):
     finally:
         log_fh.close()
         if on_exit:
-            on_exit()
+            on_exit(proc.returncode if proc.returncode is not None else proc.wait())
 
 
 def _enqueue_build(args, run_args, auto_run, agent_id=''):
@@ -449,11 +478,11 @@ def _queue_worker():
 
             is_clean = '--clean' in entry['args']
             if is_clean:
-                timeout = 300
+                timeout = 600
             elif '--engine-only' in entry['args']:
-                timeout = 180
+                timeout = 300
             else:
-                timeout = 120
+                timeout = 900  # full build includes Rust+Swift dylib: can take 10-15 min
             _build_timeout = timeout
 
             cmd = ['bash', str(BUILD_SCRIPT)] + entry['args']
@@ -471,24 +500,33 @@ def _queue_worker():
             print(f'[queue] Starting build {entry["id"]} (agent={entry["agent_id"]}): {" ".join(cmd)}', flush=True)
 
             _build_proc = subprocess.Popen(
-                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(ROOT))
+                cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(ROOT),
+                start_new_session=True)  # new session → own pgid → kill kills all children
             _build_start = time.time()
             threading.Thread(target=_tee_output, args=(_build_proc, log_fh, '[build] '),
                              daemon=True).start()
 
-            # Wait for completion (with timeout)
+            # Wait for completion (with timeout).
+            # Snapshot proc — _build_proc may be set to None by _kill_build() on another thread.
+            proc = _build_proc
             deadline = time.time() + timeout
             while time.time() < deadline:
-                if _build_proc.poll() is not None:
+                if proc is None or proc.poll() is not None:
                     break
                 time.sleep(0.5)
 
-            if _build_proc.poll() is None:
+            if proc is not None and proc.poll() is None:
                 print(f'[queue] Build {entry["id"]} TIMEOUT ({timeout}s), killing.', flush=True)
-                _build_proc.kill()
-                _build_proc.wait()
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except OSError:
+                    proc.kill()
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
 
-            rc = _build_proc.returncode
+            rc = proc.returncode if proc is not None else -1
             with _queue_lock:
                 entry['returncode'] = rc
                 entry['finished_at'] = time.time()
@@ -695,15 +733,24 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         try:
             ip = self.client_address[0]
-            agent = self.headers.get('X-Agent-ID', '')
+            cmd = getattr(self, 'command', '???')
+            path = getattr(self, 'path', '???')
+            # self.headers may not exist if parse_request() failed (bad HTTP version etc.)
+            hdrs = getattr(self, 'headers', None)
+            if hdrs is None:
+                print(f'[api] {cmd} {path}  agent=unknown (bad request)', flush=True)
+                return
+            agent = hdrs.get('X-Agent-ID', '')
             if not agent:
                 # Fall back to process name for localhost callers without X-Agent-ID
                 if ip in ('127.0.0.1', '::1'):
-                    agent = self._caller_proc(PORT) or self.headers.get('User-Agent', '') or 'unknown'
+                    agent = self._caller_proc(PORT) or hdrs.get('User-Agent', '') or 'unknown'
                 else:
-                    agent = self.headers.get('User-Agent', '') or 'unknown'
-            print(f'[api] {self.command} {self.path}  agent={agent}', flush=True)
+                    agent = hdrs.get('User-Agent', '') or 'unknown'
+            print(f'[api] {cmd} {path}  agent={agent}', flush=True)
         except BlockingIOError:
+            pass
+        except Exception:
             pass
 
     def _send(self, code, body):
@@ -759,6 +806,7 @@ class Handler(BaseHTTPRequestHandler):
                 'running': pid is not None,
                 'pid': pid,
                 'uptime_s': int(time.time() - _game_start) if pid and _game_start else None,
+                'last_crash': _last_crash,
                 'build': {
                     'active': cur is not None,
                     'queue_id': cur['id'] if cur else None,
@@ -766,6 +814,8 @@ class Handler(BaseHTTPRequestHandler):
                     'pending': pending,
                 },
             })
+        elif path == '/crash':
+            self._send(200, {'ok': True, 'crash': _last_crash})
         elif path == '/events':
             self._handle_events(qs)
         elif path == '/logs':
@@ -840,7 +890,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_build(self, body):
         args = body.get('args', [])
-        run_args = body.get('run_args', ['--level', '0', '--execute', 'q3ide attach all; give grappling hook; weapon 10'])
+        run_args = body.get('run_args', ['--level', '0'])
         auto_run = body.get('auto_run', True)
         agent_id = body.get('agent_id', '')
         entry = _enqueue_build(args, run_args, auto_run, agent_id)
@@ -931,7 +981,7 @@ class Handler(BaseHTTPRequestHandler):
         return out
 
     def _handle_run(self, body):
-        args = body.get('args', ['--level', '0', '--execute', 'q3ide attach all; give grappling hook; weapon 10'])
+        args = body.get('args', ['--level', '0'])
         agent_id = body.get('agent_id', '')
         result = _do_run(args, agent_id=agent_id)
         if result.get('ok'):

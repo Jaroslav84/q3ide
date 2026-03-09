@@ -14,8 +14,13 @@ So u can place windows in air and on walls. Great. But our window placement on w
 - wtf: https://www.youtube.com/watch?v=N-veMFHqDVo - unreal
 - wtf2 quake 3 elite - https://mus1n.github.io/# https://www.youtube.com/watch?v=Jd4nMJoHB7k&t=2s
 
-allow to switch MAPS like projects
-======================================
+- allow to switch MAPS like projects
+
+Maps
+=====
+
+# Start off point
+sh ./scripts/build.sh --run --level 0 --execute 'q3ide attach all' --music 1
 
 # wow. what i eneed
 sh ./scripts/build.sh --run --level lun3dm5 --execute 'q3ide attach all'

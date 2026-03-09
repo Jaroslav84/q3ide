@@ -9,7 +9,7 @@
 #include "../qcommon/q_shared.h"
 
 /* ── Constants ─────────────────────────────────────────────────── */
-#define Q3IDE_MAX_WIN 16
+#define Q3IDE_MAX_WIN 64
 #define Q3IDE_CAPTURE_FPS 60
 #define Q3IDE_WIN_INCHES 150.0f
 #define Q3IDE_MIN_WIN_W 400
@@ -122,6 +122,9 @@ typedef struct {
 	vec3_t hit_pos;                 /* world position of hit point */
 	/* Layout: wall-mounted windows skip back-face rendering */
 	qboolean wall_mounted; /* qtrue = placed by room layout engine on a wall */
+	/* Tunnel: OS screen-capture window. detach-all only removes these.
+	 * Non-tunnel windows (HUD, FPS, overlays) survive detach-all. */
+	qboolean is_tunnel;
 } q3ide_win_t;
 
 /* ── Global window manager state (defined in q3ide_wm.c) ──────── */
@@ -149,7 +152,7 @@ typedef struct {
 	unsigned long long last_scan_ms; /* last time we polled for changes */
 	q3ide_win_t wins[Q3IDE_MAX_WIN];
 	int num_active;
-	unsigned int slot_mask; /* bit N = scratch slot N is in use */
+	unsigned long long slot_mask; /* bit N = scratch slot N is in use */
 	byte *fbuf;
 	int fbuf_size;
 	qhandle_t border_shader; /* *white for hover border strips */

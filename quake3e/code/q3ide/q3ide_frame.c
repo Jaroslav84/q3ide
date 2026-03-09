@@ -28,12 +28,12 @@ void Q3IDE_Frame(void)
 	if (!q3ide_state.initialized)
 		return;
 
-	/* Fire nextdemo + auto-place mirror after map settles (~60 frames) */
+	/* Fire nextdemo after map settles (~60 frames) */
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
 		if (++q3ide_state.autoexec_delay > 60) {
-			Cbuf_AddText("give grappling hook\nweapon 10\nq3ide attach all\n");
 			q3ide_state.stream_last_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
 			q3ide_state.stream_cooldown = 60;
+			Cbuf_AddText("give grappling hook\nweapon 10\n");
 			{
 				cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
 				if (cmd && cmd->string[0]) {
@@ -71,12 +71,11 @@ void Q3IDE_Frame(void)
 		eye[2] += cl.snap.ps.viewheight;
 		Q3IDE_WM_UpdatePlayerPos(eye[0], eye[1], eye[2]);
 
-		/* Auto-equip grapple on respawn (health 0 → >0) */
 		{
-			int hp = cl.snap.ps.stats[STAT_HEALTH];
-			if (hp > 0 && q3ide_state.last_health <= 0)
+			int cur_health = cl.snap.ps.stats[STAT_HEALTH];
+			if (q3ide_state.last_health <= 0 && cur_health > 0)
 				Cbuf_AddText("give grappling hook\nweapon 10\n");
-			q3ide_state.last_health = hp;
+			q3ide_state.last_health = cur_health;
 		}
 
 		cur_yaw = cl.snap.ps.viewangles[YAW];
@@ -114,4 +113,14 @@ void Q3IDE_Frame(void)
 	q3ide_layout_tick();
 	Q3IDE_WM_ReflowTick();
 	Q3IDE_WM_PollFrames();
+
+	/* Heartbeat every 5 seconds so crash time is visible in q3ide.log */
+	{
+		static unsigned long long last_hb_ms;
+		unsigned long long now_ms = Sys_Milliseconds();
+		if (now_ms - last_hb_ms >= 5000) {
+			Q3IDE_LOGI("heartbeat active=%d", q3ide_wm.num_active);
+			last_hb_ms = now_ms;
+		}
+	}
 }

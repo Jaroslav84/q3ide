@@ -20,7 +20,7 @@
 #endif
 
 #define Q3IDE_WALL_DIST 512.0f
-#define Q3IDE_WALL_OFFSET 2.0f
+#define Q3IDE_WALL_OFFSET 3.0f
 
 q3ide_wm_t q3ide_wm;
 
@@ -95,10 +95,10 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		return qfalse;
 	}
 
-	for (slot = 0; slot < 16; slot++)
-		if (!(q3ide_wm.slot_mask & (1u << slot)))
+	for (slot = 0; slot < Q3IDE_MAX_WIN; slot++)
+		if (!(q3ide_wm.slot_mask & (1ULL << slot)))
 			break;
-	if (slot >= 16) {
+	if (slot >= Q3IDE_MAX_WIN) {
 		Com_Printf("q3ide: no scratch slots\n");
 		return qfalse;
 	}
@@ -108,7 +108,7 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		return qfalse;
 	}
 
-	q3ide_wm.slot_mask |= (1u << slot);
+	q3ide_wm.slot_mask |= (1ULL << slot);
 	win = &q3ide_wm.wins[i];
 	memset(win, 0, sizeof(*win));
 	win->active = qtrue;
@@ -125,6 +125,7 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	win->world_w = ww;
 	win->world_h = wh;
 	win->wall_mounted = skip_clamp;
+	win->is_tunnel = do_start; /* OS screen-capture windows are tunnels */
 	// clang-format off
 	Com_Printf("q3ide: attach win[%d] id=%u slot=%d pos=(%.0f,%.0f,%.0f) norm=(%.2f,%.2f) size=%.0fx%.0f\n",
 	           i, id, slot, origin[0], origin[1], origin[2], win->normal[0], win->normal[1], ww, wh);

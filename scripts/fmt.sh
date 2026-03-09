@@ -1,11 +1,11 @@
 #!/bin/sh
 # fmt.sh — Auto-format all q3ide C source files.
-# Run this on macOS where clang-format is available (brew install clang-format).
+# Works on macOS (brew install clang-format) and Docker (clang-format-14 at /usr/local/bin/clang-format).
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 Q3IDE_DIR="$ROOT/quake3e/code/q3ide"
 
 if ! command -v clang-format >/dev/null 2>&1; then
-    echo "clang-format not found — install: brew install clang-format"
+    echo "clang-format not found — macOS: brew install clang-format  Docker: static binary at /usr/local/bin/clang-format"
     exit 1
 fi
 

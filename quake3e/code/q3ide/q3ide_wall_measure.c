@@ -17,7 +17,7 @@ extern void q3ide_queue_push(unsigned int id, const vec3_t pos, const vec3_t nor
                              qboolean is_display);
 
 /* Minimum clearance from wall surface (after object probe). */
-#define Q3IDE_WALL_OFFSET 4.0f
+#define Q3IDE_WALL_OFFSET 3.0f
 
 /* Compute horizontal right vector from a wall normal (inline from q3ide_geom.c) */
 static void q3ide_layout_right(const vec3_t normal, vec3_t right)
@@ -42,8 +42,6 @@ void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_wall_t 
 {
 	vec3_t start, end;
 	static vec3_t mins = {0, 0, 0}, maxs = {0, 0, 0};
-	/* Small box for LOS: passes over very thin protrusions (< 4u) */
-	static vec3_t lmins = {-4, -4, -4}, lmaxs = {4, 4, 4};
 	float right_dist, left_dist, ceil_dist = 0, floor_dist = 0, wall_h;
 
 	VectorCopy(contact, wall->contact);
@@ -79,6 +77,8 @@ void q3ide_measure_wall(const vec3_t contact, const vec3_t normal, q3ide_wall_t 
 	/* Width: find the continuous wall span in ±right.
 	 * Step outward; stop when player can no longer see the position (corner) OR wall is gone. */
 	{
+		/* Small box for LOS: passes over very thin protrusions (< 4u) */
+		static vec3_t lmins = {-4, -4, -4}, lmaxs = {4, 4, 4};
 		const float step_sz = 16.0f;
 		const float max_reach = 512.0f;
 		float d, back_end[3], los_tgt[3];

@@ -88,6 +88,41 @@ impl<T> SyncCompletion<T> {
             .unwrap_or_else(|| Err("Completion signaled without result".to_string()))
     }
 
+    /// Wait for the completion callback with a timeout
+    ///
+    /// Returns `Err` if the timeout elapses before the callback fires.
+    /// The Arc context is NOT freed on timeout — the Swift Task will eventually
+    /// call the callback, which safely frees it via `Arc::from_raw`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error string if timed out or if the callback signaled an error.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the internal mutex is poisoned.
+    pub fn wait_for(self, timeout: std::time::Duration) -> Result<T, String> {
+        use std::time::Instant;
+        let (lock, cvar) = &*self.inner;
+        let mut state = lock.lock().unwrap();
+        let deadline = Instant::now() + timeout;
+        while !state.completed {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!("Completion timed out after {timeout:?}"));
+            }
+            let (new_state, timed_out) = cvar.wait_timeout(state, remaining).unwrap();
+            state = new_state;
+            if timed_out.timed_out() && !state.completed {
+                return Err(format!("Completion timed out after {timeout:?}"));
+            }
+        }
+        state
+            .result
+            .take()
+            .unwrap_or_else(|| Err("Completion signaled without result".to_string()))
+    }
+
     /// Signal successful completion with a value
     ///
     /// # Safety
