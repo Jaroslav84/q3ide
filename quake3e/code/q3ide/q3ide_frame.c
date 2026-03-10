@@ -5,6 +5,7 @@
 
 #include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
+#include "q3ide_params.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
 #include "q3ide_interaction.h"
@@ -73,7 +74,6 @@ void Q3IDE_Frame(void)
 		 * the renderer. Visible if any of the 5 points has an unobstructed path.
 		 * Works from both sides — no normal-offset tricks needed. */
 		if (q3ide_wm.num_active) {
-			static vec3_t los_mins = {0, 0, 0}, los_maxs = {0, 0, 0};
 			int _li;
 			for (_li = 0; _li < Q3IDE_MAX_WIN; _li++) {
 				q3ide_win_t *_w = &q3ide_wm.wins[_li];
@@ -81,6 +81,9 @@ void Q3IDE_Frame(void)
 					_w->los_visible = qfalse;
 					continue;
 				}
+#if Q3IDE_DISABLE_LOS_CHECK
+				_w->los_visible = qtrue;
+#else
 				{
 					/* Build same right/up basis as q3ide_win_basis(). */
 					float  _nx = _w->normal[0], _ny = _w->normal[1];
@@ -92,6 +95,7 @@ void Q3IDE_Frame(void)
 					/* 5 sample points: center, BL, BR, TR, TL corners (inset 10%). */
 					static const float _cx[5] = {0.0f, -0.9f,  0.9f, 0.9f, -0.9f};
 					static const float _cy[5] = {0.0f, -0.9f, -0.9f, 0.9f,  0.9f};
+					static vec3_t      _mins  = {0, 0, 0}, _maxs = {0, 0, 0};
 
 					_rx = (_hl > 0.01f) ? -_ny / _hl : 1.0f;
 					_ry = (_hl > 0.01f) ?  _nx / _hl : 0.0f;
@@ -110,13 +114,14 @@ void Q3IDE_Frame(void)
 						_pt[0] = _w->origin[0] + _rx * _cx[_pi] * _hw;
 						_pt[1] = _w->origin[1] + _ry * _cx[_pi] * _hw;
 						_pt[2] = _w->origin[2] + _cy[_pi] * _hh;
-						CM_BoxTrace(&_tr, eye, _pt, los_mins, los_maxs, 0, CONTENTS_SOLID, qfalse);
+						CM_BoxTrace(&_tr, eye, _pt, _mins, _maxs, 0, CONTENTS_SOLID, qfalse);
 						if (_tr.fraction >= 0.95f) {
 							_w->los_visible = qtrue;
 							break;
 						}
 					}
 				}
+#endif /* Q3IDE_DISABLE_LOS_CHECK */
 			}
 		}
 

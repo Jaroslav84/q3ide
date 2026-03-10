@@ -106,6 +106,8 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 	if (key == 'k' || key == 'K') {
 		q3ide_laser_active = down;
 		Q3IDE_LOGI("laser %s", down ? "ON" : "OFF");
+		if (down)
+			Q3IDE_SetHudMsg("K  LASER", 1500);
 		return qtrue; /* swallow — prevent Q3 from treating 'k' as a console command */
 	}
 	return Q3IDE_Interaction_OnKeyEvent(key, down);

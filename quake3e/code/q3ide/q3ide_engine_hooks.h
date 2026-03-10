@@ -56,6 +56,11 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr);
  * q3ide_interaction.hovered_entity_name ("" when nothing found). */
 void Q3IDE_UpdateEntityHover(void);
 
+/* Show a temporary amber message at the top-centre of the viewport (duration_ms). */
+void Q3IDE_SetHudMsg(const char *msg, int duration_ms);
+/* Draw the current HUD message if not expired — call before re.RenderScene. */
+void Q3IDE_DrawHudMsg(const void *refdef_ptr);
+
 /* Draw red laser beams from player eye to all active windows (hold K). */
 void Q3IDE_DrawLasers(const void *refdef_ptr);
 /* Draw brown rope from player to grapple point when rope mode (type 1) active. */

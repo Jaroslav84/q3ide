@@ -39,11 +39,9 @@ logs/
 .DS_Store
 Thumbs.db
 
-# AI/Agent files
-.agents/
+# AI/Agent files — .claude/ excluded (personal settings); .agents/ and AGENTS.md tracked
 .claude/
 CLAUDE.md
-AGENTS.md
 *.prompt.md
 
 # Temporary files

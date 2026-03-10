@@ -22,10 +22,6 @@
 #include "../client/client.h"
 #include <math.h>
 
-/* Direct server playerState access — bypasses game module, no sv_cheats required.
- * SV_GameClientNum returns pointer to game's authoritative playerState_t for client N. */
-extern playerState_t *SV_GameClientNum(int num);
-
 /* ============================================================
  *  State
  * ============================================================ */
@@ -59,25 +55,6 @@ q3ide_hooks_state_t q3ide_state;
  * Layout (Y axis, player runs south = decreasing Y):
  *   spawn (-974) → portal_A (-1100) → arrive (-1200) → portal_B (-1280) → arrive (-900) → repeat
  */
-static void q3ide_portal_tele(playerState_t *sps, float x, float y, float z, float yaw, const char *tag)
-{
-	Q3IDE_LOGI("%s -> (%.0f,%.0f,%.0f) yaw=%.0f", tag, x, y, z, yaw);
-	sps->origin[0] = x;
-	sps->origin[1] = y;
-	sps->origin[2] = z;
-	sps->velocity[0] = sps->velocity[1] = sps->velocity[2] = 0.0f;
-	sps->eFlags ^= EF_TELEPORT_BIT;
-	sps->viewangles[YAW] = yaw;
-	sps->viewangles[PITCH] = 0.0f;
-	VectorCopy(sps->origin, cl.snap.ps.origin);
-	VectorClear(cl.snap.ps.velocity);
-	cl.snap.ps.eFlags = sps->eFlags;
-}
-
-/* Portal frame logic removed — mirror portal gone. Reserved for future use. */
-__attribute__((unused)) static void q3ide_portal_frame(void)
-{
-}
 
 /* Console command dispatcher — q3ide_hooks_cmd.c */
 extern void Q3IDE_Cmd_f(void);

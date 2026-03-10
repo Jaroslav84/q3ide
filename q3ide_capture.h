@@ -17,6 +17,26 @@
 #define Q3ideQ3IDE_DESKTOP_CAPTURE_ID 4294967295
 
 /**
+ * Consecutive empty-crop frames before detector fires.
+ * Empty crop = display stream is live but window rect produced zero pixels
+ * (coordinates mismatch or window moved off-screen).
+ */
+#define Q3ideDETECTOR_EMPTY_THRESHOLD 20
+
+/**
+ * Consecutive dark frames before detector fires.
+ * Dark = crop succeeded but all sampled pixels are near-black — GPU content
+ * not composited into the display frame (Safari-class apps).
+ */
+#define Q3ideDETECTOR_DARK_THRESHOLD 30
+
+/**
+ * Pixel brightness threshold for "dark" detection (per channel, 0-255).
+ * If all sampled pixels have R, G, B all below this value → dark frame.
+ */
+#define Q3ideDETECTOR_DARK_PIXEL_MAX 12
+
+/**
  * Special window ID for desktop capture (all displays composited).
  */
 #define Q3ideDESKTOP_CAPTURE_ID 4294967295

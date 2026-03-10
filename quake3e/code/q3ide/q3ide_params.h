@@ -8,6 +8,18 @@
 #include "../qcommon/q_shared.h"
 
 /* ══════════════════════════════════════════════════════════════════
+ * TEMPORARY FPS EXPERIMENTS — flip to 1 to disable, measure, flip back
+ * ══════════════════════════════════════════════════════════════════ */
+
+/* Set 1 to skip the 5× CM_BoxTrace LOS check per window per frame.
+ * All windows render regardless of occlusion. Pure FPS cost measurement. */
+#define Q3IDE_DISABLE_LOS_CHECK   0
+
+/* Set 1 to skip q3ide_add_frame() (the 4 edge/border quads per window).
+ * Windows lose the TV-chassis surround. Measures quad-submission cost. */
+#define Q3IDE_DISABLE_EDGE_QUADS  0
+
+/* ══════════════════════════════════════════════════════════════════
  * CAPS & THROTTLES — all hard limits live here so they're easy to find and remove
  * ══════════════════════════════════════════════════════════════════ */
 
@@ -50,14 +62,14 @@
  *            Changing this value requires a FULL rebuild (Rust + engine).
  * ──────────────────────────────────────────────────────────────────────────*/
 #define Q3IDE_CAPTURE_FPS        -1 /* -1=Apple decides, 0=static, N=max fps cap */
-#define Q3IDE_CAPTURE_RING_BUF_SIZE 3
+#define Q3IDE_CAPTURE_RING_BUF_SIZE 3 /* frames kept in the per-window ring buffer; 3 = current + 2 ahead */
 
 /* ── Window sizing (world units) ────────────────────────────────── */
 
-#define Q3IDE_WINDOW_DEFAULT_WIDTH   256.0f
-#define Q3IDE_WINDOW_DEFAULT_HEIGHT  192.0f
-#define Q3IDE_WINDOW_MIN_WIDTH        64.0f
-#define Q3IDE_WIN_INCHES            150.0f /* real-world target diagonal, inches */
+#define Q3IDE_WINDOW_DEFAULT_WIDTH   256.0f /* fallback world width when no wall geometry is available */
+#define Q3IDE_WINDOW_DEFAULT_HEIGHT  192.0f /* fallback world height (4:3 aspect matches default width) */
+#define Q3IDE_WINDOW_MIN_WIDTH        64.0f /* smallest a window is ever clamped to — below this it's unreadable */
+#define Q3IDE_WIN_INCHES            150.0f /* real-world target diagonal, inches — used by layout engine to size TVs */
 
 /* ── Wall placement ─────────────────────────────────────────────── */
 
@@ -68,7 +80,7 @@
 
 #define Q3IDE_SPAWN_WIN_W        100.0f /* world width of initial placed window */
 #define Q3IDE_SPAWN_WIN_DIST     200.0f /* distance ahead of player eye for initial placement */
-#define Q3IDE_DISPLAY_ASPECT  (16.0f / 9.0f)
+#define Q3IDE_DISPLAY_ASPECT  (16.0f / 9.0f) /* assumed aspect ratio for display captures (monitors are 16:9) */
 
 /* ── Interaction / timing ───────────────────────────────────────── */
 
@@ -107,34 +119,35 @@
 
 /* ── Post-MVP: animations ───────────────────────────────────────── */
 
-#define Q3IDE_ANIM_SPAWN_SEC      0.35f
-#define Q3IDE_ANIM_CLOSE_SEC      0.25f
-#define Q3IDE_ANIM_GRAB_SCALE     1.02f
-#define Q3IDE_ANIM_LERP_SPEED     8.0f
+#define Q3IDE_ANIM_SPAWN_SEC      0.35f /* window spawn animation duration in seconds */
+#define Q3IDE_ANIM_CLOSE_SEC      0.25f /* window close animation duration in seconds */
+#define Q3IDE_ANIM_GRAB_SCALE     1.02f /* scale factor applied while window is grabbed/dragged */
+#define Q3IDE_ANIM_LERP_SPEED     8.0f  /* lerp speed for smooth position transitions (units/s) */
 
 /* ── Post-MVP: window chrome ────────────────────────────────────── */
 
-#define Q3IDE_CORNER_RADIUS       12.0f
-#define Q3IDE_WINDOW_BAR_HEIGHT   32.0f
-#define Q3IDE_WINDOW_BAR_OVERLAP  20.0f
-#define Q3IDE_ORNAMENT_Z_OFFSET    8.0f
-#define Q3IDE_ORNAMENT_OVERLAP    20.0f
-#define Q3IDE_MIN_TAP_TARGET      60.0f
+#define Q3IDE_CORNER_RADIUS       12.0f /* rounded corner radius in world units */
+#define Q3IDE_WINDOW_BAR_HEIGHT   32.0f /* title bar height in world units */
+#define Q3IDE_WINDOW_BAR_OVERLAP  20.0f /* how far the title bar overlaps the window content area */
+#define Q3IDE_ORNAMENT_Z_OFFSET    8.0f /* Z push toward player for ornament geometry (avoids z-fighting) */
+#define Q3IDE_ORNAMENT_OVERLAP    20.0f /* ornament extends this many units beyond window edge */
+#define Q3IDE_MIN_TAP_TARGET      60.0f /* minimum tap/click target size in world units (accessibility) */
 
 /* ── Post-MVP: status overlay tints ────────────────────────────── */
+/* RGBA tints drawn over windows to indicate CI/build status.       */
 
-#define Q3IDE_STATUS_PASS_R  0.2f
-#define Q3IDE_STATUS_PASS_G  0.9f
-#define Q3IDE_STATUS_PASS_B  0.4f
-#define Q3IDE_STATUS_PASS_A  0.15f
-#define Q3IDE_STATUS_FAIL_R  1.0f
-#define Q3IDE_STATUS_FAIL_G  0.3f
-#define Q3IDE_STATUS_FAIL_B  0.3f
-#define Q3IDE_STATUS_FAIL_A  0.15f
-#define Q3IDE_STATUS_BUILD_R 1.0f
-#define Q3IDE_STATUS_BUILD_G 0.8f
-#define Q3IDE_STATUS_BUILD_B 0.2f
-#define Q3IDE_STATUS_BUILD_A 0.15f
+#define Q3IDE_STATUS_PASS_R  0.2f  /* pass: green tint R */
+#define Q3IDE_STATUS_PASS_G  0.9f  /* pass: green tint G */
+#define Q3IDE_STATUS_PASS_B  0.4f  /* pass: green tint B */
+#define Q3IDE_STATUS_PASS_A  0.15f /* pass: overlay opacity */
+#define Q3IDE_STATUS_FAIL_R  1.0f  /* fail: red tint R */
+#define Q3IDE_STATUS_FAIL_G  0.3f  /* fail: red tint G */
+#define Q3IDE_STATUS_FAIL_B  0.3f  /* fail: red tint B */
+#define Q3IDE_STATUS_FAIL_A  0.15f /* fail: overlay opacity */
+#define Q3IDE_STATUS_BUILD_R 1.0f  /* building: amber tint R */
+#define Q3IDE_STATUS_BUILD_G 0.8f  /* building: amber tint G */
+#define Q3IDE_STATUS_BUILD_B 0.2f  /* building: amber tint B */
+#define Q3IDE_STATUS_BUILD_A 0.15f /* building: overlay opacity */
 
 /* ── Runtime params (accent colour, visual sizes) ───────────────────
  * Defined once in q3ide_laser.c; read everywhere else as const.   */

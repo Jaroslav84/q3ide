@@ -217,6 +217,42 @@ run_rust_checks() {
     done
     [ "$found" -eq 0 ] && info "no files"
     [ "$any_issues" -eq 0 ] && [ "$found" -gt 0 ] && ok "no unsafe outside lib.rs"
+
+    # cargo check — catches dead_code, type errors, and all compiler warnings.
+    # Only runs on macOS (crate requires ScreenCaptureKit framework).
+    echo ""
+    echo "-- capture/ Rust (cargo check) --"
+    if [ "$(uname -s)" != "Darwin" ]; then
+        info "skipped — cargo check requires macOS (ScreenCaptureKit)"
+        return
+    fi
+    if ! command -v cargo >/dev/null 2>&1; then
+        info "skipped — cargo not found"
+        return
+    fi
+
+    local cargo_out
+    cargo_out="$(cd "$ROOT/capture" && cargo check 2>&1)"
+    local cargo_exit=$?
+
+    # Report each warning/error line
+    local had_warn=0 had_err=0
+    while IFS= read -r line; do
+        case "$line" in
+            *"warning:"*) warn "cargo: $line"; had_warn=1 ;;
+            *"error["*|*"error:"*) err "cargo: $line"; had_err=1; any_issues=1
+                ERROR_FILES="${ERROR_FILES}  cargo-error\n" ;;
+        esac
+    done <<EOF
+$cargo_out
+EOF
+
+    if [ "$cargo_exit" -ne 0 ] && [ "$had_err" -eq 0 ]; then
+        err "cargo check failed (exit $cargo_exit)"
+        ERROR_FILES="${ERROR_FILES}  cargo-check\n"
+    elif [ "$had_warn" -eq 0 ] && [ "$had_err" -eq 0 ]; then
+        ok "cargo check — clean"
+    fi
 }
 
 # ─── main ─────────────────────────────────────────────────────────────────────

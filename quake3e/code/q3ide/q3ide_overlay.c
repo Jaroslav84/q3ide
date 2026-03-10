@@ -29,6 +29,58 @@ static void q3ide_ovl_init(void)
 		g_ovl_chars = re.RegisterShader("gfx/2d/bigchars");
 }
 
+/* Forward declarations for helpers defined below */
+static void q3ide_ovl_str(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, byte r,
+                          byte g, byte b);
+
+/* ── HUD message banner ─────────────────────────────────────────── */
+
+static char               g_hud_msg[64];
+static unsigned long long g_hud_msg_expire_ms;
+
+void Q3IDE_SetHudMsg(const char *msg, int duration_ms)
+{
+	Q_strncpyz(g_hud_msg, msg, sizeof(g_hud_msg));
+	g_hud_msg_expire_ms = (unsigned long long) Sys_Milliseconds() + (unsigned long long) duration_ms;
+}
+
+void Q3IDE_DrawHudMsg(const void *refdef_ptr)
+{
+	const refdef_t *fd = (const refdef_t *) refdef_ptr;
+	unsigned long long now_ms;
+	int len;
+	float ox, oy, oz, total_w;
+	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
+	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
+
+	if (!g_hud_msg[0])
+		return;
+	if (fd->rdflags & RDF_NOWORLDMODEL)
+		return;
+
+	now_ms = (unsigned long long) Sys_Milliseconds();
+	if (now_ms >= g_hud_msg_expire_ms) {
+		g_hud_msg[0] = '\0';
+		return;
+	}
+
+	q3ide_ovl_init();
+	if (!g_ovl_chars || !re.AddPolyToScene)
+		return;
+
+	len = (int) strlen(g_hud_msg);
+	/* Centre horizontally: push left by half the string width */
+	total_w = (float) len * Q3IDE_OVL_CHAR_W;
+	ox = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST - rx[0] * total_w * 0.5f +
+	     fd->viewaxis[2][0] * Q3IDE_OVL_DIST * 0.42f;
+	oy = fd->vieworg[1] + fd->viewaxis[0][1] * Q3IDE_OVL_DIST - rx[1] * total_w * 0.5f +
+	     fd->viewaxis[2][1] * Q3IDE_OVL_DIST * 0.42f;
+	oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST - rx[2] * total_w * 0.5f +
+	     fd->viewaxis[2][2] * Q3IDE_OVL_DIST * 0.42f;
+
+	q3ide_ovl_str(ox, oy, oz, rx, ux, g_hud_msg, 255, 220, 80); /* amber */
+}
+
 /*
  * Render one character as a billboard quad at world (ox,oy,oz).
  * rx = camera-right axis, ux = camera-up axis.
@@ -187,20 +239,26 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		int wrow = 0;
 		int wi;
 
-		/* Section header — "WINS 8 +2 s6" (active + pending, stream count) */
+		/* Section header — "WINS 8+2 s6 nd3" (active+pending, streaming, no-delivery) */
 		{
-			char hdr[32];
+			char hdr[48];
 			int pending = Q3IDE_WM_PendingCount();
-			int streams = 0, _si;
-			for (_si = 0; _si < Q3IDE_MAX_WIN; _si++)
-				if (q3ide_wm.wins[_si].active && q3ide_wm.wins[_si].owns_stream &&
-				    q3ide_wm.wins[_si].stream_active)
-					streams++;
+			int streams = 0, nd = 0, _si;
+			for (_si = 0; _si < Q3IDE_MAX_WIN; _si++) {
+				const q3ide_win_t *_w = &q3ide_wm.wins[_si];
+				if (_w->active && _w->owns_stream) {
+					if (_w->stream_active) streams++; else nd++;
+				}
+			}
 			float lx = ox - ux[0] * wl_base;
 			float ly = oy - ux[1] * wl_base;
 			float lz = oz - ux[2] * wl_base;
-			if (pending > 0)
+			if (pending > 0 && nd > 0)
+				Com_sprintf(hdr, sizeof(hdr), "WINS %d+%d s%d nd%d", q3ide_wm.num_active, pending, streams, nd);
+			else if (pending > 0)
 				Com_sprintf(hdr, sizeof(hdr), "WINS %d+%d s%d", q3ide_wm.num_active, pending, streams);
+			else if (nd > 0)
+				Com_sprintf(hdr, sizeof(hdr), "WINS %d s%d nd%d", q3ide_wm.num_active, streams, nd);
 			else
 				Com_sprintf(hdr, sizeof(hdr), "WINS %d s%d", q3ide_wm.num_active, streams);
 			q3ide_ovl_str(lx, ly, lz, rx, ux, hdr, 255, 255, 255);

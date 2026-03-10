@@ -66,7 +66,9 @@ void Q3IDE_WM_AddPolys(void)
 
 		{
 			qboolean highlighted = (i == q3ide_interaction.focused_win || i == q3ide_selected_win);
+#if !Q3IDE_DISABLE_EDGE_QUADS
 			q3ide_add_frame(win, highlighted);
+#endif
 			if (!win->shader)
 				continue;
 			q3ide_add_poly(win);

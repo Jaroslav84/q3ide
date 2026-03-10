@@ -1,8 +1,5 @@
 /*
- * q3ide_distance.c — Distance-based frame rate control and idle detection (Batch 1).
- *
- * Tracks player position and manages per-window frame skipping based on distance.
- * Also handles idle status when windows stop receiving frames.
+ * q3ide_distance.c — Player position tracking and idle detection.
  */
 
 #include "q3ide_win_mngr.h"
@@ -10,7 +7,6 @@
 #include "../qcommon/qcommon.h"
 #include <math.h>
 
-/* Player position (updated by Q3IDE_WM_UpdatePlayerPos) */
 static vec3_t q3ide_player_pos = {0, 0, 0};
 
 void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz)
@@ -25,22 +21,8 @@ void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz)
 		vec3_t diff;
 		if (!win->active)
 			continue;
-		/* Compute distance from player to window origin */
 		VectorSubtract(win->origin, q3ide_player_pos, diff);
 		win->player_dist = VectorLength(diff);
-		/* Determine target FPS based on distance */
-		if (win->player_dist < Q3IDE_DIST_FULL)
-			win->fps_target = Q3IDE_FPS_FULL;
-		else if (win->player_dist < Q3IDE_DIST_HALF)
-			win->fps_target = Q3IDE_FPS_HALF;
-		else if (win->player_dist < Q3IDE_DIST_LOW)
-			win->fps_target = Q3IDE_FPS_LOW;
-		else
-			win->fps_target = Q3IDE_FPS_MIN;
-		/* Cap tunnel windows to MAX_TUNNEL_FPS */
-		if (win->is_tunnel && win->fps_target > Q3IDE_MAX_TUNNEL_FPS)
-			win->fps_target = Q3IDE_MAX_TUNNEL_FPS;
-		/* Update idle status */
 		if (win->last_frame_ms > 0 && now_ms - win->last_frame_ms > Q3IDE_IDLE_TIMEOUT_MS)
 			win->status = Q3IDE_WIN_STATUS_IDLE;
 	}

@@ -2,6 +2,7 @@
  * q3ide_interaction_frame.c — Per-frame interaction logic and key routing.
  */
 
+#include "q3ide_engine_hooks.h"
 #include "q3ide_interaction.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
@@ -48,6 +49,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 				q3ide_interaction.pointer_uv[0] = q3ide_interaction.focused_uv[0];
 				q3ide_interaction.pointer_uv[1] = q3ide_interaction.focused_uv[1];
 				Q3IDE_LOGI("entered Pointer Mode win=%d (L-key)", q3ide_interaction.focused_win);
+				Q3IDE_SetHudMsg("L  POINTER MODE", 1500);
 				return;
 			}
 		} else {
@@ -104,6 +106,7 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 		if (use_key) {
 			q3ide_interaction.mode = Q3IDE_MODE_KEYBOARD;
 			Q3IDE_LOGI("entered Keyboard Mode");
+			Q3IDE_SetHudMsg("KEYBOARD MODE", 1500);
 			return;
 		}
 		if (escape) {

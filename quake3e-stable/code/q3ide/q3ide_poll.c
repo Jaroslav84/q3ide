@@ -12,7 +12,6 @@
 #include <string.h>
 
 extern void Q3IDE_WM_DrainPendingChanges(void);
-extern void Q3IDE_WM_RestartEvictedStreams(void);
 
 static void q3ide_upload_frame(q3ide_win_t *win, const Q3ideFrame *frame)
 {
@@ -60,19 +59,12 @@ void Q3IDE_WM_PollFrames(void)
 {
 	int                i;
 	unsigned long long now_ms;
-	static unsigned long long last_restart_ms = 0;
 	if (!q3ide_win_mngr.cap || !q3ide_win_mngr.cap_get_frame)
 		return;
 	now_ms = Sys_Milliseconds();
 
 	/* Drain changes fetched by background poll thread (1s interval). */
 	Q3IDE_WM_DrainPendingChanges();
-
-	/* Restore evicted streams every 5s when pool has free slots. */
-	if (now_ms - last_restart_ms > 5000) {
-		Q3IDE_WM_RestartEvictedStreams();
-		last_restart_ms = now_ms;
-	}
 
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
@@ -81,24 +73,33 @@ void Q3IDE_WM_PollFrames(void)
 			continue;
 
 		frame = q3ide_win_mngr.cap_get_frame(q3ide_win_mngr.cap, win->capture_id);
-		if (!frame.pixels)
+		if (!frame.pixels) {
+			/* Apple gave us nothing this cycle.  If the stream was active and
+			 * we haven't had a frame in >1s, that's a throttle event — light
+			 * up the overlay red flash for 2s.  Gate re-trigger to avoid
+			 * spamming the timestamp every frame while throttle persists. */
+			if (win->frames > 0 && win->stream_active &&
+			    (now_ms - win->last_frame_ms) > 1000ULL &&
+			    (now_ms - win->last_throttle_ms) > 2000ULL) {
+				win->last_throttle_ms = now_ms;
+				win->ever_failed = qtrue;
+				Q3IDE_LOGI("win[%d] id=%u THROTTLED by Apple: no frame for %llums",
+				           i, win->capture_id,
+				           (unsigned long long)(now_ms - win->last_frame_ms));
+			}
 			continue;
+		}
 		if (frame.source_wid != win->capture_id) {
 			if (win->frames < 5)
 				Q3IDE_LOGI("MISMATCH win[%d] id=%u got wid=%u", i, win->capture_id, frame.source_wid);
 			continue;
 		}
 		win->last_frame_ms = now_ms;
+		win->stream_active = qtrue; /* frame arrived — stream confirmed alive */
 		if (win->first_frame_ms == 0)
 			win->first_frame_ms = now_ms;
 		win->status = Q3IDE_WIN_STATUS_ACTIVE;
 
-		/* Timestamp-based throttle: works for any fps_target, adapts to game framerate. */
-		if (win->fps_target > 0 && win->fps_target < Q3IDE_FPS_FULL) {
-			unsigned long long interval_ms = 1000ULL / (unsigned long long) win->fps_target;
-			if (now_ms - win->last_upload_ms < interval_ms)
-				continue;
-		}
 		win->last_upload_ms = now_ms;
 
 		/* Use UV slice width for aspect correction (slice panels show 1/N of display). */

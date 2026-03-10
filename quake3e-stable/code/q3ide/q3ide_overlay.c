@@ -190,8 +190,12 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		/* Section header — "WINS 8 +2 s6" (active + pending, stream count) */
 		{
 			char hdr[32];
-			int  pending = Q3IDE_WM_PendingCount();
-			int  streams = Q3IDE_StreamCount();
+			int pending = Q3IDE_WM_PendingCount();
+			int streams = 0, _si;
+			for (_si = 0; _si < Q3IDE_MAX_WIN; _si++)
+				if (q3ide_wm.wins[_si].active && q3ide_wm.wins[_si].owns_stream &&
+				    q3ide_wm.wins[_si].stream_active)
+					streams++;
 			float lx = ox - ux[0] * wl_base;
 			float ly = oy - ux[1] * wl_base;
 			float lz = oz - ux[2] * wl_base;
@@ -199,7 +203,7 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 				Com_sprintf(hdr, sizeof(hdr), "WINS %d+%d s%d", q3ide_wm.num_active, pending, streams);
 			else
 				Com_sprintf(hdr, sizeof(hdr), "WINS %d s%d", q3ide_wm.num_active, streams);
-			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, hdr, 65, 65, 65);
+			q3ide_ovl_str(lx, ly, lz, rx, ux, hdr, 255, 255, 255);
 		}
 		wrow++;
 
@@ -229,13 +233,46 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 			ly = oy - ux[1] * row_off;
 			lz = oz - ux[2] * row_off;
 
-			/* Highlight focused window warm white; dead streams in orange-red; others dim */
-			if (wi == q3ide_interaction.focused_win)
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 220, 200, 120);
-			else if (w->owns_stream && !w->stream_active)
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 255, 80, 40); /* stream dead — orange-red */
-			else
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 110, 110, 110);
+			/* ── Two indicator lamps before the label ─────────────────────────
+			 * Lamp 1: ever_failed  — red=yes  green=never had issues
+			 * Lamp 2: failing now  — red=yes  green=stream healthy right now
+			 *   "failing now" = stream dead OR throttled within last 2s
+			 * ──────────────────────────────────────────────────────────── */
+			{
+				unsigned long long now_ov = Sys_Milliseconds();
+				float lamp_cw = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
+				/* Lamp 1 — ever failed */
+				float l1x = lx, l1y = ly, l1z = lz;
+				/* Lamp 2 — failing now */
+				float l2x = lx + rx[0] * lamp_cw * 1.5f;
+				float l2y = ly + rx[1] * lamp_cw * 1.5f;
+				float l2z = lz + rx[2] * lamp_cw * 1.5f;
+				/* Label — shifted right past the two lamps */
+				float llx = lx + rx[0] * lamp_cw * 3.2f;
+				float lly = ly + rx[1] * lamp_cw * 3.2f;
+				float llz = lz + rx[2] * lamp_cw * 3.2f;
+				qboolean failing_now =
+				    (w->owns_stream && !w->stream_active) ||
+				    (w->last_throttle_ms > 0 && (now_ov - w->last_throttle_ms) < 2000ULL);
+
+				if (w->ever_failed)
+					q3ide_ovl_str_sm(l1x, l1y, l1z, rx, ux, "*", 255, 50, 50);
+				else
+					q3ide_ovl_str_sm(l1x, l1y, l1z, rx, ux, "*", 50, 220, 80);
+
+				if (failing_now)
+					q3ide_ovl_str_sm(l2x, l2y, l2z, rx, ux, "*", 255, 30, 30);
+				else
+					q3ide_ovl_str_sm(l2x, l2y, l2z, rx, ux, "*", 50, 220, 80);
+
+				/* Label */
+				if (wi == q3ide_interaction.focused_win)
+					q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 255, 230, 140);
+				else if (w->owns_stream && !w->stream_active)
+					q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 255, 80, 40);
+				else
+					q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 210, 210, 210);
+			}
 			wrow++;
 		}
 	}

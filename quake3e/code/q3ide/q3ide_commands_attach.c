@@ -154,8 +154,13 @@ static void q3ide_push_win(const Q3ideWindowInfo *w)
 	it.id         = w->window_id;
 	it.aspect     = w->height ? (float) w->width / w->height : Q3IDE_DISPLAY_ASPECT;
 	it.is_display = qfalse;
-	Q_strncpyz(it.label, (w->title && w->title[0]) ? w->title : (w->app_name ? w->app_name : ""),
-	           sizeof(it.label));
+	/* Format label as "AppName: Title" for overlay display */
+	if (w->app_name && w->app_name[0] && w->title && w->title[0])
+		Com_sprintf(it.label, sizeof(it.label), "%s: %s", w->app_name, w->title);
+	else if (w->title && w->title[0])
+		Q_strncpyz(it.label, w->title, sizeof(it.label));
+	else
+		Q_strncpyz(it.label, w->app_name ? w->app_name : "", sizeof(it.label));
 	Q_strncpyz(it.app_name, w->app_name ? w->app_name : "", sizeof(it.app_name));
 	g_pending[g_pending_n++] = it;
 }

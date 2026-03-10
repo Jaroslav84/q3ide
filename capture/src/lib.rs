@@ -9,6 +9,7 @@
 
 mod backend;
 mod ringbuf;
+mod router;
 mod screencapturekit;
 mod window;
 

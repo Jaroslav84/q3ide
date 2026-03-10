@@ -49,12 +49,12 @@ typedef char *(*q3ide_fn_list_fmt)(Q3ideCapture *);
 typedef void (*q3ide_fn_free_str)(char *);
 typedef Q3ideWindowList (*q3ide_fn_list_wins)(Q3ideCapture *);
 typedef void (*q3ide_fn_free_wlist)(Q3ideWindowList);
-typedef int (*q3ide_fn_start_cap)(Q3ideCapture *, unsigned int, unsigned int);
+typedef int (*q3ide_fn_start_cap)(Q3ideCapture *, unsigned int, int); /* fps: -1=off, 0=static, N=cap */
 typedef void (*q3ide_fn_stop_cap)(Q3ideCapture *, unsigned int);
 typedef Q3ideFrame (*q3ide_fn_get_frame)(Q3ideCapture *, unsigned int);
 typedef Q3ideDisplayList (*q3ide_fn_list_disp)(Q3ideCapture *);
 typedef void (*q3ide_fn_free_dlist)(Q3ideDisplayList);
-typedef int (*q3ide_fn_start_disp)(Q3ideCapture *, unsigned int, unsigned int);
+typedef int (*q3ide_fn_start_disp)(Q3ideCapture *, unsigned int, int); /* fps: -1=off, 0=static, N=cap */
 /* Batch 2: Input injection (optional — gracefully absent if dylib lacks them) */
 typedef void (*q3ide_fn_inject_click)(Q3ideCapture *, unsigned int, float, float);
 typedef void (*q3ide_fn_inject_key)(Q3ideCapture *, unsigned int, int, int);
@@ -98,7 +98,6 @@ typedef struct {
 	unsigned long long first_frame_ms; /* Sys_Milliseconds() on first frame */
 	unsigned long long last_frame_ms;  /* Sys_Milliseconds() on last frame */
 	float player_dist;                 /* distance from player, updated each frame */
-	int fps_target;                    /* target FPS for this window (distance-based) */
 	unsigned long long last_upload_ms; /* Sys_Milliseconds() of last texture upload */
 	/* Batch 2: Interaction */
 	int hover_active; /* 1 = crosshair dwelling on this window */
@@ -114,8 +113,10 @@ typedef struct {
 	qboolean is_tunnel;
 	/* Display slice: UV crop */
 	float uv_x0, uv_x1;  /* horizontal UV crop [0..1], default 0.0/1.0 */
-	qboolean owns_stream;   /* qtrue = calls cap_stop on detach */
-	qboolean stream_active; /* qtrue = SCK stream is currently running */
+	qboolean owns_stream;                /* qtrue = calls cap_stop on detach */
+	qboolean stream_active;              /* qtrue = SCK stream currently delivering frames */
+	qboolean ever_failed;                /* qtrue = stream has ever been throttled or died; never resets */
+	unsigned long long last_throttle_ms; /* Sys_Milliseconds() last time Apple gave no frame for >1s */
 } q3ide_win_t;
 
 /* ── Global window manager state (defined in q3ide_win_mngr.c) ──────── */

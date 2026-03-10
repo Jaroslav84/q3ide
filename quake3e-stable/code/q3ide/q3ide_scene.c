@@ -108,7 +108,7 @@ void Q3IDE_WM_CmdDetachAll(void)
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active || !w->is_tunnel)
 			continue;
-		if (w->owns_stream && w->stream_active && q3ide_win_mngr.cap_stop)
+		if (w->owns_stream && q3ide_win_mngr.cap_stop)
 			q3ide_win_mngr.cap_stop(q3ide_win_mngr.cap, w->capture_id);
 		memset(w, 0, sizeof(q3ide_win_t));
 		q3ide_wm.num_active--;
@@ -128,9 +128,9 @@ void Q3IDE_WM_CmdStatus(void)
 		if (!w->active)
 			continue;
 		Com_Printf("  [%d] id=%u slot=%d sz=%.0fx%.0f frames=%llu status=%s"
-		           " dist=%.0f fps=%d%s%s\n",
+		           " dist=%.0f%s%s\n",
 		           i, w->capture_id, w->scratch_slot, w->world_w, w->world_h, w->frames,
-		           snames[w->status < 4 ? w->status : 3], w->player_dist, w->fps_target, w->label[0] ? " label=" : "",
+		           snames[w->status < 4 ? w->status : 3], w->player_dist, w->label[0] ? " label=" : "",
 		           w->label[0] ? w->label : "");
 		count++;
 	}
