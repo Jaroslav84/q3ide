@@ -1,7 +1,7 @@
 /*
- * q3ide_wm.h — Q3IDE window manager internal API.
+ * q3ide_win_mngr.h — Q3IDE window manager internal API.
  *
- * Private header shared between q3ide_wm.c and q3ide_hooks.c.
+ * Private header shared between q3ide_win_mngr.c and q3ide_commands.c.
  * Not included by engine files.
  */
 
@@ -25,12 +25,11 @@ void Q3IDE_WM_InvalidateShaders(void);
 /* Add active window quads to scene (call before RenderScene). */
 void Q3IDE_WM_AddPolys(void);
 
-/* Primitives used by command handlers in q3ide_hooks.c */
+/* Primitives used by command handlers in q3ide_commands.c */
 qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out_normal);
 /* skip_clamp=qtrue: layout engine already measured fit; skip q3ide_clamp_window_size */
 qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start,
                          qboolean skip_clamp);
-
 /*
  * Ray-test all active windows; returns index of closest hit or -1.
  * skip_idx: exclude this index (-1 = none), for cycling through stacked windows.
@@ -44,19 +43,25 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_cl
 /* Find slot index of a window by capture id; returns -1 if not found. */
 int Q3IDE_WM_FindById(unsigned int cid);
 
-/* Simple commands (in q3ide_wm.c) */
+/* Pending-spawn queue (in q3ide_commands_attach.c).
+ * Returns number of items waiting; pops+attaches the next one at pos/norm. */
+int      Q3IDE_WM_PendingCount(void);
+qboolean Q3IDE_WM_AttachNextPending(vec3_t pos, vec3_t norm);
+int      Q3IDE_StreamCount(void); /* active per-window SCK streams */
+
+/* Simple commands (in q3ide_win_mngr.c) */
 void Q3IDE_WM_CmdList(void);
 void Q3IDE_WM_CmdDetachAll(void);
 void Q3IDE_WM_CmdStatus(void);
 
-/* Detach exactly one window by capture id; prints result. (in q3ide_cmd.c) */
+/* Detach exactly one window by capture id; prints result. (in q3ide_commands.c) */
 qboolean Q3IDE_WM_DetachById(unsigned int capture_id);
 
-/* Complex commands (in q3ide_cmd.c) */
+/* Complex commands (in q3ide_commands.c) */
 void Q3IDE_WM_CmdAttach(void);
 void Q3IDE_WM_CmdDesktop(void);
 
-/* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_cmd.c) */
+/* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_commands.c) */
 void Q3IDE_WM_PollChanges(void);
 /* Drain change list fetched by background poll thread — call from main thread. */
 void Q3IDE_WM_DrainPendingChanges(void);

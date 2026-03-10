@@ -3,7 +3,7 @@
  */
 
 #include "q3ide_aas.h"
-#include "q3ide_aas_fmt.h"
+#include "q3ide_aas_format.h"
 #include "q3ide_log.h"
 #include "../qcommon/qcommon.h"
 #include <math.h>

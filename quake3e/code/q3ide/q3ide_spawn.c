@@ -4,18 +4,15 @@
  */
 
 #include "q3ide_log.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
 
-/* Defined in q3ide_cmd_query.c */
+/* Defined in q3ide_commands_query.c */
 extern const char *q3ide_terminal_apps[];
 extern qboolean q3ide_match(const char *app, const char **list);
-
-#define Q3IDE_SPAWN_WIN_W    100.0f /* world width of spawn-focus window, units */
-#define Q3IDE_SPAWN_WIN_DIST 200.0f /* distance ahead of player eye */
 
 void q3ide_spawn_focus_terminal(const vec3_t eye)
 {

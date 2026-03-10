@@ -92,6 +92,12 @@ Reduces SCK's enumeration overhead.
 
 ## GPU-Side Optimizations
 
+### Cull-Disable Single-Quad Rendering (IMPLEMENTED ✅)
+
+Each window is a single polygon with `cull disable` in the shader. The GPU renders front and back faces automatically — winding reversal on the back face mirrors UVs horizontally for free. Half the vertex data, half the draw calls vs. submitting explicit front+back pairs. Border strips use the same trick (4 strips instead of 8). Zero memory overhead.
+
+
+
 ### Glass Material Blur Caching
 
 The Glass Material shader requires a multi-pass blur of the scene behind the Window. This is expensive if done every frame for every Floating Window.

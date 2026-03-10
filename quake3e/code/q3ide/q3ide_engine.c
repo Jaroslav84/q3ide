@@ -4,10 +4,10 @@
  * Contains Q3IDE_Init, Q3IDE_Shutdown, Q3IDE_AddPolysToScene, input hooks.
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "q3ide_interaction.h"
 #include "q3ide_aas.h"
 #include "../qcommon/qcommon.h"
@@ -19,13 +19,13 @@ extern playerState_t *SV_GameClientNum(int num);
 extern q3ide_hooks_state_t q3ide_state;
 extern int q3ide_selected_win;
 extern int q3ide_last_attack;
-extern void Q3IDE_Cmd_f(void); /* command dispatcher in q3ide_hooks.c */
+extern void Q3IDE_Cmd_f(void); /* command dispatcher in q3ide_console.c */
 
-/* Grapple helpers — q3ide_hooks_grapple.c */
+/* Grapple helpers — q3ide_engine_hooks_grapple.c */
 extern void q3ide_grapple_type_frame(void);
 extern void q3ide_grapple_window_frame(void);
 
-/* Shoot-to-place — q3ide_hooks_input.c */
+/* Shoot-to-place — q3ide_engine_hooks_input.c */
 extern void q3ide_shoot_frame(void);
 
 /* ============================================================
@@ -47,6 +47,7 @@ void Q3IDE_Init(void)
 	Q3IDE_Interaction_Init();
 
 	Cmd_AddCommand("q3ide", Q3IDE_Cmd_f);
+	Cvar_Get("q3ide_spawn_count", "1", CVAR_ARCHIVE); /* 0=all, N=attach N then shoot walls */
 	q3ide_state.initialized = qtrue;
 }
 
@@ -105,6 +106,7 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 	if (key == 'k' || key == 'K') {
 		q3ide_laser_active = down;
 		Q3IDE_LOGI("laser %s", down ? "ON" : "OFF");
+		return qtrue; /* swallow — prevent Q3 from treating 'k' as a console command */
 	}
 	return Q3IDE_Interaction_OnKeyEvent(key, down);
 }

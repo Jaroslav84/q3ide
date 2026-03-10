@@ -4,16 +4,16 @@
  * Per-frame tick: q3ide_frame.c.
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
+#include "q3ide_params.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 
 extern playerState_t *SV_GameClientNum(int num);
 
-#define TELE_HIST 20
-static vec3_t tele_pos[TELE_HIST];
-static float tele_yaw[TELE_HIST];
+static vec3_t tele_pos[Q3IDE_TELE_HIST];
+static float tele_yaw[Q3IDE_TELE_HIST];
 static int tele_head;
 static int tele_filled;
 static int tele_block; /* frames remaining in restore window */
@@ -38,7 +38,7 @@ void q3ide_teleport_block_frame(void)
 
 	if (tele_block > 0) {
 		/* Restore to position from ~15 frames ago (safely before the trigger) */
-		int tail = (tele_filled >= 15) ? (tele_head - 14 + TELE_HIST) % TELE_HIST : 0;
+		int tail = (tele_filled >= 15) ? (tele_head - 14 + Q3IDE_TELE_HIST) % Q3IDE_TELE_HIST : 0;
 		playerState_t *sps = SV_GameClientNum(0);
 		if (sps) {
 			VectorCopy(tele_pos[tail], sps->origin);
@@ -49,10 +49,10 @@ void q3ide_teleport_block_frame(void)
 		}
 		tele_block--;
 	} else {
-		tele_head = (tele_head + 1) % TELE_HIST;
+		tele_head = (tele_head + 1) % Q3IDE_TELE_HIST;
 		VectorCopy(cl.snap.ps.origin, tele_pos[tele_head]);
 		tele_yaw[tele_head] = cl.snap.ps.viewangles[YAW];
-		if (tele_filled < TELE_HIST)
+		if (tele_filled < Q3IDE_TELE_HIST)
 			tele_filled++;
 	}
 }

@@ -3,8 +3,8 @@
  */
 
 #include "q3ide_interaction.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "q3ide_log.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -154,9 +154,9 @@ qboolean Q3IDE_Interaction_OnKeyEvent(int key, qboolean down)
 	win_idx = q3ide_interaction.focused_win;
 	if (win_idx < 0 || !q3ide_wm.wins[win_idx].active)
 		return qfalse;
-	if (!q3ide_wm.cap_inject_key)
+	if (!q3ide_win_mngr.cap_inject_key)
 		return qfalse;
-	q3ide_wm.cap_inject_key(q3ide_wm.cap, q3ide_wm.wins[win_idx].capture_id, key, down ? 1 : 0);
+	q3ide_win_mngr.cap_inject_key(q3ide_win_mngr.cap, q3ide_wm.wins[win_idx].capture_id, key, down ? 1 : 0);
 	return qtrue;
 }
 

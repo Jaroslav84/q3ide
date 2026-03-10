@@ -1,8 +1,8 @@
-/* q3ide_cmd_query.c — Q3IDE poll changes and desktop command. */
+/* q3ide_commands_query.c — Q3IDE poll changes and desktop command. */
 
-#include "q3ide_wm.h"
+#include "q3ide_win_mngr.h"
 #include "q3ide_log.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -110,21 +110,21 @@ void Q3IDE_WM_DrainPendingChanges(void)
 	if (!has)
 		return;
 	q3ide_apply_change_list(&clist);
-	if (q3ide_wm.cap_free_changes)
-		q3ide_wm.cap_free_changes(clist);
+	if (q3ide_win_mngr.cap_free_changes)
+		q3ide_win_mngr.cap_free_changes(clist);
 }
 
 /* Kept for callers that need a synchronous fetch. */
 void Q3IDE_WM_PollChanges(void)
 {
 	Q3ideWindowChangeList clist;
-	if (!q3ide_wm.cap_poll_changes || !q3ide_wm.cap_free_changes)
+	if (!q3ide_win_mngr.cap_poll_changes || !q3ide_win_mngr.cap_free_changes)
 		return;
-	clist = q3ide_wm.cap_poll_changes(q3ide_wm.cap);
+	clist = q3ide_win_mngr.cap_poll_changes(q3ide_win_mngr.cap);
 	if (!clist.changes || !clist.count)
 		return;
 	q3ide_apply_change_list(&clist);
-	q3ide_wm.cap_free_changes(clist);
+	q3ide_win_mngr.cap_free_changes(clist);
 }
 
 /* ── CmdDesktop — mirror each macOS display onto its game monitor ── */
@@ -136,12 +136,12 @@ void Q3IDE_WM_CmdDesktop(void)
 	float yaw, angle;
 	int n_disp, n_mon, center, i, j, attached = 0;
 
-	if (!q3ide_wm.cap || !q3ide_wm.cap_list_disp || !q3ide_wm.cap_start_disp) {
+	if (!q3ide_win_mngr.cap || !q3ide_win_mngr.cap_list_disp || !q3ide_win_mngr.cap_start_disp) {
 		Q3IDE_LOGI("display capture not available");
 		return;
 	}
 	Q3IDE_WM_CmdDetachAll();
-	dlist = q3ide_wm.cap_list_disp(q3ide_wm.cap);
+	dlist = q3ide_win_mngr.cap_list_disp(q3ide_win_mngr.cap);
 	if (!dlist.displays || !dlist.count) {
 		Q3IDE_LOGI("no displays found");
 		return;
@@ -158,8 +158,8 @@ void Q3IDE_WM_CmdDesktop(void)
 				sorted[i] = sorted[j];
 				sorted[j] = t;
 			}
-	if (q3ide_wm.cap_free_dlist)
-		q3ide_wm.cap_free_dlist(dlist);
+	if (q3ide_win_mngr.cap_free_dlist)
+		q3ide_win_mngr.cap_free_dlist(dlist);
 
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
@@ -186,7 +186,7 @@ void Q3IDE_WM_CmdDesktop(void)
 			wnorm[1] = -dir[1];
 			wnorm[2] = 0.0f;
 		}
-		if (q3ide_wm.cap_start_disp(q3ide_wm.cap, d->display_id, Q3IDE_CAPTURE_FPS) != 0) {
+		if (q3ide_win_mngr.cap_start_disp(q3ide_win_mngr.cap, d->display_id, Q3IDE_CAPTURE_FPS) != 0) {
 			Q3IDE_LOGI("display %u start failed", d->display_id);
 			continue;
 		}

@@ -1,9 +1,9 @@
 /*
- * q3ide_geom_clamp.c — Window size clamping and ray-window hit detection.
+ * q3ide_geometry_clamp.c — Window size clamping and ray-window hit detection.
  */
 
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include <math.h>
 
@@ -126,13 +126,22 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 
 int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir, int skip_idx)
 {
+	/*
+	 * Ray-plane intersection using the same right/up basis as q3ide_win_basis()
+	 * in q3ide_geometry.c.  Using identical axes makes hit detection pixel-perfect
+	 * and consistent from both sides of a double-sided window.
+	 *
+	 * Basis: right = XY-perp of normal, up = world Z.
+	 * Works for walls (normal mostly horizontal) and is intentionally simple.
+	 */
 	int i, best = -1;
 	float best_t = 512.0f;
 
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
-		vec3_t right, up, diff, hit;
-		float denom, t, hw, hh, lx, ly;
+		vec3_t diff, hit;
+		float denom, t, hw, hh, lx, ly, nx, ny, horiz_len;
+		float right[3], up[3];
 
 		if (!win->active)
 			continue;
@@ -140,28 +149,35 @@ int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir, int skip_idx)
 			continue;
 
 		denom = DotProduct(dir, win->normal);
+		/* Double-sided: accept ray from either side (|denom| check only). */
 		if (fabsf(denom) < 0.001f)
 			continue;
 
 		VectorSubtract(win->origin, start, diff);
 		t = DotProduct(diff, win->normal) / denom;
-		if (t < 0 || t >= best_t)
+		if (t < 0.0f || t >= best_t)
 			continue;
 
 		hit[0] = start[0] + dir[0] * t;
 		hit[1] = start[1] + dir[1] * t;
 		hit[2] = start[2] + dir[2] * t;
 
-		if (fabsf(win->normal[2]) > 0.99f) {
-			vec3_t fwd = {1, 0, 0};
-			CrossProduct(win->normal, fwd, right);
+		/* Same basis as q3ide_win_basis() — XY projection of normal. */
+		nx        = win->normal[0];
+		ny        = win->normal[1];
+		horiz_len = sqrtf(nx * nx + ny * ny);
+		if (horiz_len > 0.01f) {
+			right[0] = -ny / horiz_len;
+			right[1] = nx / horiz_len;
+			right[2] = 0.0f;
 		} else {
-			vec3_t wup = {0, 0, 1};
-			CrossProduct(win->normal, wup, right);
+			right[0] = 1.0f;
+			right[1] = 0.0f;
+			right[2] = 0.0f;
 		}
-		VectorNormalize(right);
-		CrossProduct(right, win->normal, up);
-		VectorNormalize(up);
+		up[0] = 0.0f;
+		up[1] = 0.0f;
+		up[2] = 1.0f;
 
 		VectorSubtract(hit, win->origin, diff);
 		lx = DotProduct(diff, right);
@@ -171,14 +187,12 @@ int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir, int skip_idx)
 
 		if (fabsf(lx) <= hw && fabsf(ly) <= hh) {
 			best_t = t;
-			best = i;
+			best   = i;
 		}
 	}
 	return best;
 }
 
-#define Q3IDE_WALL_DIST   512.0f
-#define Q3IDE_WALL_OFFSET 3.0f
 
 qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out_normal)
 {

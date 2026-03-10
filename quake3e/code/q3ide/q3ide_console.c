@@ -3,10 +3,10 @@
  * Engine hooks: q3ide_engine.c.  Portal helpers: q3ide_portal.c.
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "q3ide_interaction.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -15,8 +15,6 @@
 extern q3ide_hooks_state_t q3ide_state;
 extern int q3ide_selected_win;
 extern int q3ide_select_time;
-
-#define Q3IDE_REPOSITION_MS 5000
 
 void Q3IDE_Cmd_f(void)
 {

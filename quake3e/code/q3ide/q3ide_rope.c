@@ -3,8 +3,8 @@
  * Laser beams: q3ide_laser.c.
  */
 
-#include "q3ide_hooks.h"
-#include "q3ide_wm.h"
+#include "q3ide_engine_hooks.h"
+#include "q3ide_win_mngr.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>

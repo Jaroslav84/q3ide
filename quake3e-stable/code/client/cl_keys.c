@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "client.h"
 #ifdef USE_Q3IDE
-#include "../q3ide/q3ide_hooks.h"
+#include "../q3ide/q3ide_engine_hooks.h"
 #endif
 
 /*
@@ -819,11 +819,4 @@ void Key_SetCatcher( int catcher )
 
 	keyCatchers = catcher;
 
-#ifdef USE_Q3IDE
-	/* Tell renderer whether UI/console is active so RB_SetGL2D uses full viewport */
-	if ( catcher & ( KEYCATCH_UI | KEYCATCH_CONSOLE ) )
-		Cvar_Set( "r_mmUIActive", "1" );
-	else
-		Cvar_Set( "r_mmUIActive", "0" );
-#endif
 }

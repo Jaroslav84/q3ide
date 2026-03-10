@@ -26,7 +26,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../botlib/botlib.h"
 
 #ifdef USE_Q3IDE
-#include "../q3ide/q3ide_hooks.h"
+#include "../q3ide/q3ide_engine_hooks.h"
 #endif
 
 extern	botlib_export_t	*botlib_export;

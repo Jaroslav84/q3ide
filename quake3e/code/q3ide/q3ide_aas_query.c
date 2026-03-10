@@ -2,7 +2,7 @@
  * q3ide_aas_query.c — AAS BSP traversal: point-in-area lookup.
  */
 
-#include "q3ide_aas_fmt.h"
+#include "q3ide_aas_format.h"
 #include "../qcommon/q_shared.h"
 
 extern q3ide_aas_t g_aas;

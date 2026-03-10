@@ -1,5 +1,5 @@
 /*
- * q3ide_aas_fmt.h — AAS binary format constants and types.
+ * q3ide_aas_format.h — AAS binary format constants and types.
  * Shared by q3ide_aas.c, q3ide_aas_query.c, q3ide_aas_face.c.
  */
 

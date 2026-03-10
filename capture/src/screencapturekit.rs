@@ -39,7 +39,9 @@ fn extract_pixels(sample: &CMSampleBuffer, output_type: SCStreamOutputType) -> O
     }
 
     match sample.frame_status() {
-        Some(SCFrameStatus::Complete) | None => {}
+        /* Complete: normal frame. Started: first frame from a new stream (pixels valid).
+         * None: status unavailable — treat as complete. */
+        Some(SCFrameStatus::Complete) | Some(SCFrameStatus::Started) | None => {}
         Some(_) => return None,
     }
 

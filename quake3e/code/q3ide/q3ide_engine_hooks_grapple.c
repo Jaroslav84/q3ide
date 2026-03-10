@@ -1,15 +1,15 @@
 /*
- * q3ide_hooks_grapple.c — Grapple physics overrides (engine-side).
+ * q3ide_engine_hooks_grapple.c — Grapple physics overrides (engine-side).
  *
- * Split from q3ide_hooks.c to keep file sizes under the 400-line limit.
+ * Split from q3ide_engine.c to keep file sizes under the 400-line limit.
  * Provides q3ide_grapple_type_frame() and q3ide_grapple_window_frame()
- * called each frame from Q3IDE_Frame (q3ide_hooks_frame.c).
+ * called each frame from Q3IDE_Frame (q3ide_frame.c).
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>

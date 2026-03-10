@@ -3,23 +3,24 @@
  * Mirror rendering: q3ide_mirror.c.  Frame polling: q3ide_poll.c.
  */
 
-#include "q3ide_wm.h"
+#include "q3ide_win_mngr.h"
 #include "q3ide_log.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_params.h"
+#include "q3ide_win_mngr_internal.h"
+#include "q3ide_interaction.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <string.h>
 
-/* Geometry helpers — q3ide_geom.c */
+/* Geometry helpers — q3ide_geometry.c */
 extern void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader);
-extern void q3ide_add_depth_quad(q3ide_win_t *win);
-extern void q3ide_add_select_border(q3ide_win_t *win);
-extern void q3ide_add_hover_border(q3ide_win_t *win);
+extern void q3ide_add_frame(q3ide_win_t *win, qboolean highlighted);
 extern void q3ide_add_poly(q3ide_win_t *win);
 extern void q3ide_add_blood_splat(q3ide_win_t *win);
 
 /* Shoot-to-place selection — q3ide_portal.c */
 extern int q3ide_selected_win;
+
 
 
 /* ── Shader invalidation ─────────────────────────────────────── */
@@ -28,7 +29,7 @@ void Q3IDE_WM_InvalidateShaders(void)
 {
 	int i;
 	q3ide_wm.border_shader = 0;
-	q3ide_wm.portal_shader = 0;
+	q3ide_wm.edge_shader   = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		q3ide_wm.wins[i].shader = 0;
 }
@@ -42,8 +43,17 @@ void Q3IDE_WM_AddPolys(void)
 	if (!re.AddPolyToScene)
 		return;
 
-	if (!q3ide_wm.border_shader && re.RegisterShader)
-		q3ide_wm.border_shader = re.RegisterShader("q3ide/border");
+	if (!q3ide_wm.border_shader && re.RegisterShader && re.UploadCinematic) {
+		/* Slot 63: accent colour (Quake red) — borders, splats, lasers. */
+		byte accent_bgra[4] = {q3ide_params.accentColor[2], q3ide_params.accentColor[1],
+		                       q3ide_params.accentColor[0], 255};
+		re.UploadCinematic(1, 1, 1, 1, accent_bgra, 63, qtrue, 0x80E1);
+		q3ide_wm.border_shader = re.RegisterShader("q3ide/win63");
+		/* Slot 62: solid black — TV chassis edge quads. */
+		byte black_bgra[4] = {0, 0, 0, 255};
+		re.UploadCinematic(1, 1, 1, 1, black_bgra, 62, qtrue, 0x80E1);
+		q3ide_wm.edge_shader = re.RegisterShader("q3ide/win62");
+	}
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
 
@@ -54,14 +64,14 @@ void Q3IDE_WM_AddPolys(void)
 		if (!win->los_visible)
 			continue;
 
-		if (i == q3ide_selected_win)
-			q3ide_add_select_border(win);
-		q3ide_add_hover_border(win);
-		if (!win->shader)
-			continue; /* no texture yet — borders drawn, but skip depth/poly/splat */
-		q3ide_add_depth_quad(win);
-		q3ide_add_poly(win);
-		q3ide_add_blood_splat(win);
+		{
+			qboolean highlighted = (i == q3ide_interaction.focused_win || i == q3ide_selected_win);
+			q3ide_add_frame(win, highlighted);
+			if (!win->shader)
+				continue;
+			q3ide_add_poly(win);
+			q3ide_add_blood_splat(win);
+		}
 	}
 }
 
@@ -79,15 +89,15 @@ void Q3IDE_WM_SetLabel(unsigned int capture_id, const char *label)
 
 void Q3IDE_WM_CmdList(void)
 {
-	if (!q3ide_wm.cap || !q3ide_wm.cap_list_fmt) {
+	if (!q3ide_win_mngr.cap || !q3ide_win_mngr.cap_list_fmt) {
 		Com_Printf("q3ide: no capture available\n");
 		return;
 	}
 	{
-		char *s = q3ide_wm.cap_list_fmt(q3ide_wm.cap);
+		char *s = q3ide_win_mngr.cap_list_fmt(q3ide_win_mngr.cap);
 		Com_Printf("%s\n", s ? s : "(none)");
-		if (s && q3ide_wm.cap_free_str)
-			q3ide_wm.cap_free_str(s);
+		if (s && q3ide_win_mngr.cap_free_str)
+			q3ide_win_mngr.cap_free_str(s);
 	}
 }
 
@@ -98,8 +108,8 @@ void Q3IDE_WM_CmdDetachAll(void)
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active || !w->is_tunnel)
 			continue;
-		if (w->owns_stream && q3ide_wm.cap_stop)
-			q3ide_wm.cap_stop(q3ide_wm.cap, w->capture_id);
+		if (w->owns_stream && w->stream_active && q3ide_win_mngr.cap_stop)
+			q3ide_win_mngr.cap_stop(q3ide_win_mngr.cap, w->capture_id);
 		memset(w, 0, sizeof(q3ide_win_t));
 		q3ide_wm.num_active--;
 		n++;
@@ -112,7 +122,7 @@ void Q3IDE_WM_CmdStatus(void)
 	int i, count = 0;
 	static const char *snames[] = {"INACTIVE", "ACTIVE", "IDLE", "ERROR"};
 	Com_Printf("q3ide status: dylib=%s cap=%s auto_attach=%d num_active=%d\n", q3ide_wm.dylib ? "yes" : "no",
-	           q3ide_wm.cap ? "yes" : "no", q3ide_wm.auto_attach, q3ide_wm.num_active);
+	           q3ide_win_mngr.cap ? "yes" : "no", q3ide_wm.auto_attach, q3ide_wm.num_active);
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active)

@@ -7,16 +7,15 @@
  * Writes the name into q3ide_interaction.hovered_entity_name.
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_interaction.h"
+#include "q3ide_params.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include "../game/bg_public.h"
 #include <string.h>
 #include <math.h>
 
-#define ENT_MAX_DIST 512.0f
-#define ENT_COS_CONE 0.9976f /* cos(4°) */
 
 /*
  * bg_itemlist[] order — standard Q3 / Quake3e.
@@ -68,7 +67,7 @@ void Q3IDE_UpdateEntityHover(void)
 	vec3_t eye, fwd;
 	float yaw, pitch, cy, sy, cp, sp;
 	int i;
-	float best_dist = ENT_MAX_DIST;
+	float best_dist = Q3IDE_ENT_MAX_DIST;
 	const char *best_name = NULL;
 
 	q3ide_interaction.hovered_entity_name[0] = '\0';
@@ -99,11 +98,11 @@ void Q3IDE_UpdateEntityHover(void)
 
 		VectorSubtract(ent->pos.trBase, eye, delta);
 		dist = VectorLength(delta);
-		if (dist < 1.0f || dist > ENT_MAX_DIST)
+		if (dist < 1.0f || dist > Q3IDE_ENT_MAX_DIST)
 			continue;
 
 		dot = (delta[0] * fwd[0] + delta[1] * fwd[1] + delta[2] * fwd[2]) / dist;
-		if (dot < ENT_COS_CONE)
+		if (dot < Q3IDE_ENT_COS_CONE)
 			continue;
 
 		if (ent->eType == ET_PLAYER) {

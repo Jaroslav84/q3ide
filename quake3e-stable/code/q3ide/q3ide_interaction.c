@@ -5,8 +5,8 @@
 
 #include "q3ide_interaction.h"
 #include "q3ide_log.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -17,8 +17,8 @@ q3ide_interaction_state_t q3ide_interaction;
 
 void q3ide_do_click(unsigned int wid, float uv_x, float uv_y)
 {
-	if (q3ide_wm.cap_inject_click)
-		q3ide_wm.cap_inject_click(q3ide_wm.cap, wid, uv_x, uv_y);
+	if (q3ide_win_mngr.cap_inject_click)
+		q3ide_win_mngr.cap_inject_click(q3ide_win_mngr.cap, wid, uv_x, uv_y);
 	else
 		Q3IDE_LOGW("click wid=%u uv=(%.2f,%.2f) - inject unavailable", wid, uv_x, uv_y);
 }
@@ -41,7 +41,7 @@ int q3ide_crosshair_window(float *out_uv, float *out_dist, vec3_t out_hit_pos)
 	fwd[1] = cosf(p) * sinf(y);
 	fwd[2] = -sinf(p);
 
-	hit = Q3IDE_WM_TraceWindowHit(eye, fwd);
+	hit = Q3IDE_WM_TraceWindowHit(eye, fwd, -1);
 	if (hit < 0)
 		return -1;
 

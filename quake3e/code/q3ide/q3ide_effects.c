@@ -1,15 +1,15 @@
 /*
  * q3ide_effects.c — Portal frame and blood splat rendering.
- * Core window geometry: q3ide_geom.c.
+ * Core window geometry: q3ide_geometry.c.
  */
 
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
 
-/* Basis vectors for a window quad — q3ide_geom.c */
+/* Basis vectors for a window quad — q3ide_geometry.c */
 extern void q3ide_win_basis(q3ide_win_t *win, vec3_t right, vec3_t up);
 
 void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
@@ -47,8 +47,6 @@ void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader)
 		re.AddPolyToScene(shader, 4, rv, 1);
 	}
 }
-
-#define Q3IDE_SPLAT_LIFE_MS 700ULL
 
 static void q3ide_splat_quad(vec3_t center, vec3_t right, vec3_t up, vec3_t normal, float hw, float hh, byte r, byte g,
                              byte b, qhandle_t shader)
@@ -90,13 +88,14 @@ void q3ide_add_blood_splat(q3ide_win_t *win)
 	}
 
 	q3ide_win_basis(win, right, up);
-	q3ide_splat_quad(win->hit_pos, right, up, win->normal, 14.f, 4.f, 220, 0, 0, q3ide_wm.border_shader);
-	q3ide_splat_quad(win->hit_pos, right, up, win->normal, 4.f, 14.f, 180, 0, 0, q3ide_wm.border_shader);
+	/* Accent colour comes from scratch slot 63 texture; vertex brightness varies intensity. */
+	q3ide_splat_quad(win->hit_pos, right, up, win->normal, 14.f, 4.f, 255, 255, 255, q3ide_wm.border_shader);
+	q3ide_splat_quad(win->hit_pos, right, up, win->normal, 4.f, 14.f, 200, 200, 200, q3ide_wm.border_shader);
 	for (i = 0; i < 4; i++) {
 		vec3_t drip;
 		drip[0] = win->hit_pos[0] + right[0] * drip_r[i] + up[0] * drip_u[i];
 		drip[1] = win->hit_pos[1] + right[1] * drip_r[i] + up[1] * drip_u[i];
 		drip[2] = win->hit_pos[2] + right[2] * drip_r[i] + up[2] * drip_u[i];
-		q3ide_splat_quad(drip, right, up, win->normal, 5.f, 5.f, 200, 10, 10, q3ide_wm.border_shader);
+		q3ide_splat_quad(drip, right, up, win->normal, 5.f, 5.f, 180, 180, 180, q3ide_wm.border_shader);
 	}
 }

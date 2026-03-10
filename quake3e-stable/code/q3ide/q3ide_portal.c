@@ -12,10 +12,10 @@
  *   "give ammo" is injected after each shot so the weapon never dry-fires.
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "q3ide_interaction.h"
 #include "q3ide_aas.h"
 #include "../qcommon/qcommon.h"
@@ -26,13 +26,11 @@
  * SV_GameClientNum returns pointer to game's authoritative playerState_t for client N. */
 extern playerState_t *SV_GameClientNum(int num);
 
-#define Q3IDE_REPOSITION_MS 5000 /* ms to shoot destination after selecting */
-
 /* ============================================================
  *  State
  * ============================================================ */
 
-/* Shoot-to-place state — exported for q3ide_hooks_input.c */
+/* Shoot-to-place state — exported for q3ide_engine_hooks_input.c */
 int q3ide_selected_win = -1; /* wins[] index, -1 = none selected */
 int q3ide_select_time = 0;   /* Sys_Milliseconds() when selected */
 int q3ide_last_attack = 0;   /* previous frame BUTTON_ATTACK state */
@@ -84,4 +82,4 @@ __attribute__((unused)) static void q3ide_portal_frame(void)
 /* Console command dispatcher — q3ide_hooks_cmd.c */
 extern void Q3IDE_Cmd_f(void);
 
-/* Grapple + public engine hooks — defined in q3ide_hooks_grapple.c / q3ide_hooks_frame.c */
+/* Grapple + public engine hooks — defined in q3ide_engine_hooks_grapple.c / q3ide_hooks_frame.c */

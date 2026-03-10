@@ -3,26 +3,27 @@
  * Engine lifecycle hooks: q3ide_engine.c.  Portal logic: q3ide_portal.c.
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "q3ide_interaction.h"
 #include "q3ide_aas.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
+#include <math.h>
 
 extern q3ide_hooks_state_t q3ide_state;
 extern int q3ide_last_attack;
 
-/* Grapple helpers — q3ide_hooks_grapple.c */
+/* Grapple helpers — q3ide_engine_hooks_grapple.c */
 extern void q3ide_grapple_type_frame(void);
 extern void q3ide_grapple_window_frame(void);
 
 /* Spawn-focus — q3ide_spawn.c */
 extern void q3ide_spawn_focus_terminal(const vec3_t eye);
 
-/* Shoot-to-place — q3ide_hooks_input.c */
+/* Shoot-to-place — q3ide_engine_hooks_input.c */
 extern void q3ide_shoot_frame(void);
 
 void Q3IDE_Frame(void)
@@ -68,7 +69,10 @@ void Q3IDE_Frame(void)
 		eye[2] += cl.snap.ps.viewheight;
 		Q3IDE_WM_UpdatePlayerPos(eye[0], eye[1], eye[2]);
 
-		/* Cache LOS visibility once per frame — reused across all monitor render passes. */
+		/* Cache LOS visibility once per frame — reused across all monitor render passes.
+		 * Pixel-perfect: trace to center + 4 corners using the same right/up basis as
+		 * the renderer. Visible if any of the 5 points has an unobstructed path.
+		 * Works from both sides — no normal-offset tricks needed. */
 		if (q3ide_wm.num_active) {
 			static vec3_t los_mins = {0, 0, 0}, los_maxs = {0, 0, 0};
 			int _li;
@@ -79,9 +83,33 @@ void Q3IDE_Frame(void)
 					continue;
 				}
 				{
+					/* Build same right/up basis as q3ide_win_basis(). */
+					float  _nx = _w->normal[0], _ny = _w->normal[1];
+					float  _hl = sqrtf(_nx * _nx + _ny * _ny);
+					float  _rx, _ry, _hw, _hh;
+					vec3_t _pt;
 					trace_t _tr;
-					CM_BoxTrace(&_tr, eye, _w->origin, los_mins, los_maxs, 0, CONTENTS_SOLID, qfalse);
-					_w->los_visible = (_tr.startsolid || _tr.fraction >= 0.95f) ? qtrue : qfalse;
+					int    _pi;
+					/* 5 sample points: center, BL, BR, TR, TL corners (inset 10%). */
+					static const float _cx[5] = {0.0f, -0.9f,  0.9f, 0.9f, -0.9f};
+					static const float _cy[5] = {0.0f, -0.9f, -0.9f, 0.9f,  0.9f};
+
+					_rx = (_hl > 0.01f) ? -_ny / _hl : 1.0f;
+					_ry = (_hl > 0.01f) ?  _nx / _hl : 0.0f;
+					_hw = _w->world_w * 0.5f;
+					_hh = _w->world_h * 0.5f;
+
+					_w->los_visible = qfalse;
+					for (_pi = 0; _pi < 5; _pi++) {
+						_pt[0] = _w->origin[0] + _rx * _cx[_pi] * _hw;
+						_pt[1] = _w->origin[1] + _ry * _cx[_pi] * _hw;
+						_pt[2] = _w->origin[2] + _cy[_pi] * _hh;
+						CM_BoxTrace(&_tr, eye, _pt, los_mins, los_maxs, 0, CONTENTS_SOLID, qfalse);
+						if (_tr.startsolid || _tr.fraction >= 0.95f) {
+							_w->los_visible = qtrue;
+							break;
+						}
+					}
 				}
 			}
 		}

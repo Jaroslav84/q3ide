@@ -1,5 +1,5 @@
 /*
- * q3ide_hooks.h — Q3IDE engine integration.
+ * q3ide_engine_hooks.h — Q3IDE engine integration.
  *
  * Bridges the Quake3e engine with the macOS ScreenCaptureKit dylib.
  * All hooks guarded by #ifdef USE_Q3IDE in engine source files.

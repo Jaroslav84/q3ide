@@ -1,12 +1,12 @@
 /*
- * q3ide_wm.c — Window manager: dylib load, attach, move, find, init/shutdown.
+ * q3ide_win_mngr.c — Window manager: dylib load, attach, move, find, init/shutdown.
  * Frame polling: q3ide_poll.c.  Scene rendering: q3ide_scene.c.  Mirror: q3ide_mirror.c.
  */
 
-#include "q3ide_wm.h"
+#include "q3ide_win_mngr.h"
 #include "q3ide_log.h"
-#include "q3ide_wm_internal.h"
-#include "q3ide_design.h"
+#include "q3ide_win_mngr_internal.h"
+
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <dlfcn.h>
@@ -20,13 +20,45 @@
 #define Q3IDE_DYLIB "libq3ide_capture.so"
 #endif
 
-#define Q3IDE_WALL_DIST   512.0f
-#define Q3IDE_WALL_OFFSET 3.0f
 
 q3ide_wm_t q3ide_wm;
 
-/* Geometry clamp — q3ide_geom_clamp.c */
+/* Geometry clamp — q3ide_geometry_clamp.c */
 extern void q3ide_clamp_window_size(q3ide_win_t *win);
+
+/* ── Stream pool ────────────────────────────────────────────────── */
+
+/* Count per-window streams currently active (display streams not counted). */
+int Q3IDE_StreamCount(void)
+{
+	int i, n = 0;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+		q3ide_win_t *w = &q3ide_wm.wins[i];
+		if (w->active && w->owns_stream && w->stream_active)
+			n++;
+	}
+	return n;
+}
+
+/*
+ * Try to restart streams for windows that lost theirs (silently dropped by SCK).
+ * Called periodically from PollFrames.
+ */
+void Q3IDE_WM_RestartEvictedStreams(void)
+{
+	int i;
+	if (!q3ide_wm.cap_start)
+		return;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+		q3ide_win_t *w = &q3ide_wm.wins[i];
+		if (!w->active || !w->owns_stream || w->stream_active)
+			continue;
+		if (q3ide_wm.cap_start(q3ide_wm.cap, w->capture_id, Q3IDE_CAPTURE_FPS) == 0) {
+			w->stream_active = qtrue;
+			Q3IDE_LOGI("stream: restarted win[%d] '%s'", i, w->label);
+		}
+	}
+}
 
 static qboolean q3ide_load_dylib(void)
 {
@@ -75,7 +107,7 @@ static qboolean q3ide_load_dylib(void)
 	return qtrue;
 }
 
-/* Q3IDE_WM_TraceWall — q3ide_geom_clamp.c */
+/* Q3IDE_WM_TraceWall — q3ide_geometry_clamp.c */
 
 qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start,
                          qboolean skip_clamp)
@@ -113,7 +145,8 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		return qfalse;
 	}
 
-	if (do_start && q3ide_wm.cap_start && q3ide_wm.cap_start(q3ide_wm.cap, id, Q3IDE_CAPTURE_FPS) != 0) {
+	if (do_start && q3ide_wm.cap_start &&
+	    q3ide_wm.cap_start(q3ide_wm.cap, id, Q3IDE_CAPTURE_FPS) != 0) {
 		Com_Printf("q3ide: capture start failed id=%u\n", id);
 		return qfalse;
 	}
@@ -133,7 +166,11 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	win->world_w = ww;
 	win->world_h = wh;
 	win->wall_mounted = skip_clamp;
-	win->is_tunnel = do_start; /* OS screen-capture windows are tunnels */
+	win->is_tunnel = qtrue; /* OS screen-capture window — removed by detach-all */
+	win->uv_x0 = 0.0f;
+	win->uv_x1 = 1.0f;
+	win->owns_stream   = do_start;
+	win->stream_active = do_start;
 	q3ide_wm.num_active++;
 	if (!skip_clamp)
 		q3ide_clamp_window_size(win);

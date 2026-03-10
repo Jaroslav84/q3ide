@@ -94,6 +94,7 @@ These are always true, regardless of stage or placement mode.
 1. **Minimum size = 100u diagonal.** Exception: user manually resizes.
 2. **Aspect ratio is sacred.** Never stretched, never cropped.
 3. **Double-sided display.** Render from behind with flipped image. Exception: flush against wall.
+   Single polygon + `cull disable` shader. GPU mirrors UVs on back face via winding reversal — free, zero extra geometry.
 4. **Single horizontal row per wall.** Never stacked vertically.
 5. **Vertically centered on wall.** Middle. Like a projector screen.
 6. **Vertical walls only.** ±5° threshold. Exception: in-map monitors/billboards ±30°.

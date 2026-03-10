@@ -45,6 +45,9 @@ Ofcourse they used inches...
 - Windows can display picture and have same interactions from behind too with the image flipped horizontally
     - exceptions:
         - window is 100% on the wall and none can see it from behind
+    - **implementation:** single polygon with `cull disable` shader — GPU renders both faces for free.
+      Back-face winding reversal automatically flips UVs horizontally (correct physical behaviour).
+      Never submit a second explicit back-face quad — redundant and wasteful.
 - Single horizontal row per wall. Never stacked vertically.
 - Vertically centered on wall. Middle. Like a projector screen.
 - All windows are equal priority. FIFO order. No VIP treatment.
@@ -127,6 +130,22 @@ Ofcourse they used inches...
 - During leapfrog (single window move): no global throttle needed. One window repositioning is cheap.
 
 ## Rendering optimizations
+
+### WIN #0: Cull-disable single-quad trick (IMPLEMENTED ✅)
+
+**Problem:** Early implementation submitted TWO quads per window (front + explicit back face = 2× vertex data, 2× draw calls per window). Border strips had the same problem — 8 strips instead of 4.
+
+**Fix:** All `q3ide/win*` and `q3ide/win63` (border) shaders declare `cull disable`. A single polygon is rendered from both sides by the GPU at zero extra cost:
+- Front face: winding CCW → UVs read left-to-right → correct image
+- Back face: same vertices, winding appears CW from that camera → UVs mirror horizontally → correct physical behaviour (like looking at a screen from behind)
+
+**Result:** 50% fewer quads per window, 50% fewer border strips. No texture duplication, no second scratch slot, zero extra memory. The GPU's backface-culling disable is essentially free.
+
+**Code:** `q3ide_geometry.c` — `q3ide_add_poly()` and `q3ide_frame_strips()`.
+
+**Rule:** Never add a second back-face quad. The shader does it.
+
+---
 
 ### Current bottleneck (the murder weapon)
 - Capture: CMSampleBuffer → CVPixelBuffer.lock_read_only() → raw CPU pointer

@@ -5,12 +5,10 @@
  * Also handles idle status when windows stop receiving frames.
  */
 
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include <math.h>
-
-#define Q3IDE_IDLE_TIMEOUT_MS 5000
 
 /* Player position (updated by Q3IDE_WM_UpdatePlayerPos) */
 static vec3_t q3ide_player_pos = {0, 0, 0};

@@ -1347,9 +1347,10 @@ void IN_Frame( void )
 #endif
 
 	if ( Key_GetCatcher() & KEYCATCH_CONSOLE ) {
-		// temporarily deactivate if not in the game and
-		// running on the desktop with multimonitor configuration
-		if ( !glw_state.isFullscreen || glw_state.monitorCount > 1 ) {
+		// Deactivate mouse for windowed mode only.
+		// Multi-monitor spanning is still fullscreen — keep mouse active so
+		// the console can receive keyboard input normally.
+		if ( !glw_state.isFullscreen ) {
 			IN_DeactivateMouse();
 			return;
 		}

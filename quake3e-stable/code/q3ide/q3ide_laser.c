@@ -1,12 +1,15 @@
 /*
- * q3ide_laser.c — Red laser beams from player to all active windows.
+ * q3ide_laser.c — Red laser beams from player to active windows.
  * Grapple rope rendering: q3ide_rope.c.
+ *
+ * Color comes from border_shader (slot 63, solid red texture).
+ * Vertex colors must be white — rgbGen vertex reads them, not modulate.
  */
 
-#include "q3ide_hooks.h"
+#include "q3ide_engine_hooks.h"
 #include "q3ide_params.h"
-#include "q3ide_wm.h"
-#include "q3ide_wm_internal.h"
+#include "q3ide_win_mngr.h"
+#include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -14,26 +17,26 @@
 
 /* q3ide_params singleton — input/keyboard must never write to this. */
 const q3ide_params_t q3ide_params = {
-    .laserPointerWidth = 0.5f,
+    .laserPointerWidth = 2.0f,
+    .borderThickness   = 0.421875f,
+    .windowDepth       = 1.0f,        /* TV chassis thickness — visible from the side */
+    .accentColor       = {160, 0, 0}, /* Quake red — deep crimson */
 };
 
-static qhandle_t g_laser_shader;
-
-static void q3ide_laser_shader_init(void)
-{
-	if (!g_laser_shader)
-		g_laser_shader = re.RegisterShader("q3ide/laser");
-}
-
 /*
- * Draw a camera-facing ribbon from `from` to `to`.
- * vieworg is used to compute a billboard perp so the ribbon always faces the
- * camera regardless of beam direction.
+ * Draw a camera-facing ribbon from `from` to `to` using border_shader.
+ * half_w: half-width of the ribbon in world units.
+ * All vertex colors white — red comes from the solid-red scratch texture.
  */
-static void q3ide_draw_beam(const vec3_t from, const vec3_t to, const vec3_t vieworg, byte r, byte g, byte b, byte a)
+static void q3ide_draw_beam(const vec3_t from, const vec3_t to, const vec3_t vieworg, float half_w)
 {
-	vec3_t beam_dir, mid, to_cam, perp, perp2, up = {0.0f, 0.0f, 1.0f};
+	vec3_t beam_dir, mid, to_cam, perp, up = {0.0f, 0.0f, 1.0f};
 	float len;
+	polyVert_t v[4];
+	int i;
+
+	if (!q3ide_wm.border_shader || !re.AddPolyToScene)
+		return;
 
 	VectorSubtract(to, from, beam_dir);
 	len = VectorLength(beam_dir);
@@ -55,7 +58,6 @@ static void q3ide_draw_beam(const vec3_t from, const vec3_t to, const vec3_t vie
 	CrossProduct(beam_dir, to_cam, perp);
 	len = VectorLength(perp);
 	if (len < 0.1f) {
-		/* Beam is pointing directly at camera — fall back to Z cross */
 		CrossProduct(beam_dir, up, perp);
 		len = VectorLength(perp);
 		if (len < 0.1f) {
@@ -64,72 +66,65 @@ static void q3ide_draw_beam(const vec3_t from, const vec3_t to, const vec3_t vie
 			len = VectorLength(perp);
 		}
 	}
-	VectorScale(perp, (q3ide_params.laserPointerWidth * 0.5f) / len, perp);
+	if (len < 0.01f)
+		return;
+	VectorScale(perp, half_w / len, perp);
 
-	/* Second ribbon perpendicular to first (cross shape for full visibility) */
-	CrossProduct(beam_dir, perp, perp2);
-	len = VectorLength(perp2);
-	if (len > 0.1f)
-		VectorScale(perp2, (q3ide_params.laserPointerWidth * 0.5f) / len, perp2);
+	VectorAdd(from, perp, v[0].xyz);
+	VectorSubtract(from, perp, v[1].xyz);
+	VectorSubtract(to, perp, v[2].xyz);
+	VectorAdd(to, perp, v[3].xyz);
 
-	/* Helper: emit one ribbon quad with given offset vector */
-	{
-		int q, i;
-		polyVert_t v[4];
-		for (q = 0; q < 2; q++) {
-			vec3_t *pv = (q == 0) ? &perp : &perp2;
-			if (VectorLength(*pv) < 0.01f)
-				continue;
-			VectorAdd(from, *pv, v[0].xyz);
-			VectorSubtract(from, *pv, v[1].xyz);
-			VectorSubtract(to, *pv, v[2].xyz);
-			VectorAdd(to, *pv, v[3].xyz);
+	v[0].st[0] = 0.0f; v[0].st[1] = 0.0f;
+	v[1].st[0] = 1.0f; v[1].st[1] = 0.0f;
+	v[2].st[0] = 1.0f; v[2].st[1] = 1.0f;
+	v[3].st[0] = 0.0f; v[3].st[1] = 1.0f;
 
-			v[0].st[0] = 0.0f;
-			v[0].st[1] = 0.0f;
-			v[1].st[0] = 1.0f;
-			v[1].st[1] = 0.0f;
-			v[2].st[0] = 1.0f;
-			v[2].st[1] = 1.0f;
-			v[3].st[0] = 0.0f;
-			v[3].st[1] = 1.0f;
-
-			for (i = 0; i < 4; i++) {
-				v[i].modulate.rgba[0] = r;
-				v[i].modulate.rgba[1] = g;
-				v[i].modulate.rgba[2] = b;
-				v[i].modulate.rgba[3] = a;
-			}
-			re.AddPolyToScene(g_laser_shader, 4, v, 1);
-		}
+	/* White verts — color comes from the solid-red scratch texture, not vertex */
+	for (i = 0; i < 4; i++) {
+		v[i].modulate.rgba[0] = 255;
+		v[i].modulate.rgba[1] = 255;
+		v[i].modulate.rgba[2] = 255;
+		v[i].modulate.rgba[3] = 255;
 	}
+	re.AddPolyToScene(q3ide_wm.border_shader, 4, v, 1);
 }
 
 void Q3IDE_DrawLasers(const void *refdef_ptr)
 {
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
-	vec3_t beam_start;
-	int i;
+	vec3_t fwd, beam_end;
+	int hit, i;
 
 	extern qboolean q3ide_laser_active;
 	if (!q3ide_laser_active)
 		return;
 	if (fd->rdflags & RDF_NOWORLDMODEL)
 		return;
-
-	q3ide_laser_shader_init();
-	if (!g_laser_shader || !re.AddPolyToScene)
+	if (!re.AddPolyToScene)
 		return;
 
-	/* Start beams from mid-body: scales with player viewheight (stand/crouch). */
-	beam_start[0] = cl.snap.ps.origin[0];
-	beam_start[1] = cl.snap.ps.origin[1];
-	beam_start[2] = cl.snap.ps.origin[2] + (float) cl.snap.ps.viewheight * 0.5f;
+	/* Crosshair ray from camera origin along camera forward axis. */
+	fwd[0] = fd->viewaxis[0][0];
+	fwd[1] = fd->viewaxis[0][1];
+	fwd[2] = fd->viewaxis[0][2];
 
+	hit = Q3IDE_WM_TraceWindowHit(fd->vieworg, fwd, -1);
+	if (hit >= 0) {
+		/* Thick beam to the aimed-at window. */
+		q3ide_draw_beam(fd->vieworg, q3ide_wm.wins[hit].origin, fd->vieworg, q3ide_params.laserPointerWidth);
+	} else {
+		/* No window in sights — extend 2000u. */
+		beam_end[0] = fd->vieworg[0] + fwd[0] * 2000.0f;
+		beam_end[1] = fd->vieworg[1] + fwd[1] * 2000.0f;
+		beam_end[2] = fd->vieworg[2] + fwd[2] * 2000.0f;
+		q3ide_draw_beam(fd->vieworg, beam_end, fd->vieworg, q3ide_params.laserPointerWidth * 0.5f);
+	}
+
+	/* Thin spokes to every other active window so user can see them all. */
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-		q3ide_win_t *w = &q3ide_wm.wins[i];
-		if (!w->active)
+		if (!q3ide_wm.wins[i].active || i == hit)
 			continue;
-		q3ide_draw_beam(beam_start, w->origin, fd->vieworg, 255, 20, 20, 220);
+		q3ide_draw_beam(fd->vieworg, q3ide_wm.wins[i].origin, fd->vieworg, q3ide_params.laserPointerWidth * 0.25f);
 	}
 }

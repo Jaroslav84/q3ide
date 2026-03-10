@@ -1,5 +1,5 @@
 /*
- * q3ide_wm_internal.h — private types shared between q3ide_wm.c and q3ide_cmd.c.
+ * q3ide_win_mngr_internal.h — private types shared between q3ide_win_mngr.c and q3ide_commands.c.
  * Not included by engine source files.
  */
 
@@ -7,14 +7,8 @@
 #define Q3IDE_WM_INTERNAL_H
 
 #include "../qcommon/q_shared.h"
+#include "q3ide_params.h"
 #include <pthread.h>
-
-/* ── Constants ─────────────────────────────────────────────────── */
-#define Q3IDE_MAX_WIN     64
-#define Q3IDE_CAPTURE_FPS 60
-#define Q3IDE_WIN_INCHES  150.0f
-#define Q3IDE_MIN_WIN_W   400
-#define Q3IDE_MIN_WIN_H   300
 
 /* ── Dylib C-ABI types ─────────────────────────────────────────── */
 
@@ -89,15 +83,6 @@ typedef enum {
 	Q3IDE_WIN_STATUS_ERROR,
 } q3ide_win_status_t;
 
-#define Q3IDE_DIST_FULL      200.0f  /* full 60fps */
-#define Q3IDE_DIST_HALF      500.0f  /* 30fps */
-#define Q3IDE_DIST_LOW       1000.0f /* 15fps */
-#define Q3IDE_FPS_FULL       60
-#define Q3IDE_FPS_HALF       30
-#define Q3IDE_FPS_LOW        15
-#define Q3IDE_FPS_MIN        5
-#define Q3IDE_MAX_TUNNEL_FPS 25 /* hard cap for screen-capture tunnel windows */
-
 /* ── Per-window state ─────────────────────────────────────────── */
 typedef struct {
 	qboolean active;
@@ -122,15 +107,18 @@ typedef struct {
 	/* Hit effect: blood splat on window surface */
 	unsigned long long hit_time_ms; /* Sys_Milliseconds() at last bullet impact; 0=none */
 	vec3_t hit_pos;                 /* world position of hit point */
-	/* Layout: wall-mounted windows skip back-face rendering */
-	qboolean wall_mounted; /* qtrue = placed by room layout engine on a wall */
+	qboolean wall_mounted; /* qtrue = placed by auto-layout engine; qfalse = user-manual or floating */
 	qboolean los_visible;  /* cached LOS result — updated once per frame, reused across monitor passes */
 	/* Tunnel: OS screen-capture window. detach-all only removes these.
 	 * Non-tunnel windows (HUD, FPS, overlays) survive detach-all. */
 	qboolean is_tunnel;
+	/* Display slice: UV crop */
+	float uv_x0, uv_x1;  /* horizontal UV crop [0..1], default 0.0/1.0 */
+	qboolean owns_stream;   /* qtrue = calls cap_stop on detach */
+	qboolean stream_active; /* qtrue = SCK stream is currently running */
 } q3ide_win_t;
 
-/* ── Global window manager state (defined in q3ide_wm.c) ──────── */
+/* ── Global window manager state (defined in q3ide_win_mngr.c) ──────── */
 typedef struct {
 	void *dylib;
 	q3ide_fn_init cap_init;
@@ -158,8 +146,8 @@ typedef struct {
 	int frame_uploads; /* texture uploads since last heartbeat */
 	byte *fbuf;
 	int fbuf_size;
-	qhandle_t border_shader; /* *white for hover border strips */
-	qhandle_t portal_shader; /* teleporter energy glow */
+	qhandle_t border_shader; /* scratch slot 63: solid red — hover/select/splat */
+	qhandle_t edge_shader;   /* scratch slot 62: solid black — TV chassis edge quads */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;
 	pthread_mutex_t poll_mutex;
@@ -169,5 +157,6 @@ typedef struct {
 } q3ide_wm_t;
 
 extern q3ide_wm_t q3ide_wm;
+#define q3ide_win_mngr q3ide_wm /* alias for renamed references */
 
 #endif /* Q3IDE_WM_INTERNAL_H */
