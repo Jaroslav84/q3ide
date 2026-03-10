@@ -15,6 +15,8 @@ mod window;
 
 extern "C" {
     fn sc_check_screen_recording_permission() -> bool;
+    /// Activate the app (PID) and try to unminimize its windows via AX.
+    fn sc_raise_window(pid: i32);
 }
 
 /// Safe wrapper — callable from any module without repeating the unsafe block.
@@ -418,7 +420,7 @@ pub struct Q3ideWindowChange {
     pub app_name: *mut c_char,
     pub width: c_uint,
     pub height: c_uint,
-    /// 1 = added, 0 = removed, 2 = resized.
+    /// 1 = added, 0 = removed, 2 = resized, 3 = moved (composite crop updated internally).
     pub is_added: c_int,
 }
 
@@ -464,58 +466,84 @@ pub unsafe extern "C" fn q3ide_poll_window_changes(
         return empty;
     }
 
-    let known = known_lock.as_ref().unwrap();
-    let mut changes: Vec<Q3ideWindowChange> = Vec::new();
+    // Diff current vs known — scoped so `known` borrow ends before we mutate known_lock.
+    let (mut changes, moved_wids): (Vec<Q3ideWindowChange>, Vec<u32>) = {
+        let known = known_lock.as_ref().unwrap();
+        let mut changes: Vec<Q3ideWindowChange> = Vec::new();
+        let mut moved_wids: Vec<u32> = Vec::new();
 
-    // Removed: in known but not in current.
-    let current_ids: std::collections::HashSet<u32> =
-        current.iter().map(|w| w.window_id).collect();
-    for id in known.keys() {
-        if !current_ids.contains(id) {
-            changes.push(Q3ideWindowChange {
-                window_id: *id,
-                app_name: ptr::null_mut(),
-                width: 0,
-                height: 0,
-                is_added: 0,
-            });
+        // Removed: in known but not in current.
+        let current_ids: std::collections::HashSet<u32> =
+            current.iter().map(|w| w.window_id).collect();
+        for id in known.keys() {
+            if !current_ids.contains(id) {
+                changes.push(Q3ideWindowChange {
+                    window_id: *id,
+                    app_name: ptr::null_mut(),
+                    width: 0,
+                    height: 0,
+                    is_added: 0,
+                });
+            }
         }
-    }
 
-    // Added: in current but not in known.
-    for w in &current {
-        if !known.contains_key(&w.window_id) {
-            let app_name = CString::new(w.app_name.as_str()).unwrap_or_default().into_raw();
-            changes.push(Q3ideWindowChange {
-                window_id: w.window_id,
-                app_name,
-                width: w.width,
-                height: w.height,
-                is_added: 1,
-            });
-        }
-    }
-
-    // Resized: in both known and current, but dimensions changed.
-    for w in &current {
-        if let Some(prev) = known.get(&w.window_id) {
-            if prev.width != w.width || prev.height != w.height {
+        // Added: in current but not in known.
+        for w in &current {
+            if !known.contains_key(&w.window_id) {
                 let app_name = CString::new(w.app_name.as_str()).unwrap_or_default().into_raw();
                 changes.push(Q3ideWindowChange {
                     window_id: w.window_id,
                     app_name,
                     width: w.width,
                     height: w.height,
-                    is_added: 2,
+                    is_added: 1,
                 });
             }
         }
-    }
+
+        // Resized or moved: in both known and current, but dimensions or position changed.
+        for w in &current {
+            if let Some(prev) = known.get(&w.window_id) {
+                let resized = prev.width != w.width || prev.height != w.height;
+                let moved = prev.x != w.x || prev.y != w.y;
+                if resized {
+                    let app_name = CString::new(w.app_name.as_str()).unwrap_or_default().into_raw();
+                    changes.push(Q3ideWindowChange {
+                        window_id: w.window_id,
+                        app_name,
+                        width: w.width,
+                        height: w.height,
+                        is_added: 2,
+                    });
+                } else if moved {
+                    // Position changed — composite crop needs updating.
+                    // Emit MOVED so C can log it; crop update happens below before return.
+                    let app_name = CString::new(w.app_name.as_str()).unwrap_or_default().into_raw();
+                    changes.push(Q3ideWindowChange {
+                        window_id: w.window_id,
+                        app_name,
+                        width: w.width,
+                        height: w.height,
+                        is_added: 3,
+                    });
+                    moved_wids.push(w.window_id);
+                }
+            }
+        }
+
+        (changes, moved_wids)
+    }; // `known` borrow ends here — known_lock is now free to mutate.
 
     // Update snapshot to current.
     let new_known: HashMap<u32, backend::WindowInfo> =
         current.into_iter().map(|w| (w.window_id, w)).collect();
     *known_lock = Some(new_known);
+    drop(known_lock);
+
+    // Update composite crop rects for moved windows (after releasing known_windows lock).
+    for wid in moved_wids {
+        ctx.backend.update_window_crop(wid);
+    }
 
     if changes.is_empty() {
         return empty;
@@ -968,6 +996,51 @@ pub unsafe extern "C" fn q3ide_inject_key(
             "q3ide_inject_key: wid={} q3key={} cgkey={} down={}",
             window_id, q3key, cgkey, is_down
         );
+    }
+}
+
+/// Activate and unminimize the macOS window behind the given capture ID.
+///
+/// Looks up the window's owning application PID via SCK, then calls the Swift
+/// `sc_raise_window(pid:)` helper which:
+///   1. Activates the app via NSRunningApplication (no special permission).
+///   2. Unminimizes all minimized windows via AX (requires Accessibility permission;
+///      silently skipped if not granted).
+///
+/// Call this when the player hovers over a q3ide window (red border activates).
+///
+/// # Safety
+/// `handle` must be a valid pointer from `q3ide_init`.
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_raise_window(handle: *mut Q3ideCapture, window_id: c_uint) {
+    #[cfg(target_os = "macos")]
+    {
+        if handle.is_null() {
+            return;
+        }
+        use ::screencapturekit::shareable_content::SCShareableContent;
+        let content = match SCShareableContent::get() {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("q3ide_raise_window: SCShareableContent failed: {}", e);
+                return;
+            }
+        };
+        let windows = content.windows();
+        let win = windows.iter().find(|w| w.window_id() == window_id);
+        let Some(win) = win else {
+            log::warn!("q3ide_raise_window: wid={} not found", window_id);
+            return;
+        };
+        let pid = win.owning_application()
+            .map(|a| a.process_id())
+            .unwrap_or(0);
+        if pid <= 0 {
+            log::warn!("q3ide_raise_window: wid={} has no owning app", window_id);
+            return;
+        }
+        log::info!("q3ide_raise_window: wid={} pid={}", window_id, pid);
+        sc_raise_window(pid);
     }
 }
 

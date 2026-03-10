@@ -58,13 +58,15 @@ typedef int (*q3ide_fn_start_disp)(Q3ideCapture *, unsigned int, int); /* fps: -
 /* Batch 2: Input injection (optional — gracefully absent if dylib lacks them) */
 typedef void (*q3ide_fn_inject_click)(Q3ideCapture *, unsigned int, float, float);
 typedef void (*q3ide_fn_inject_key)(Q3ideCapture *, unsigned int, int, int);
+/* Hover: activate + unminimize macOS window when player hovers (optional) */
+typedef void (*q3ide_fn_raise_win)(Q3ideCapture *, unsigned int);
 
 /* ── Window change detection ──────────────────────────────────── */
 typedef struct {
 	unsigned int window_id;
 	char *app_name; /* owned by lib (added events only; NULL for removed) */
 	unsigned int width, height;
-	int is_added; /* 1=added, 0=removed, 2=resized */
+	int is_added; /* 1=added, 0=removed, 2=resized, 3=moved (composite crop updated by dylib) */
 } Q3ideWindowChange;
 
 typedef struct {
@@ -135,7 +137,8 @@ typedef struct {
 	q3ide_fn_free_dlist cap_free_dlist;
 	q3ide_fn_start_disp cap_start_disp;
 	q3ide_fn_inject_click cap_inject_click; /* optional: NULL if dylib lacks symbol */
-	q3ide_fn_inject_key cap_inject_key;     /* optional: NULL if dylib lacks symbol */
+	q3ide_fn_inject_key   cap_inject_key;   /* optional: NULL if dylib lacks symbol */
+	q3ide_fn_raise_win    cap_raise_win;    /* optional: activate + unminimize on hover */
 	q3ide_fn_poll_changes cap_poll_changes; /* optional: window open/close events */
 	q3ide_fn_free_changes cap_free_changes; /* optional */
 	Q3ideCapture *cap;

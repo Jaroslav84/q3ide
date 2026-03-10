@@ -159,46 +159,53 @@ static void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, cons
 
 static void q3ide_rebuild_keyboard_cache(void)
 {
-	static const float ktw     = 10.0f * Q3IDE_OVL_KEY_CELL;
-	static const float lbl_off = 10.0f * Q3IDE_OVL_KEY_CELL * 0.5f + 0.5f;
+	static const float ktw      = 10.0f * Q3IDE_OVL_KEY_CELL;
+	static const float lbl_key_x = 10.0f * Q3IDE_OVL_KEY_CELL * 0.5f + 0.3f; /* label col start */
 	int i, j;
+	int lrow = 0; /* label row counter — increments per q3ide key found */
 
 	g_glyph_count = 0;
 
+	/* Pass 1: keyboard grid — all keys white, no color coding */
 	for (i = 0; i < 4; i++) {
 		float br = -ktw * 0.5f + krow_indent[i] * Q3IDE_OVL_KEY_CELL;
 		float bu = -(float) i * Q3IDE_OVL_KEY_ROW_H;
 		for (j = 0; j < krow_len[i]; j++) {
 			float kr = br + (float) j * Q3IDE_OVL_KEY_CELL;
-			key_state_t ks = classify(krows[i][j].keynum);
-			if (ks == KEY_Q3IDE) {
-				float x;
-				ovl_emit(kr, bu, (unsigned char) krows[i][j].display, 220, 220, 220);
-				for (x = kr + Q3IDE_OVL_KEY_CELL; x < lbl_off - Q3IDE_OVL_CHAR_W; x += Q3IDE_OVL_CHAR_W * 0.9f)
-					ovl_emit(x, bu, '-', 70, 70, 70);
-				ovl_emit_str(lbl_off, bu, q3ide_label(krows[i][j].keynum), 160, 160, 160);
-			} else if (ks == KEY_QUAKE) {
-				ovl_emit(kr, bu, (unsigned char) krows[i][j].display, 190, 155, 25);
-			} else {
-				ovl_emit(kr, bu, (unsigned char) krows[i][j].display, 25, 25, 25);
-			}
+			ovl_emit(kr, bu, (unsigned char) krows[i][j].display, 210, 210, 210);
 		}
 	}
-
 	for (i = 0; i < 4; i++) {
 		float kr = kextras[i].col * Q3IDE_OVL_KEY_CELL - ktw * 0.5f;
 		float ku = -kextras[i].row * Q3IDE_OVL_KEY_ROW_H;
-		key_state_t ks = classify(kextras[i].keynum);
-		if (ks == KEY_Q3IDE) {
+		ovl_emit_str(kr, ku, kextras[i].disp, 210, 210, 210);
+	}
+
+	/* Pass 2: label list — q3ide keys only, stacked top-to-bottom, no overlap */
+	for (i = 0; i < 4; i++) {
+		for (j = 0; j < krow_len[i]; j++) {
+			if (classify(krows[i][j].keynum) == KEY_Q3IDE) {
+				float lu = -(float) lrow * Q3IDE_OVL_LINE_H;
+				float x;
+				ovl_emit(lbl_key_x, lu, (unsigned char) krows[i][j].display, 255, 255, 255);
+				for (x = lbl_key_x + Q3IDE_OVL_CHAR_W * 1.5f; x < lbl_key_x + Q3IDE_OVL_CHAR_W * 5.0f; x += Q3IDE_OVL_CHAR_W * 1.0f)
+					ovl_emit(x, lu, '-', 80, 80, 80);
+				ovl_emit_str(lbl_key_x + Q3IDE_OVL_CHAR_W * 5.5f, lu,
+				             q3ide_label(krows[i][j].keynum), 170, 170, 170);
+				lrow++;
+			}
+		}
+	}
+	for (i = 0; i < 4; i++) {
+		if (classify(kextras[i].keynum) == KEY_Q3IDE) {
+			float lu = -(float) lrow * Q3IDE_OVL_LINE_H;
 			float x;
-			ovl_emit_str(kr, ku, kextras[i].disp, 220, 220, 220);
-			for (x = kr + Q3IDE_OVL_KEY_CELL; x < lbl_off - Q3IDE_OVL_CHAR_W; x += Q3IDE_OVL_CHAR_W * 0.9f)
-				ovl_emit(x, ku, '-', 70, 70, 70);
-			ovl_emit_str(lbl_off, ku, q3ide_label(kextras[i].keynum), 160, 160, 160);
-		} else if (ks == KEY_QUAKE) {
-			ovl_emit_str(kr, ku, kextras[i].disp, 190, 155, 25);
-		} else {
-			ovl_emit_str(kr, ku, kextras[i].disp, 25, 25, 25);
+			ovl_emit_str(lbl_key_x, lu, kextras[i].disp, 255, 255, 255);
+			for (x = lbl_key_x + Q3IDE_OVL_CHAR_W * 3.0f; x < lbl_key_x + Q3IDE_OVL_CHAR_W * 5.0f; x += Q3IDE_OVL_CHAR_W * 1.0f)
+				ovl_emit(x, lu, '-', 80, 80, 80);
+			ovl_emit_str(lbl_key_x + Q3IDE_OVL_CHAR_W * 5.5f, lu,
+			             q3ide_label(kextras[i].keynum), 170, 170, 170);
+			lrow++;
 		}
 	}
 }

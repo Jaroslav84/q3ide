@@ -453,13 +453,28 @@ impl SCKBackend {
             .ok_or(CaptureError::WindowNotFound(window_id))?;
 
         let wf = sc_window.frame();
-        let (w, h) = (wf.size().width as u32, wf.size().height as u32);
+        let (wx, wy, ww, wh) = (wf.origin().x, wf.origin().y, wf.size().width, wf.size().height);
 
-        log::info!("dedicated: wid={} app='{}' {}x{}pt", window_id, app_name, w, h);
+        // SCStreamConfiguration expects pixel dimensions, not points.
+        // Derive scale from the display this window is on (same as COMPOSITE path).
+        let displays = content.displays();
+        let scale = find_display_for_window(&displays, wx, wy, ww, wh)
+            .map(|d| {
+                let df = d.frame();
+                let dpw = df.size().width.max(1.0);
+                d.width() as f64 / dpw
+            })
+            .unwrap_or(2.0); // safe fallback: assume Retina 2x
+
+        let pw = ((ww * scale) as u32).max(1);
+        let ph = ((wh * scale) as u32).max(1);
+
+        log::info!("dedicated: wid={} app='{}' {:.0}x{:.0}pt → {}x{}px (scale={:.2})",
+            window_id, app_name, ww, wh, pw, ph, scale);
 
         let filter = SCContentFilter::create().with_window(sc_window).build();
         let mut config = SCStreamConfiguration::new()
-            .with_width(w.max(1)).with_height(h.max(1))
+            .with_width(pw).with_height(ph)
             .with_pixel_format(PixelFormat::BGRA)
             .with_shows_cursor(false)
             .with_queue_depth(3);
@@ -497,6 +512,8 @@ impl CaptureBackend for SCKBackend {
                 width: f.size().width as u32,
                 height: f.size().height as u32,
                 is_on_screen: w.is_on_screen(),
+                x: f.origin().x as i32,
+                y: f.origin().y as i32,
             }
         }).collect())
     }
@@ -746,6 +763,69 @@ impl CaptureBackend for SCKBackend {
         // q3ide desktop display stream
         let s = self.display_streams.get(&window_id)?;
         s.latest_frame.lock().ok()?.clone()
+    }
+
+    fn update_window_crop(&mut self, window_id: u32) {
+        // Only composite windows have a crop rect to update.
+        let info = match self.window_map.get(&window_id) {
+            Some(i) => i,
+            None => return, // dedicated or unknown — no-op
+        };
+        let display_id = info.display_id;
+
+        let content = match SCShareableContent::get() {
+            Ok(c) => c,
+            Err(e) => {
+                log::warn!("update_window_crop: SCShareableContent failed: {}", e);
+                return;
+            }
+        };
+
+        let windows = content.windows();
+        let sc_window = match windows.iter().find(|w| w.window_id() == window_id) {
+            Some(w) => w,
+            None => {
+                log::warn!("update_window_crop: wid={} not found in SCK", window_id);
+                return;
+            }
+        };
+
+        let displays = content.displays();
+        let wf = sc_window.frame();
+        let (wx, wy, ww, wh) = (wf.origin().x, wf.origin().y, wf.size().width, wf.size().height);
+
+        let display = match displays.iter().find(|d| d.display_id() == display_id) {
+            Some(d) => d,
+            None => {
+                log::warn!("update_window_crop: display_id={} not found", display_id);
+                return;
+            }
+        };
+
+        let df = display.frame();
+        let (dx, dy, dpw, dph) = (df.origin().x, df.origin().y, df.size().width, df.size().height);
+        let (dw, dh) = (display.width(), display.height());
+        let scale_x = dw as f64 / dpw.max(1.0);
+        let scale_y = dh as f64 / dph.max(1.0);
+
+        let rel_x = wx - dx;
+        let rel_y = wy - dy;
+        let crop_x = (rel_x * scale_x).max(0.0) as u32;
+        let crop_y = ((dph - (rel_y + wh)) * scale_y).max(0.0) as u32;
+        let crop_w = (ww * scale_x) as u32;
+        let crop_h = (wh * scale_y) as u32;
+
+        log::info!(
+            "update_crop: wid={} new crop=({},{} {}x{}px)",
+            window_id, crop_x, crop_y, crop_w, crop_h
+        );
+
+        if let Some(entry) = self.window_map.get_mut(&window_id) {
+            entry.crop_x = crop_x;
+            entry.crop_y = crop_y;
+            entry.crop_w = crop_w;
+            entry.crop_h = crop_h;
+        }
     }
 
     fn shutdown(&mut self) {

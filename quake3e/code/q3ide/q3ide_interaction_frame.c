@@ -35,6 +35,12 @@ void Q3IDE_Interaction_Frame(qboolean attacking, qboolean use_key, qboolean esca
 				if (prev_win >= 0)
 					Q3IDE_WM_SetHover(prev_win, 0.0f);
 				Com_DPrintf("q3ide: crosshair → win=%d dist=%.0f\n", q3ide_interaction.focused_win, dist);
+				/* Raise (activate + unminimize) the macOS window being hovered. */
+				if (q3ide_win_mngr.cap_raise_win &&
+				    q3ide_interaction.focused_win < Q3IDE_MAX_WIN) {
+					unsigned int cid = q3ide_wm.wins[q3ide_interaction.focused_win].capture_id;
+					q3ide_win_mngr.cap_raise_win(q3ide_win_mngr.cap, cid);
+				}
 			}
 
 			if (q3ide_interaction.dwell_start_ms >= 0.0f) {

@@ -12,6 +12,10 @@ pub struct WindowInfo {
     pub width: u32,
     pub height: u32,
     pub is_on_screen: bool,
+    /// Quartz global X coordinate (y-up, points). Used for composite crop change detection.
+    pub x: i32,
+    /// Quartz global Y coordinate (y-up, points). Used for composite crop change detection.
+    pub y: i32,
 }
 
 /// Information about a capturable display.
@@ -97,6 +101,10 @@ pub trait CaptureBackend: Send {
     /// Get the latest captured frame for a window.
     /// Returns None if no frame is available yet.
     fn get_frame(&self, window_id: u32) -> Option<FrameData>;
+
+    /// Update the composite crop rect for a window whose screen position changed.
+    /// No-op for DEDICATED windows (they follow the window automatically).
+    fn update_window_crop(&mut self, window_id: u32);
 
     /// Shut down the backend and release all resources.
     fn shutdown(&mut self);

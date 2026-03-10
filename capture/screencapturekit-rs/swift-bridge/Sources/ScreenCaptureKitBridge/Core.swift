@@ -156,6 +156,40 @@ func errorWithCodeToCString(_ error: Error) -> UnsafeMutablePointer<CChar>? {
     return strdup(formatted)
 }
 
+// MARK: - Window raise / unminimize
+
+import AppKit
+import ApplicationServices
+
+/// Activate and unminimize a macOS window by its owning application PID.
+///
+/// Called when the player hovers over a q3ide window (red border activates).
+/// Two-step:
+///   1. NSRunningApplication.activate — brings app to front (no special permission needed).
+///   2. AXUIElement: unminimize every minimized window of the app (requires Accessibility permission).
+///      Silently skipped if Accessibility is not granted.
+@_cdecl("sc_raise_window")
+public func raiseWindow(pid: Int32) {
+    guard pid > 0 else { return }
+    let appPid = pid_t(pid)
+
+    // Unminimize via AX — does NOT steal focus from Quake.
+    // Requires Accessibility permission in System Settings → Privacy → Accessibility.
+    // Silently skipped if not granted.
+    guard AXIsProcessTrusted() else { return }
+    let axApp = AXUIElementCreateApplication(appPid)
+    var windowsRef: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+          let windows = windowsRef as? [AXUIElement] else { return }
+    for axWin in windows {
+        var minimizedRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(axWin, kAXMinimizedAttribute as CFString, &minimizedRef) == .success,
+           let isMinimized = minimizedRef as? Bool, isMinimized {
+            AXUIElementSetAttributeValue(axWin, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+        }
+    }
+}
+
 // MARK: - Thread-safe result holder for async→sync bridging
 
 /// Thread-safe box used to pass a result from an async Task to a waiting semaphore caller.

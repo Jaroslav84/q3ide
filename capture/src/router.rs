@@ -33,7 +33,6 @@ pub const WHITELIST_COMPOSITE: &[&str] = &[
     "tabby",       // Tabby terminal
     "xterm",       // xterm / uxterm
     "cool-retro",  // cool-retro-term
-    "sourcetree",  // native AppKit git GUI
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -63,6 +62,7 @@ pub const WHITELIST_DEDICATED: &[&str] = &[
     "rider",
     "rubymine",
     "fleet",       // JetBrains Fleet
+    "sourcetree",  // may be occluded by other windows; DEDICATED sees through occlusion
     // Communication (Electron with GPU layers)
     "slack",
     "discord",

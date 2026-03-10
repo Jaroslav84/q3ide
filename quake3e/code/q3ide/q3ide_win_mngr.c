@@ -54,6 +54,7 @@ static qboolean q3ide_load_dylib(void)
 	SYM(cap_inject_key, "q3ide_inject_key");
 	SYM(cap_poll_changes, "q3ide_poll_window_changes");
 	SYM(cap_free_changes, "q3ide_free_change_list");
+	SYM(cap_raise_win, "q3ide_raise_window");
 #undef SYM
 
 	if (!q3ide_wm.cap_init || !q3ide_wm.cap_shutdown || !q3ide_wm.cap_get_frame) {
@@ -64,10 +65,11 @@ static qboolean q3ide_load_dylib(void)
 		return qfalse;
 	}
 	// clang-format off
-	Q3IDE_LOGI("dylib loaded (inject_click=%s inject_key=%s poll_changes=%s)",
+	Q3IDE_LOGI("dylib loaded (inject_click=%s inject_key=%s poll_changes=%s raise_win=%s)",
 	           q3ide_wm.cap_inject_click ? "yes" : "no",
 	           q3ide_wm.cap_inject_key   ? "yes" : "no",
-	           q3ide_wm.cap_poll_changes ? "yes" : "no");
+	           q3ide_wm.cap_poll_changes ? "yes" : "no",
+	           q3ide_wm.cap_raise_win    ? "yes" : "no");
 	// clang-format on
 	Q3IDE_Event("dylib_loaded", "");
 	return qtrue;
@@ -170,17 +172,21 @@ int Q3IDE_WM_FindById(unsigned int cid)
 	return -1;
 }
 
-/* Background thread: fetch SCK change list every 1s, store for main thread drain. */
+/* Background thread: fetch SCK change list every 500ms, store for main thread drain.
+ * Runs whenever there are active windows — not gated on auto_attach so that position
+ * changes on composite windows are always detected (Calendar drag, etc.). */
 static void *q3ide_poll_thread_fn(void *arg)
 {
 	(void) arg;
 	while (q3ide_wm.poll_running) {
-		struct timespec ts = {1, 0};
+		struct timespec ts = {0, 500000000}; /* 500ms */
 		nanosleep(&ts, NULL);
-		if (!q3ide_wm.poll_running || !q3ide_wm.auto_attach)
+		if (!q3ide_wm.poll_running)
 			continue;
 		if (!q3ide_wm.cap_poll_changes || !q3ide_wm.cap)
 			continue;
+		if (q3ide_wm.num_active == 0 && !q3ide_wm.auto_attach)
+			continue; /* nothing to watch */
 		{
 			Q3ideWindowChangeList clist = q3ide_wm.cap_poll_changes(q3ide_wm.cap);
 			if (clist.changes && clist.count) {

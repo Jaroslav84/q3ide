@@ -129,7 +129,7 @@ typedef struct Q3ideQ3ideWindowChange {
     unsigned int width;
     unsigned int height;
     /**
-     * 1 = added, 0 = removed, 2 = resized.
+     * 1 = added, 0 = removed, 2 = resized, 3 = moved (composite crop updated internally).
      */
     int is_added;
 } Q3ideQ3ideWindowChange;
@@ -170,6 +170,11 @@ typedef struct Q3ideCGPoint {
 } Q3ideCGPoint;
 
 extern bool sc_check_screen_recording_permission(void);
+
+/**
+ * Activate the app (PID) and try to unminimize its windows via AX.
+ */
+extern void sc_raise_window(int32_t pid);
 
 /**
  * Initialize the capture system. Returns an opaque handle.
@@ -366,6 +371,22 @@ void q3ide_inject_key(struct Q3ideQ3ideCapture *_handle,
                       unsigned int window_id,
                       int q3key,
                       int is_down);
+
+/**
+ * Activate and unminimize the macOS window behind the given capture ID.
+ *
+ * Looks up the window's owning application PID via SCK, then calls the Swift
+ * `sc_raise_window(pid:)` helper which:
+ *   1. Activates the app via NSRunningApplication (no special permission).
+ *   2. Unminimizes all minimized windows via AX (requires Accessibility permission;
+ *      silently skipped if not granted).
+ *
+ * Call this when the player hovers over a q3ide window (red border activates).
+ *
+ * # Safety
+ * `handle` must be a valid pointer from `q3ide_init`.
+ */
+q3ide_ void q3ide_raise_window(struct Q3ideQ3ideCapture *handle, unsigned int window_id);
 
 /**
  * Start capturing all displays, composited vertically into a single frame.

@@ -79,6 +79,9 @@ static void q3ide_apply_change_list(const Q3ideWindowChangeList *clist)
 				Q3IDE_LOGI("win %u resized %dx%d world %.0fx%.0f", ch->window_id, ch->width, ch->height, w->world_w,
 				           w->world_h);
 			}
+		} else if (ch->is_added == 3) {
+			/* Window moved — composite crop was updated by dylib automatically */
+			Q3IDE_LOGI("win %u moved, composite crop refreshed", ch->window_id);
 		} else if (ch->is_added == 1 && q3ide_wm.auto_attach) {
 			/* New window — auto-attach if it matches app filter */
 			float aspect;
