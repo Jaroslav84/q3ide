@@ -1,6 +1,35 @@
 # Q3IDE — Rendering Optimization Ideas
 
-Ideas and techniques for future performance improvements. These are NOT yet in ./plan/04-Q3IDE_SPECIFICATION.md and are NOT part of any batch. This is a brainstorm doc — pick from it when performance becomes a bottleneck.
+Ideas and techniques for future performance improvements. This is a brainstorm doc — pick from it when performance becomes a bottleneck.
+
+---
+
+## ✅ Implemented: Hybrid CaptureRouter (+20% FPS)
+
+**Status: DONE. In production.**
+
+The single biggest capture optimization implemented so far. Routes each window to one of two modes at attach time:
+
+| Mode | Stream cost | Use case | FPS impact |
+|------|------------|----------|------------|
+| **COMPOSITE** | 1 stream per display (shared) | Terminals, native AppKit (CPU-rendered) | Best — N terminals share 1 stream |
+| **DEDICATED** | 1 stream per window | Browsers, IDEs, Electron, VLC (GPU-rendered) | Correct but heavier |
+
+**Result**: ~20% FPS improvement over all-dedicated. No stream count limit (OS ~9-11 stream cap bypassed for composite apps). No camera icon per terminal window.
+
+See `capture/src/router.rs` for whitelists and detector thresholds.
+
+---
+
+## ⚠️ Open Question: FPS Caps
+
+`Q3IDE_CAPTURE_FPS = -1` — Apple decides everything. No `minimumFrameInterval` is passed to SCK.
+
+**Finding**: Rendering is **smoother without any cap**. Apple's content-driven model delivers frames only when content changes. Idle windows cost zero CPU/GPU. Capping at 25fps makes idle windows worse (Apple now has to tick a timer) and active windows jerkier.
+
+**Spec item 1.8** ("SCK minimumFrameInterval per tier") is an **open question**. Measure actual frame delivery timing before implementing. The hypothesis that capping saves resources may be wrong — Apple's scheduler already does this better.
+
+---
 
 ---
 
@@ -52,16 +81,16 @@ Terminals are mostly 2-8 colors (background, foreground, syntax highlighting). S
 
 ### SCK Frame Rate Capping Per Stream
 
-Set `minimumFrameInterval` per `SCStream` based on Window priority:
+> ⚠️ **Open question** — measure before implementing. Current finding: uncapped (`Q3IDE_CAPTURE_FPS = -1`) is smoother than any cap. Apple's content-driven model already skips frames when content is static. A timer-based cap may increase overhead by forcing SCK to tick on idle windows.
+
+If profiling shows SCK is the bottleneck despite content-driven delivery, then per-stream caps may help:
 
 - Focused Window: `CMTime(1, 60)` (60fps)
 - Visible nearby: `CMTime(1, 30)` (30fps)
 - Visible far: `CMTime(1, 15)` (15fps)
 - Background: `CMTime(1, 5)` (5fps)
 
-This throttles SCK itself — it never even generates frames faster than needed. Reduces SCK's GPU/CPU overhead at the source, not just at upload time.
-
-**Dynamic adjustment:** When the player moves, recalculate priorities and call `stream.updateConfiguration()` with new frame intervals. SCK supports on-the-fly config changes without restarting the stream.
+**Dynamic adjustment:** `stream.updateConfiguration()` supports on-the-fly interval changes without restarting the stream.
 
 ### CVPixelBuffer Pool Reuse
 

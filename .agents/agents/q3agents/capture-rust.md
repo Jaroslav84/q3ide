@@ -37,13 +37,35 @@ Implements the macOS ScreenCaptureKit capture backend and C-ABI bridge.
 
 Never edit outside your scope to unblock a build. That corrupts another agent's WIP.
 
+## CaptureRouter — Hybrid Backend (IMPLEMENTED ✅)
+
+The capture backend uses two modes selected per-window at attach time:
+
+| Mode | When | How |
+|------|------|-----|
+| **COMPOSITE** | CPU-rendered apps (terminals, native AppKit) | 1 SCStream per display, shared. `get_frame()` crops window rect. No camera icon. No stream limit. Best FPS. |
+| **DEDICATED** | GPU/hardware-accelerated apps (browsers, IDEs, Electron, VLC) | 1 SCStream per window via `with_window()`. Correct GPU layer compositing. |
+
+**Resolution order** (in `start_capture`):
+1. Window is minimized (`!is_on_screen && frame < 200pt`) → **DEDICATED** (captures Dock buffer)
+2. App name matches `WHITELIST_COMPOSITE` → **COMPOSITE**
+3. App name matches `WHITELIST_DEDICATED` → **DEDICATED**
+4. Unknown → **COMPOSITE** + detector active
+
+**Detector**: tracks consecutive empty/dark frames for composite windows. Logs `WARN` at threshold suggesting app be added to `WHITELIST_DEDICATED`. No auto-switch yet (Phase 2).
+
+**Whitelists live in `capture/src/router.rs`** — edit there, rebuild. No magic strings elsewhere.
+
+**FPS caps**: `Q3IDE_CAPTURE_FPS = -1` means Apple decides everything. No cap is passed to SCK. Rendering is smoother without any cap — Apple's content-driven model delivers frames only when content changes. **Do NOT add FPS caps** unless profiling shows a specific bottleneck.
+
 ## Rules
 
 - No `unsafe` outside `lib.rs`
 - Use `Result`/`?` for errors
 - `crossbeam` for concurrency
 - Never import engine or spatial headers
-- One SCStream per window (fix for frame mixing)
+- CaptureRouter selects COMPOSITE or DEDICATED per window — never hardcode one mode
+- Whitelists in `router.rs` only — never scattered strings in `screencapturekit.rs`
 - CGEvent for click/key injection (Batch 2)
 
 ## Remote API Identity

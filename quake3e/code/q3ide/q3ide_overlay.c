@@ -1,10 +1,6 @@
 /*
- * q3ide_overlay.c — Left-monitor keybinding cheat sheet + stream alert panel.
- *
- * Small, macOS-style keybinding panel anchored to the far top-left of the
- * left monitor viewport. Rendered as 3D billboard bigchars quads so it
- * always faces the left monitor camera regardless of player orientation.
- * Called from Q3IDE_MultiMonitorRender for i==0 (left monitor) only.
+ * q3ide_overlay.c — Left-monitor QWERTY keyboard UI + stream alert panel.
+ * Keyboard is rebuilt ≤2 Hz into a glyph cache; replayed cheap every frame.
  */
 
 #include "q3ide_engine_hooks.h"
@@ -158,101 +154,120 @@ static void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, cons
 	}
 }
 
+/* Layout tables + glyph cache statics + classify/label helpers */
+#include "q3ide_overlay_keys.h"
+
+static void q3ide_rebuild_keyboard_cache(void)
+{
+	static const float ktw     = 10.0f * Q3IDE_OVL_KEY_CELL;
+	static const float lbl_off = 10.0f * Q3IDE_OVL_KEY_CELL * 0.5f + 0.5f;
+	int i, j;
+
+	g_glyph_count = 0;
+
+	for (i = 0; i < 4; i++) {
+		float br = -ktw * 0.5f + krow_indent[i] * Q3IDE_OVL_KEY_CELL;
+		float bu = -(float) i * Q3IDE_OVL_KEY_ROW_H;
+		for (j = 0; j < krow_len[i]; j++) {
+			float kr = br + (float) j * Q3IDE_OVL_KEY_CELL;
+			key_state_t ks = classify(krows[i][j].keynum);
+			if (ks == KEY_Q3IDE) {
+				float x;
+				ovl_emit(kr, bu, (unsigned char) krows[i][j].display, 220, 220, 220);
+				for (x = kr + Q3IDE_OVL_KEY_CELL; x < lbl_off - Q3IDE_OVL_CHAR_W; x += Q3IDE_OVL_CHAR_W * 0.9f)
+					ovl_emit(x, bu, '-', 70, 70, 70);
+				ovl_emit_str(lbl_off, bu, q3ide_label(krows[i][j].keynum), 160, 160, 160);
+			} else if (ks == KEY_QUAKE) {
+				ovl_emit(kr, bu, (unsigned char) krows[i][j].display, 190, 155, 25);
+			} else {
+				ovl_emit(kr, bu, (unsigned char) krows[i][j].display, 25, 25, 25);
+			}
+		}
+	}
+
+	for (i = 0; i < 4; i++) {
+		float kr = kextras[i].col * Q3IDE_OVL_KEY_CELL - ktw * 0.5f;
+		float ku = -kextras[i].row * Q3IDE_OVL_KEY_ROW_H;
+		key_state_t ks = classify(kextras[i].keynum);
+		if (ks == KEY_Q3IDE) {
+			float x;
+			ovl_emit_str(kr, ku, kextras[i].disp, 220, 220, 220);
+			for (x = kr + Q3IDE_OVL_KEY_CELL; x < lbl_off - Q3IDE_OVL_CHAR_W; x += Q3IDE_OVL_CHAR_W * 0.9f)
+				ovl_emit(x, ku, '-', 70, 70, 70);
+			ovl_emit_str(lbl_off, ku, q3ide_label(kextras[i].keynum), 160, 160, 160);
+		} else if (ks == KEY_QUAKE) {
+			ovl_emit_str(kr, ku, kextras[i].disp, 190, 155, 25);
+		} else {
+			ovl_emit_str(kr, ku, kextras[i].disp, 25, 25, 25);
+		}
+	}
+}
+
 /*
- * Draw keybinding cheat sheet for the left monitor.
- * refdef_ptr is the (const refdef_t *) for the left viewport.
- * Must be called BEFORE re.RenderScene so polys enter the scene.
+ * Draw QWERTY keyboard UI + stream panel for the left monitor.
+ * Must be called before re.RenderScene so polys enter the scene.
  */
 void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 {
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
-	/* viewaxis[1] = LEFT in Q3; negate → right. viewaxis[2] = up. */
 	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
 	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
-	/* Far top-left: push left ~78% of 90° half-FOV, lift ~38% */
-	float right_off = -Q3IDE_OVL_DIST * 0.78f;
-	float up_off = Q3IDE_OVL_DIST * 0.38f;
+	float right_off = -Q3IDE_OVL_DIST * 0.90f; /* far left edge */
+	float up_off    =  Q3IDE_OVL_DIST * 0.20f;  /* slightly above center */
 	float ox, oy, oz;
-	int i;
-
-	/* key col (gray-white), label col (dim gray), header (very dim) */
-	struct {
-		const char *key;
-		const char *label;
-	} entries[] = {
-	    {"Q3IDE", ""},   /* header */
-	    {"K", "Laser"},  /* hold K → laser beams */
-	    {"L", "Focus"},  /* enter Pointer Mode */
-	    {"M1", "Click"}, /* click in Pointer Mode */
-	    {"ESC", "Exit"}, /* exit mode */
-	};
-	int n = (int) (sizeof(entries) / sizeof(entries[0]));
+	unsigned long long now;
+	int gi;
+	float wl_base = Q3IDE_OVL_KEY_ROW_H * 7.5f; /* vertical offset to window list */
 
 	q3ide_ovl_init();
 	if (!g_ovl_chars || !re.AddPolyToScene)
 		return;
 
-	/* Panel top-left anchor */
-	ox = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST - fd->viewaxis[1][0] * right_off + fd->viewaxis[2][0] * up_off;
-	oy = fd->vieworg[1] + fd->viewaxis[0][1] * Q3IDE_OVL_DIST - fd->viewaxis[1][1] * right_off + fd->viewaxis[2][1] * up_off;
-	oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST - fd->viewaxis[1][2] * right_off + fd->viewaxis[2][2] * up_off;
+	ox = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST + rx[0] * right_off + fd->viewaxis[2][0] * up_off;
+	oy = fd->vieworg[1] + fd->viewaxis[0][1] * Q3IDE_OVL_DIST + rx[1] * right_off + fd->viewaxis[2][1] * up_off;
+	oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST + rx[2] * right_off + fd->viewaxis[2][2] * up_off;
 
-	for (i = 0; i < n; i++) {
-		float lx = ox - ux[0] * Q3IDE_OVL_LINE_H * i;
-		float ly = oy - ux[1] * Q3IDE_OVL_LINE_H * i;
-		float lz = oz - ux[2] * Q3IDE_OVL_LINE_H * i;
-
-		if (i == 0) {
-			/* Header: very dim gray */
-			q3ide_ovl_str(lx, ly, lz, rx, ux, entries[i].key, 65, 65, 65);
-		} else {
-			/* Key: medium gray (macOS key cap feel) */
-			q3ide_ovl_str(lx, ly, lz, rx, ux, entries[i].key, 190, 190, 190);
-			/* Label: dim gray, offset past fixed key column */
-			if (entries[i].label[0]) {
-				float labx = lx + rx[0] * (Q3IDE_OVL_KEY_W + Q3IDE_OVL_GAP);
-				float laby = ly + rx[1] * (Q3IDE_OVL_KEY_W + Q3IDE_OVL_GAP);
-				float labz = lz + rx[2] * (Q3IDE_OVL_KEY_W + Q3IDE_OVL_GAP);
-				q3ide_ovl_str(labx, laby, labz, rx, ux, entries[i].label, 95, 95, 95);
-			}
-		}
+	/* Rate-limited keyboard cache rebuild (≤ MAX_LEFT_UI_RENDER_FPS) */
+	now = (unsigned long long) Sys_Milliseconds();
+	if (g_ovl_dirty || (now - g_ovl_last_build_ms) >= OVL_REBUILD_MS) {
+		q3ide_rebuild_keyboard_cache();
+		g_ovl_last_build_ms = now;
+		g_ovl_dirty         = qfalse;
 	}
 
-	/* Room/area display: cluster + area below the keybinding panel */
+	/* Replay glyph cache — cheap per-frame path */
+	for (gi = 0; gi < g_glyph_count; gi++) {
+		const ovl_rel_glyph_t *gp = &g_glyphs[gi];
+		float cx = ox + rx[0] * gp->right + ux[0] * gp->up;
+		float cy = oy + rx[1] * gp->right + ux[1] * gp->up;
+		float cz = oz + rx[2] * gp->right + ux[2] * gp->up;
+		q3ide_ovl_char(cx, cy, cz, rx, ux, gp->ch, gp->r, gp->g, gp->b);
+	}
+
+	/* Room/area display below keyboard */
 	if (cls.state == CA_ACTIVE) {
 		int leafnum = CM_PointLeafnum(cl.snap.ps.origin);
-		int cluster = CM_LeafCluster(leafnum);
-		int area = CM_LeafArea(leafnum);
 		char room_buf[32];
-		float rx_off = n * Q3IDE_OVL_LINE_H + Q3IDE_OVL_LINE_H * 0.5f; /* one gap below last entry */
-		float rlx = ox - ux[0] * rx_off;
-		float rly = oy - ux[1] * rx_off;
-		float rlz = oz - ux[2] * rx_off;
-		Com_sprintf(room_buf, sizeof(room_buf), "area %d  cls %d", area, cluster);
+		float rx_off = Q3IDE_OVL_KEY_ROW_H * 6.5f;
+		float rlx = ox - ux[0] * rx_off, rly = oy - ux[1] * rx_off, rlz = oz - ux[2] * rx_off;
+		Com_sprintf(room_buf, sizeof(room_buf), "area %d cls %d", CM_LeafArea(leafnum), CM_LeafCluster(leafnum));
 		q3ide_ovl_str(rlx, rly, rlz, rx, ux, room_buf, 100, 200, 255);
 	}
 
-	/* Window list: active capture windows below area line (small text) */
+	/* Window list: active capture windows (small text) */
 	{
-		float sm_lh = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE; /* tighter line pitch for small text */
-		float wl_base = n * Q3IDE_OVL_LINE_H + Q3IDE_OVL_LINE_H * 1.8f;
-		int wrow = 0;
-		int wi;
-
-		/* Section header — "WINS 8+2 s6 nd3" (active+pending, streaming, no-delivery) */
-		{
+		float sm_lh = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE;
+		int wrow = 0, wi;
+		{ /* Section header */
 			char hdr[48];
-			int pending = Q3IDE_WM_PendingCount();
-			int streams = 0, nd = 0, _si;
+			int pending = Q3IDE_WM_PendingCount(), streams = 0, nd = 0, _si;
+			float lx = ox - ux[0] * wl_base, ly = oy - ux[1] * wl_base, lz = oz - ux[2] * wl_base;
 			for (_si = 0; _si < Q3IDE_MAX_WIN; _si++) {
 				const q3ide_win_t *_w = &q3ide_wm.wins[_si];
 				if (_w->active && _w->owns_stream) {
 					if (_w->stream_active) streams++; else nd++;
 				}
 			}
-			float lx = ox - ux[0] * wl_base;
-			float ly = oy - ux[1] * wl_base;
-			float lz = oz - ux[2] * wl_base;
 			if (pending > 0 && nd > 0)
 				Com_sprintf(hdr, sizeof(hdr), "WINS %d+%d s%d nd%d", q3ide_wm.num_active, pending, streams, nd);
 			else if (pending > 0)
@@ -268,62 +283,35 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		for (wi = 0; wi < Q3IDE_MAX_WIN; wi++) {
 			q3ide_win_t *w = &q3ide_wm.wins[wi];
 			char entry[22];
-			int slen, k;
-			float lx, ly, lz, row_off;
+			float row_off, lx, ly, lz;
 
 			if (!w->active)
 				continue;
 
-			/* Truncate label to 20 chars */
-			slen = (int) strlen(w->label);
-			if (slen > 20) {
-				for (k = 0; k < 19; k++)
-					entry[k] = w->label[k];
-				entry[19] = '~';
-				entry[20] = '\0';
-			} else {
-				for (k = 0; k <= slen; k++)
-					entry[k] = w->label[k];
-			}
+			/* Truncate label to fit entry buffer */
+			Q_strncpyz(entry, w->label, sizeof(entry));
+			if (strlen(w->label) > 20) { entry[19] = '~'; entry[20] = '\0'; }
 
 			row_off = wl_base + wrow * sm_lh;
 			lx = ox - ux[0] * row_off;
 			ly = oy - ux[1] * row_off;
 			lz = oz - ux[2] * row_off;
 
-			/* ── Two indicator lamps before the label ─────────────────────────
-			 * Lamp 1: ever_failed  — red=yes  green=never had issues
-			 * Lamp 2: failing now  — red=yes  green=stream healthy right now
-			 *   "failing now" = stream dead OR throttled within last 2s
-			 * ──────────────────────────────────────────────────────────── */
+			/* ── Two indicator lamps ───────────────────────────────────── *
+			 * Lamp 1: ever_failed  — red=yes  green=never had issues       *
+			 * Lamp 2: failing now  — red=yes  green=stream healthy          */
 			{
-				unsigned long long now_ov = Sys_Milliseconds();
 				float lamp_cw = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
-				/* Lamp 1 — ever failed */
-				float l1x = lx, l1y = ly, l1z = lz;
-				/* Lamp 2 — failing now */
-				float l2x = lx + rx[0] * lamp_cw * 1.5f;
-				float l2y = ly + rx[1] * lamp_cw * 1.5f;
-				float l2z = lz + rx[2] * lamp_cw * 1.5f;
-				/* Label — shifted right past the two lamps */
-				float llx = lx + rx[0] * lamp_cw * 3.2f;
-				float lly = ly + rx[1] * lamp_cw * 3.2f;
-				float llz = lz + rx[2] * lamp_cw * 3.2f;
+				float l2x = lx + rx[0] * lamp_cw * 1.5f, l2y = ly + rx[1] * lamp_cw * 1.5f, l2z = lz + rx[2] * lamp_cw * 1.5f;
+				float llx = lx + rx[0] * lamp_cw * 3.2f, lly = ly + rx[1] * lamp_cw * 3.2f, llz = lz + rx[2] * lamp_cw * 3.2f;
 				qboolean failing_now =
 				    (w->owns_stream && !w->stream_active) ||
-				    (w->last_throttle_ms > 0 && (now_ov - w->last_throttle_ms) < 2000ULL);
+				    (w->last_throttle_ms > 0 && (now - w->last_throttle_ms) < 2000ULL);
 
-				if (w->ever_failed)
-					q3ide_ovl_str_sm(l1x, l1y, l1z, rx, ux, "*", 255, 50, 50);
-				else
-					q3ide_ovl_str_sm(l1x, l1y, l1z, rx, ux, "*", 50, 220, 80);
-
-				if (failing_now)
-					q3ide_ovl_str_sm(l2x, l2y, l2z, rx, ux, "*", 255, 30, 30);
-				else
-					q3ide_ovl_str_sm(l2x, l2y, l2z, rx, ux, "*", 50, 220, 80);
-
-				/* Label */
+				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, "*",
+				                 w->ever_failed ? 255 : 50, w->ever_failed ? 50 : 220, w->ever_failed ? 50 : 80);
+				q3ide_ovl_str_sm(l2x, l2y, l2z, rx, ux, "*",
+				                 failing_now ? 255 : 50, failing_now ? 30 : 220, failing_now ? 30 : 80);
 				if (wi == q3ide_interaction.focused_win)
 					q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 255, 230, 140);
 				else if (w->owns_stream && !w->stream_active)
@@ -335,27 +323,23 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		}
 	}
 
-	/* Stream failure alerts — bright red banner for any dead tunnel streams */
+	/* Stream failure alert */
 	{
 		int dead = 0, wi;
 		for (wi = 0; wi < Q3IDE_MAX_WIN; wi++) {
 			q3ide_win_t *w = &q3ide_wm.wins[wi];
-			if (w->active && w->owns_stream && !w->stream_active)
-				dead++;
+			if (w->active && w->owns_stream && !w->stream_active) dead++;
 		}
 		if (dead > 0) {
 			char alert[32];
-			/* Position below the window list, centered-ish */
-			float al_off = n * Q3IDE_OVL_LINE_H + Q3IDE_OVL_LINE_H * 10.0f;
-			float alx = ox - ux[0] * al_off;
-			float aly = oy - ux[1] * al_off;
-			float alz = oz - ux[2] * al_off;
+			float al_off = wl_base + Q3IDE_OVL_LINE_H * 10.0f;
+			float alx = ox - ux[0] * al_off, aly = oy - ux[1] * al_off, alz = oz - ux[2] * al_off;
 			Com_sprintf(alert, sizeof(alert), "! %d STREAM%s DEAD", dead, dead == 1 ? "" : "S");
 			q3ide_ovl_str(alx, aly, alz, rx, ux, alert, 255, 50, 50);
 		}
 	}
 
-	/* Hover label: show hovered window/entity name at top-right of left monitor */
+	/* Hover label: show focused/hovered name at top-right of left monitor */
 	{
 		const char *lbl = NULL;
 		int fw = q3ide_interaction.focused_win;
@@ -375,7 +359,6 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 			hx -= rx[0] * Q3IDE_OVL_CHAR_W * len;
 			hy -= rx[1] * Q3IDE_OVL_CHAR_W * len;
 			hz -= rx[2] * Q3IDE_OVL_CHAR_W * len;
-			/* amber for game entities, warm white for windows */
 			if (q3ide_interaction.hovered_entity_name[0] && lbl == q3ide_interaction.hovered_entity_name)
 				q3ide_ovl_str(hx, hy, hz, rx, ux, lbl, 255, 220, 80);
 			else

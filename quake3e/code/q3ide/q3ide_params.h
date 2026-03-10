@@ -112,6 +112,10 @@
 #define Q3IDE_OVL_KEY_W           0.56f /* fixed key column width (4 chars) */
 #define Q3IDE_OVL_DIST            10.0f /* distance from camera — small so always in front of walls */
 #define Q3IDE_OVL_SMALL_SCALE      0.6f /* small text variant scale factor */
+#define MAX_LEFT_UI_RENDER_FPS       2  /* keyboard section rebuilt at most 2x per second */
+#define OVL_REBUILD_MS             500  /* 1000 / MAX_LEFT_UI_RENDER_FPS */
+#define Q3IDE_OVL_KEY_CELL        0.28f /* per-key column stride (2 chars + margin) */
+#define Q3IDE_OVL_KEY_ROW_H       0.26f /* row pitch for keyboard grid — tighter than OVL_LINE_H */
 
 /* ── Teleport history ───────────────────────────────────────────── */
 

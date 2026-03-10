@@ -136,8 +136,27 @@ The capture pipeline and basic texture rendering. Getting pixels on walls.
 | 0.5 | Console commands (`/q3ide_list`, `/q3ide_attach`, `/q3ide_detach`) | ✅ Done | Basic window management from Q3 console |
 | 0.6 | Multi-window capture (unique windowID per SCStream) | ✅ Done | Fix frame mixing bug — **cause:** matching windows by app name gives the same window to every SCStream. **Fix:** each SCStream must have its own `SCContentFilter(desktopIndependentWindow:)` created with the unique `CGWindowID` (not app name or bundle ID). Multiple windows of the same app (e.g., 3 iTerm2 windows) each have a distinct `CGWindowID`. Key by that, not by `owningApplication`. |
 | 0.7 | Three-monitor support | ✅ Done | Q3e spans 3 monitors, wall textures render across all |
+| 0.8 | **Hybrid CaptureRouter** | ✅ Done | Two-mode capture backend — see below. +20% FPS gain. No stream limit. |
 
 **🧪 TEST CHECKPOINT 0:** Multiple terminal windows from the same app display independently on walls. No frame mixing. Stable 60fps. No memory leaks. Clean dylib unload.
+
+#### Hybrid CaptureRouter (✅ Implemented — `capture/src/router.rs`)
+
+The capture backend routes each window to one of two modes at attach time:
+
+**COMPOSITE** — 1 `SCStream` per physical display, shared by all windows on it. `get_frame()` crops the window's rect from the display pixel buffer using Y-flipped Quartz→pixel coordinates. No per-app camera notification. No stream count limit (~9–11 stream OS limit bypassed entirely). Best FPS — terminals share one display stream.
+
+**DEDICATED** — 1 `SCStream` per window via `SCContentFilter.with_window()`. Captures the window's own GPU compositor layers in isolation, regardless of Z-order, occlusion, or minimized state. Required for any app using Metal/GPU rendering.
+
+Resolution order at attach time:
+1. Window is **minimized** (`!is_on_screen && frame < 200pt`) → DEDICATED (captures Dock buffer correctly)
+2. App name in **`WHITELIST_COMPOSITE`** (terminals, native AppKit) → COMPOSITE
+3. App name in **`WHITELIST_DEDICATED`** (browsers, IDEs, Electron, VLC) → DEDICATED
+4. **Unknown app** → COMPOSITE + detector watches for empty/dark frames, logs warning
+
+Detector thresholds (tunable in `router.rs`): 20 consecutive empty crops → warn. 30 consecutive dark frames → warn (GPU content not composited into display frame). No auto-switch yet — Phase 2.
+
+**FPS caps: DO NOT ADD.** `Q3IDE_CAPTURE_FPS = -1` — Apple's content-driven model delivers frames only when content changes. Idle windows cost zero. Uncapped is smoother than any cap. The spec item 1.8 "SCK minimumFrameInterval" is **open question** — measure actual impact before implementing.
 
 ---
 

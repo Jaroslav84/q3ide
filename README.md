@@ -35,18 +35,19 @@ It's the beggining of something more with an awesome FPS engine behind it.
 
 ### Core (working)
   - 3 monitor setup (3*1980 x 1080p for my setup) - 90fps
-  - Window tunneling (SCStream → texture → GPU) - 40fps (no optimalization) 
+  - Window tunneling (SCStream → texture → GPU) - 40fps with 13 windows
+  - **Hybrid CaptureRouter** (+20% FPS) — COMPOSITE for terminals, DEDICATED for GPU apps
   - Shoot to reposition windows on walls
   - Hover/highlight effect
   - Grapple hook
   - Laser (window finder debug tool)
   - AAS area detection (just tracking, no placement)
-  - Distance-based FPS throttle
   - LOS visibility culling (per-frame trace)
   - Auto-attach new windows (PollChanges)
   - Left monitor keybinding overlay
   - Blood splat on window hit
   - GL_BGRA native (no CPU swizzle)
+  - Minimized app tunneling (DEDICATED captures Dock buffer)
 
 ## Roadmap
 
@@ -57,8 +58,9 @@ While keeping FPS at 90..
 | 0 | **Vision, architecture, design language** | 0 | ✅ Done |
 | 1 | **MVP — terminal on nearest wall at spawn** | 0 | ✅ Done |
 | 2 | **Multiple windows, floating panels** | 0 | ✅ Done |
-| 3 | **Multi-window windows capture (unique windowID per SCStream)** | 0 | ✅ Done |
+| 3 | **Multi-window capture (unique windowID per SCStream)** | 0 | ✅ Done |
 | 4 | **Three-monitor support** | 0 | ✅ Done |
+| 4.1 | **Hybrid CaptureRouter** (COMPOSITE + DEDICATED, +20% FPS) | 0 | ✅ Done |
 | 5 | **Window Entity data model** & lifecycle management | 1 | 🔧 In Progress |
 | 5.1 | ↳ Kill BGRA→RGBA swizzle (GL_BGRA native) | 1 | ✅ Done |
 | 5.2 | ↳ Visibility-gated texture uploads (dot product + BSP trace) | 1 | — |
@@ -237,17 +239,22 @@ Each room in the map can represent a section of the codebase. Walk into the `aut
 
 
 ```
-macOS Desktop                         Quake III Arena
-┌──────────────┐                     ┌────────────────────────┐
-│              │   ScreenCaptureKit  │                        │
-│  iTerm2      │ ──── BGRA frames ──►│  Wall texture (live)   │
-│  VSCode      │   per-window capture│                        │
-│  Browser     │                     │  You, with a railgun   │
-│              │                     │                        │
-└──────────────┘                     └────────────────────────┘
+macOS Desktop                              Quake III Arena
+┌──────────────┐                          ┌────────────────────────┐
+│  iTerm2      │──COMPOSITE (shared)─────►│                        │
+│  Terminal    │   1 stream/display        │  Wall texture (live)   │
+│              │   crop per window         │                        │
+├──────────────┤                          │  You, with a railgun   │
+│  Safari      │──DEDICATED (per-window)─►│                        │
+│  Xcode       │   with_window() filter   │                        │
+│  Cursor      │   correct GPU layers     └────────────────────────┘
+└──────────────┘
+
+         CaptureRouter (capture/src/router.rs)
+         selects mode per app at attach time
 ```
 
-A Rust dylib captures desktop windows via Apple's `ScreenCaptureKit` framework and streams pixel data into a lock-free ring buffer. The game engine polls the buffer each frame and uploads it as a dynamic texture onto a surface in the game world.
+A Rust dylib (`capture/`) captures desktop windows via Apple's `ScreenCaptureKit` framework using a **Hybrid CaptureRouter**: CPU-rendered apps (terminals) share one display-level stream per monitor — no stream limit, no camera icon per app. GPU-accelerated apps (browsers, IDEs, Electron) get isolated per-window streams for correct Metal layer compositing. Pixel data streams into a lock-free ring buffer; the engine polls each frame and uploads as a dynamic texture.
 
 The engine layer is abstracted — Quake3e today, potentially a VR engine tomorrow.
 
@@ -291,7 +298,8 @@ q3ide/
 │   ├── src/
 │   │   ├── lib.rs          # C-ABI exports
 │   │   ├── backend.rs      # CaptureBackend trait
-│   │   ├── screencapturekit.rs
+│   │   ├── router.rs       # CaptureRouter — COMPOSITE vs DEDICATED selection + whitelists
+│   │   ├── screencapturekit.rs  # Hybrid backend (both modes)
 │   │   ├── ringbuf.rs      # Lock-free frame buffer
 │   │   └── window.rs       # Window enumeration
 │   └── Cargo.toml
