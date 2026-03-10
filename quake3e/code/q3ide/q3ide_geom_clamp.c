@@ -124,7 +124,7 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	}
 }
 
-int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)
+int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir, int skip_idx)
 {
 	int i, best = -1;
 	float best_t = 512.0f;
@@ -135,6 +135,8 @@ int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir)
 		float denom, t, hw, hh, lx, ly;
 
 		if (!win->active)
+			continue;
+		if (i == skip_idx)
 			continue;
 
 		denom = DotProduct(dir, win->normal);

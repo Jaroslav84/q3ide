@@ -54,14 +54,6 @@ void Q3IDE_WM_AddPolys(void)
 		if (!win->los_visible)
 			continue;
 
-		/* Back-face cull for wall-mounted windows. */
-		if (win->wall_mounted) {
-			vec3_t diff;
-			VectorSubtract(q3ide_wm.player_eye, win->origin, diff);
-			if (DotProduct(diff, win->normal) < 0.0f)
-				continue;
-		}
-
 		if (i == q3ide_selected_win)
 			q3ide_add_select_border(win);
 		q3ide_add_hover_border(win);
@@ -106,7 +98,7 @@ void Q3IDE_WM_CmdDetachAll(void)
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active || !w->is_tunnel)
 			continue;
-		if (q3ide_wm.cap_stop)
+		if (w->owns_stream && q3ide_wm.cap_stop)
 			q3ide_wm.cap_stop(q3ide_wm.cap, w->capture_id);
 		memset(w, 0, sizeof(q3ide_win_t));
 		q3ide_wm.num_active--;

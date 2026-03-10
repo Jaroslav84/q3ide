@@ -62,15 +62,30 @@ void q3ide_shoot_frame(void)
 	fwd[1] = cosf(p) * sinf(y);
 	fwd[2] = -sinf(p);
 
-	hit = Q3IDE_WM_TraceWindowHit(eye, fwd);
+	hit = Q3IDE_WM_TraceWindowHit(eye, fwd, -1);
 
-	if (hit >= 0) {
-		/* Shot hit a window → select it */
+	if (hit >= 0 && hit == q3ide_selected_win) {
+		/* Re-hit the already-selected window: cycle to the next one behind it */
+		int next = Q3IDE_WM_TraceWindowHit(eye, fwd, hit);
+		if (next >= 0) {
+			q3ide_selected_win = next;
+			q3ide_select_time = Sys_Milliseconds();
+			Q3IDE_LOGI("cycled to [%d] -> shoot surface to move (5s)", next);
+			Cbuf_AddText("give ammo\n");
+			return;
+		}
+		/* No other window behind it — treat as miss so move path triggers */
+		hit = -1;
+	} else if (hit >= 0) {
+		/* Shot hit a new window → select it */
 		q3ide_selected_win = hit;
 		q3ide_select_time = Sys_Milliseconds();
 		Q3IDE_LOGI("selected [%d] -> shoot surface to move (5s)", hit);
 		Cbuf_AddText("give ammo\n");
-	} else if (q3ide_selected_win >= 0 && Sys_Milliseconds() - q3ide_select_time < Q3IDE_REPOSITION_MS) {
+		return;
+	}
+
+	if (hit < 0 && q3ide_selected_win >= 0 && Sys_Milliseconds() - q3ide_select_time < Q3IDE_REPOSITION_MS) {
 		/* Selection active, shot missed windows → move to hit surface */
 		vec3_t wall_pos, wall_normal;
 		if (Q3IDE_WM_TraceWall(eye, fwd, wall_pos, wall_normal)) {

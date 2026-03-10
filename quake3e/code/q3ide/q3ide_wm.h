@@ -33,9 +33,9 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 
 /*
  * Ray-test all active windows; returns index of closest hit or -1.
- * Used for shoot-to-select.
+ * skip_idx: exclude this index (-1 = none), for cycling through stacked windows.
  */
-int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir);
+int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir, int skip_idx);
 
 /* Move an active window to a new position (shoot-to-move).
  * skip_clamp=qtrue: skip q3ide_clamp_window_size (use when size is already correct). */

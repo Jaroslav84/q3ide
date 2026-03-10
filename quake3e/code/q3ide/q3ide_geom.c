@@ -141,37 +141,41 @@ void q3ide_add_poly(q3ide_win_t *win)
 
 	q3ide_win_basis(win, right, up);
 
-	/* Front face */
-	for (i = 0; i < 4; i++) {
-		float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
-		float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
-		verts[i].xyz[0] = win->origin[0] + right[0] * sx * hw + up[0] * sy * hh + win->normal[0] * pop;
-		verts[i].xyz[1] = win->origin[1] + right[1] * sx * hw + up[1] * sy * hh + win->normal[1] * pop;
-		verts[i].xyz[2] = win->origin[2] + right[2] * sx * hw + up[2] * sy * hh + win->normal[2] * pop;
-		verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
-		verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
-		verts[i].modulate.rgba[0] = 255;
-		verts[i].modulate.rgba[1] = 255;
-		verts[i].modulate.rgba[2] = 255;
-		verts[i].modulate.rgba[3] = 255;
-	}
-	re.AddPolyToScene(win->shader, 4, verts, 1);
+	{
+		float u0 = win->uv_x0, u1 = win->uv_x1;
 
-	/* Back face — visible from both sides */
-	for (i = 0; i < 4; i++) {
-		float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
-		float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
-		verts[i].xyz[0] = win->origin[0] - right[0] * sx * hw + up[0] * sy * hh - win->normal[0];
-		verts[i].xyz[1] = win->origin[1] - right[1] * sx * hw + up[1] * sy * hh - win->normal[1];
-		verts[i].xyz[2] = win->origin[2] - right[2] * sx * hw + up[2] * sy * hh - win->normal[2];
-		verts[i].st[0] = 1.0f - (sx + 1.0f) * 0.5f;
-		verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
-		verts[i].modulate.rgba[0] = 255;
-		verts[i].modulate.rgba[1] = 255;
-		verts[i].modulate.rgba[2] = 255;
-		verts[i].modulate.rgba[3] = 255;
+		/* Front face */
+		for (i = 0; i < 4; i++) {
+			float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
+			float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
+			verts[i].xyz[0] = win->origin[0] + right[0] * sx * hw + up[0] * sy * hh + win->normal[0] * pop;
+			verts[i].xyz[1] = win->origin[1] + right[1] * sx * hw + up[1] * sy * hh + win->normal[1] * pop;
+			verts[i].xyz[2] = win->origin[2] + right[2] * sx * hw + up[2] * sy * hh + win->normal[2] * pop;
+			verts[i].st[0] = u0 + (1.0f - (sx + 1.0f) * 0.5f) * (u1 - u0);
+			verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
+			verts[i].modulate.rgba[0] = 255;
+			verts[i].modulate.rgba[1] = 255;
+			verts[i].modulate.rgba[2] = 255;
+			verts[i].modulate.rgba[3] = 255;
+		}
+		re.AddPolyToScene(win->shader, 4, verts, 1);
+
+		/* Back face — visible from both sides */
+		for (i = 0; i < 4; i++) {
+			float sx = (i == 0 || i == 3) ? -1.0f : 1.0f;
+			float sy = (i == 0 || i == 1) ? -1.0f : 1.0f;
+			verts[i].xyz[0] = win->origin[0] - right[0] * sx * hw + up[0] * sy * hh - win->normal[0];
+			verts[i].xyz[1] = win->origin[1] - right[1] * sx * hw + up[1] * sy * hh - win->normal[1];
+			verts[i].xyz[2] = win->origin[2] - right[2] * sx * hw + up[2] * sy * hh - win->normal[2];
+			verts[i].st[0] = u0 + (1.0f - (sx + 1.0f) * 0.5f) * (u1 - u0);
+			verts[i].st[1] = 1.0f - (sy + 1.0f) * 0.5f;
+			verts[i].modulate.rgba[0] = 255;
+			verts[i].modulate.rgba[1] = 255;
+			verts[i].modulate.rgba[2] = 255;
+			verts[i].modulate.rgba[3] = 255;
+		}
+		re.AddPolyToScene(win->shader, 4, verts, 1);
 	}
-	re.AddPolyToScene(win->shader, 4, verts, 1);
 }
 
 /* Portal frame and blood splat — q3ide_effects.c */

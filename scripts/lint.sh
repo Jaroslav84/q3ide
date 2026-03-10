@@ -41,10 +41,10 @@ run_clang_format() {
         [ -f "$f" ] || continue
         local r; r="$(rel "$f")"
         local lines; lines=$(trim "$(wc -l < "$f")")
-        local out; out="$(clang-format --dry-run "$f" 2>&1)"
-        if [ -n "$out" ]; then
+        local violations; violations="$(clang-format --dry-run "$f" 2>/dev/null)"
+        if [ -n "$violations" ]; then
             warn "$r [${lines}L]: clang-format violations (fix: clang-format -i $r)"
-            echo "$out" | head -6 | while IFS= read -r line; do info "  $line"; done
+            echo "$violations" | head -6 | while IFS= read -r line; do info "  $line"; done
         else
             ok "$r [${lines}L]"
         fi

@@ -41,7 +41,7 @@ int q3ide_crosshair_window(float *out_uv, float *out_dist, vec3_t out_hit_pos)
 	fwd[1] = cosf(p) * sinf(y);
 	fwd[2] = -sinf(p);
 
-	hit = Q3IDE_WM_TraceWindowHit(eye, fwd);
+	hit = Q3IDE_WM_TraceWindowHit(eye, fwd, -1);
 	if (hit < 0)
 		return -1;
 

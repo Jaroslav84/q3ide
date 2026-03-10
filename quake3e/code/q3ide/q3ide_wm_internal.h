@@ -128,6 +128,11 @@ typedef struct {
 	/* Tunnel: OS screen-capture window. detach-all only removes these.
 	 * Non-tunnel windows (HUD, FPS, overlays) survive detach-all. */
 	qboolean is_tunnel;
+	/* Display slice: UV crop and shared texture slot */
+	float uv_x0, uv_x1;            /* horizontal UV crop [0..1], default 0.0/1.0 */
+	qboolean tex_primary;           /* qfalse = secondary slice, skip frame upload */
+	unsigned int parent_capture_id; /* for secondary slices: primary's capture_id; else 0 */
+	qboolean owns_stream;           /* qtrue = calls cap_stop on detach */
 } q3ide_win_t;
 
 /* ── Global window manager state (defined in q3ide_wm.c) ──────── */
