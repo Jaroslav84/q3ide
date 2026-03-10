@@ -190,8 +190,12 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		/* Section header — "WINS 8 +2 s6" (active + pending, stream count) */
 		{
 			char hdr[32];
-			int  pending = Q3IDE_WM_PendingCount();
-			int  streams = Q3IDE_StreamCount();
+			int pending = Q3IDE_WM_PendingCount();
+			int streams = 0, _si;
+			for (_si = 0; _si < Q3IDE_MAX_WIN; _si++)
+				if (q3ide_wm.wins[_si].active && q3ide_wm.wins[_si].owns_stream &&
+				    q3ide_wm.wins[_si].stream_active)
+					streams++;
 			float lx = ox - ux[0] * wl_base;
 			float ly = oy - ux[1] * wl_base;
 			float lz = oz - ux[2] * wl_base;
@@ -199,7 +203,7 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 				Com_sprintf(hdr, sizeof(hdr), "WINS %d+%d s%d", q3ide_wm.num_active, pending, streams);
 			else
 				Com_sprintf(hdr, sizeof(hdr), "WINS %d s%d", q3ide_wm.num_active, streams);
-			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, hdr, 65, 65, 65);
+			q3ide_ovl_str(lx, ly, lz, rx, ux, hdr, 255, 255, 255);
 		}
 		wrow++;
 
@@ -229,13 +233,24 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 			ly = oy - ux[1] * row_off;
 			lz = oz - ux[2] * row_off;
 
-			/* Highlight focused window warm white; dead streams in orange-red; others dim */
+			/* Highlight focused window warm white; dead streams in orange-red; others bright */
 			if (wi == q3ide_interaction.focused_win)
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 220, 200, 120);
+				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 255, 230, 140);
 			else if (w->owns_stream && !w->stream_active)
 				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 255, 80, 40); /* stream dead — orange-red */
 			else
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 110, 110, 110);
+				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 210, 210, 210);
+
+			/* Red throttle flash: Apple gave us no frame for >1s — show '!' for 2s */
+			{
+				unsigned long long now_ov = Sys_Milliseconds();
+				if (w->last_throttle_ms > 0 && (now_ov - w->last_throttle_ms) < 2000ULL) {
+					float flash_x = lx + rx[0] * (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE * 21.5f);
+					float flash_y = ly + rx[1] * (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE * 21.5f);
+					float flash_z = lz + rx[2] * (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE * 21.5f);
+					q3ide_ovl_str_sm(flash_x, flash_y, flash_z, rx, ux, "!", 255, 30, 30);
+				}
+			}
 			wrow++;
 		}
 	}

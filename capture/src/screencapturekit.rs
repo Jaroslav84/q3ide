@@ -342,7 +342,7 @@ impl CaptureBackend for SCKBackend {
             .collect())
     }
 
-    fn start_capture(&mut self, window_id: u32, _target_fps: u32) -> Result<()> {
+    fn start_capture(&mut self, window_id: u32, target_fps: i32) -> Result<()> {
         if self.window_sessions.contains_key(&window_id) {
             return Err(CaptureError::AlreadyCapturing(window_id));
         }
@@ -380,12 +380,19 @@ impl CaptureBackend for SCKBackend {
             .with_window(sc_window)
             .build();
 
-        let config = SCStreamConfiguration::new()
+
+        let mut config = SCStreamConfiguration::new()
             .with_width(w)
             .with_height(h)
             .with_pixel_format(PixelFormat::BGRA)
             .with_shows_cursor(false)
             .with_queue_depth(3);
+        if target_fps >= 0 {
+            log::info!("capture: wid={} applying fps cap={}", window_id, target_fps);
+            config = config.with_fps(target_fps as u32);
+        } else {
+            log::info!("capture: wid={} fps=UNCAPPED (Apple decides)", window_id);
+        }
 
         let latest_frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
 
@@ -413,7 +420,7 @@ impl CaptureBackend for SCKBackend {
         Ok(())
     }
 
-    fn start_desktop_capture(&mut self, _target_fps: u32) -> Result<u32> {
+    fn start_desktop_capture(&mut self, target_fps: i32) -> Result<u32> {
         if self.desktop_capture.is_some() {
             return Err(CaptureError::AlreadyCapturing(DESKTOP_CAPTURE_ID));
         }
@@ -446,12 +453,19 @@ impl CaptureBackend for SCKBackend {
                 .with_display(display)
                 .with_excluding_windows(&[])
                 .build();
-            let config = SCStreamConfiguration::new()
+    
+            let mut config = SCStreamConfiguration::new()
                 .with_width(entry.scaled_width)
                 .with_height(entry.scaled_height)
                 .with_pixel_format(PixelFormat::BGRA)
                 .with_shows_cursor(true)
                 .with_queue_depth(3);
+            if target_fps >= 0 {
+                log::info!("desktop: display[{}] applying fps cap={}", idx, target_fps);
+                config = config.with_fps(target_fps as u32);
+            } else {
+                log::info!("desktop: display[{}] fps=UNCAPPED (Apple decides)", idx);
+            }
 
             let handler = DesktopDisplayHandler {
                 display_frames: Arc::clone(&display_frames),
@@ -479,7 +493,7 @@ impl CaptureBackend for SCKBackend {
         Ok(DESKTOP_CAPTURE_ID)
     }
 
-    fn start_display_capture(&mut self, display_id: u32, _target_fps: u32) -> Result<()> {
+    fn start_display_capture(&mut self, display_id: u32, target_fps: i32) -> Result<()> {
         if self.window_sessions.contains_key(&display_id) {
             return Err(CaptureError::AlreadyCapturing(display_id));
         }
@@ -521,12 +535,19 @@ impl CaptureBackend for SCKBackend {
             .with_excluding_windows(&quake_wins)
             .build();
 
-        let config = SCStreamConfiguration::new()
+
+        let mut config = SCStreamConfiguration::new()
             .with_width(w)
             .with_height(h)
             .with_pixel_format(PixelFormat::BGRA)
             .with_shows_cursor(true)
             .with_queue_depth(3);
+        if target_fps >= 0 {
+            log::info!("capture: display={} applying fps cap={}", display_id, target_fps);
+            config = config.with_fps(target_fps as u32);
+        } else {
+            log::info!("capture: display={} fps=UNCAPPED (Apple decides)", display_id);
+        }
 
         let latest_frame: Arc<Mutex<Option<FrameData>>> = Arc::new(Mutex::new(None));
 

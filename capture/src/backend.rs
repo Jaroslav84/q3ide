@@ -79,18 +79,17 @@ pub trait CaptureBackend: Send {
     /// Enumerate all available displays.
     fn list_displays(&self) -> Result<Vec<DisplayInfo>>;
 
-    /// Start capturing a specific window at the given FPS.
-    fn start_capture(&mut self, window_id: u32, target_fps: u32) -> Result<()>;
+    /// Start capturing a specific window.
+    /// target_fps: -1 = Apple decides (no cap), 0 = static image, N = max fps cap.
+    fn start_capture(&mut self, window_id: u32, target_fps: i32) -> Result<()>;
 
     /// Start capturing all displays, composited vertically into a single frame.
-    /// The composite width will be the maximum display width, with all displays
-    /// scaled to fit that width while maintaining aspect ratio.
-    fn start_desktop_capture(&mut self, _target_fps: u32) -> Result<u32>;
+    /// target_fps: -1 = Apple decides (no cap), 0 = static image, N = max fps cap.
+    fn start_desktop_capture(&mut self, _target_fps: i32) -> Result<u32>;
 
     /// Start capturing a single display by its CGDirectDisplayID.
-    /// Frames are stored in window_sessions keyed by display_id
-    /// (CGDirectDisplayID values don't overlap with CGWindowID).
-    fn start_display_capture(&mut self, display_id: u32, target_fps: u32) -> Result<()>;
+    /// target_fps: -1 = Apple decides (no cap), 0 = static image, N = max fps cap.
+    fn start_display_capture(&mut self, display_id: u32, target_fps: i32) -> Result<()>;
 
     /// Stop capturing a specific window.
     fn stop_capture(&mut self, window_id: u32);

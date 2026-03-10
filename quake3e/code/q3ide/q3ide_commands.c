@@ -24,7 +24,7 @@ qboolean Q3IDE_WM_DetachById(unsigned int cid)
 			continue;
 		if (w->capture_id != cid)
 			continue;
-		if (w->owns_stream && w->stream_active && q3ide_win_mngr.cap_stop)
+		if (w->owns_stream && q3ide_win_mngr.cap_stop)
 			q3ide_win_mngr.cap_stop(q3ide_win_mngr.cap, w->capture_id);
 		Q3IDE_LOGI("detached wid=%u", w->capture_id);
 		memset(w, 0, sizeof(q3ide_win_t));

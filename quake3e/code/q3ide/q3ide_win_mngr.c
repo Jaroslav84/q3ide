@@ -26,40 +26,6 @@ q3ide_wm_t q3ide_wm;
 /* Geometry clamp — q3ide_geometry_clamp.c */
 extern void q3ide_clamp_window_size(q3ide_win_t *win);
 
-/* ── Stream pool ────────────────────────────────────────────────── */
-
-/* Count per-window streams currently active (display streams not counted). */
-int Q3IDE_StreamCount(void)
-{
-	int i, n = 0;
-	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-		q3ide_win_t *w = &q3ide_wm.wins[i];
-		if (w->active && w->owns_stream && w->stream_active)
-			n++;
-	}
-	return n;
-}
-
-/*
- * Try to restart streams for windows that lost theirs (silently dropped by SCK).
- * Called periodically from PollFrames.
- */
-void Q3IDE_WM_RestartEvictedStreams(void)
-{
-	int i;
-	if (!q3ide_wm.cap_start)
-		return;
-	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-		q3ide_win_t *w = &q3ide_wm.wins[i];
-		if (!w->active || !w->owns_stream || w->stream_active)
-			continue;
-		if (q3ide_wm.cap_start(q3ide_wm.cap, w->capture_id, Q3IDE_CAPTURE_FPS) == 0) {
-			w->stream_active = qtrue;
-			Q3IDE_LOGI("stream: restarted win[%d] '%s'", i, w->label);
-		}
-	}
-}
-
 static qboolean q3ide_load_dylib(void)
 {
 	void *dl = dlopen(Q3IDE_DYLIB, RTLD_LAZY);
@@ -169,8 +135,7 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	win->is_tunnel = qtrue; /* OS screen-capture window — removed by detach-all */
 	win->uv_x0 = 0.0f;
 	win->uv_x1 = 1.0f;
-	win->owns_stream   = do_start;
-	win->stream_active = do_start;
+	win->owns_stream = do_start;
 	q3ide_wm.num_active++;
 	if (!skip_clamp)
 		q3ide_clamp_window_size(win);

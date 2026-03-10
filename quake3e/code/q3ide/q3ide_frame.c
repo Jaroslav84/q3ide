@@ -35,7 +35,6 @@ void Q3IDE_Frame(void)
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
 		if (++q3ide_state.autoexec_delay > 60) {
 			q3ide_state.stream_last_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
-			q3ide_state.stream_cooldown = 60;
 			Cbuf_AddText("give grappling hook\nweapon 10\nq3ide attach all\n");
 			{
 				cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
@@ -99,13 +98,20 @@ void Q3IDE_Frame(void)
 					_hw = _w->world_w * 0.5f;
 					_hh = _w->world_h * 0.5f;
 
+					/* Proximity exemption: within 1 window diagonal the player is
+					 * clearly next to the TV — skip LOS, always show it. */
+					if (_w->player_dist < sqrtf(_hw * _hw + _hh * _hh) * 2.0f) {
+						_w->los_visible = qtrue;
+						continue;
+					}
+
 					_w->los_visible = qfalse;
 					for (_pi = 0; _pi < 5; _pi++) {
 						_pt[0] = _w->origin[0] + _rx * _cx[_pi] * _hw;
 						_pt[1] = _w->origin[1] + _ry * _cx[_pi] * _hw;
 						_pt[2] = _w->origin[2] + _cy[_pi] * _hh;
 						CM_BoxTrace(&_tr, eye, _pt, los_mins, los_maxs, 0, CONTENTS_SOLID, qfalse);
-						if (_tr.startsolid || _tr.fraction >= 0.95f) {
+						if (_tr.fraction >= 0.95f) {
 							_w->los_visible = qtrue;
 							break;
 						}

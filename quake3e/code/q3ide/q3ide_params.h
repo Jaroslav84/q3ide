@@ -11,12 +11,6 @@
  * CAPS & THROTTLES — all hard limits live here so they're easy to find and remove
  * ══════════════════════════════════════════════════════════════════ */
 
-/* FPS cap for OS screen-capture tunnel windows. SCK has an undocumented
- * concurrent-stream hardware limit (~9 streams on this machine); keeping tunnel
- * fps lower leaves render budget for the rest of the game.
- * Set equal to Q3IDE_FPS_FULL to remove the cap. */
-#define Q3IDE_MAX_TUNNEL_FPS     25 /* fps — tunnel window hard cap */
-
 /* Max consecutive cap_start failures to skip before giving up on a wall-shot
  * placement attempt. Prevents an infinite hang when SCK won't start a stream. */
 #define Q3IDE_ATTACH_MAX_SKIP     8 /* retries */
@@ -32,18 +26,31 @@
 
 /* ── Capture / streaming ─────────────────────────────────────────── */
 
-#define Q3IDE_CAPTURE_FPS        60 /* SCK stream target fps */
+/* ── SCK stream FPS cap ──────────────────────────────────────────────────────
+ * Controls the minimumFrameInterval passed to SCStreamConfiguration.
+ *
+ *  -1  OFF — no cap passed to Apple at all. Apple's ScreenCaptureKit decides
+ *            completely autonomously when to deliver frames (content-driven).
+ *            Idle windows cost zero. Active windows get whatever the content
+ *            refresh rate demands. THIS IS THE RECOMMENDED PRODUCTION VALUE.
+ *            Never throttle Apple when it knows better than us.
+ *
+ *   0  STATIC IMAGE — passes fps=0 to SCK. Effectively freezes the stream
+ *            after the first frame. Use only for debugging/screenshots.
+ *
+ *   1  ONE FRAME PER SECOND — slowest useful live cap. Good for background
+ *            reference windows that barely change.
+ *
+ *  25  SOFT 25fps cap — Apple will not deliver more than 25 fps even if the
+ *            window is changing faster. Does NOT guarantee 25fps (Apple's
+ *            content-driven model still skips idle frames for free).
+ *
+ * IMPORTANT: Passed verbatim as a signed int through the C→Rust FFI.
+ *            The Rust layer skips with_fps() entirely when value is < 0.
+ *            Changing this value requires a FULL rebuild (Rust + engine).
+ * ──────────────────────────────────────────────────────────────────────────*/
+#define Q3IDE_CAPTURE_FPS        -1 /* -1=Apple decides, 0=static, N=max fps cap */
 #define Q3IDE_CAPTURE_RING_BUF_SIZE 3
-
-/* ── Distance-based FPS throttle ────────────────────────────────── */
-
-#define Q3IDE_DIST_FULL       200.0f /* closer than this → full fps */
-#define Q3IDE_DIST_HALF       500.0f /* → half fps */
-#define Q3IDE_DIST_LOW       1000.0f /* → low fps */
-#define Q3IDE_FPS_FULL           60
-#define Q3IDE_FPS_HALF           30
-#define Q3IDE_FPS_LOW            15
-#define Q3IDE_FPS_MIN             5
 
 /* ── Window sizing (world units) ────────────────────────────────── */
 

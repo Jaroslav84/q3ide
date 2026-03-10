@@ -187,7 +187,7 @@ q3ide_ void q3ide_free_window_list(struct Q3ideQ3ideWindowList list);
 q3ide_
 enum Q3ideQ3ideError q3ide_start_capture(struct Q3ideQ3ideCapture *handle,
                                          unsigned int window_id,
-                                         unsigned int target_fps);
+                                         int target_fps);
 
 /**
  * Stop capturing a window.
@@ -271,7 +271,7 @@ q3ide_ void q3ide_free_change_list(struct Q3ideQ3ideWindowChangeList list);
 q3ide_
 unsigned int q3ide_attach_by_title(struct Q3ideQ3ideCapture *handle,
                                    const char *title_query,
-                                   unsigned int target_fps);
+                                   int target_fps);
 
 /**
  * List available displays.
@@ -304,7 +304,7 @@ q3ide_ void q3ide_free_display_list(struct Q3ideQ3ideDisplayList list);
 q3ide_
 enum Q3ideQ3ideError q3ide_start_display_capture(struct Q3ideQ3ideCapture *handle,
                                                  unsigned int display_id,
-                                                 unsigned int target_fps);
+                                                 int target_fps);
 
 extern void *CGEventCreateMouseEvent(void *source,
                                      uint32_t mouse_type,
@@ -359,8 +359,6 @@ void q3ide_inject_key(struct Q3ideQ3ideCapture *_handle,
  * # Safety
  * `handle` must be a valid pointer from `q3ide_init`.
  */
-q3ide_
-unsigned int q3ide_start_desktop_capture(struct Q3ideQ3ideCapture *handle,
-                                         unsigned int target_fps);
+q3ide_ unsigned int q3ide_start_desktop_capture(struct Q3ideQ3ideCapture *handle, int target_fps);
 
 #endif  /* Q3IDE_CAPTURE_H */

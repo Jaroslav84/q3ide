@@ -7,24 +7,8 @@
 #include "../qcommon/qcommon.h"
 #include <math.h>
 
-/* Compute right/up basis — duplicated from geom.c (both static, no cross-TU dep) */
-static void q3ide_win_basis_clamp(q3ide_win_t *win, vec3_t right, vec3_t up)
-{
-	float nx = win->normal[0], ny = win->normal[1];
-	float horiz_len = sqrtf(nx * nx + ny * ny);
-	if (horiz_len > 0.01f) {
-		right[0] = -ny / horiz_len;
-		right[1] = nx / horiz_len;
-		right[2] = 0.0f;
-	} else {
-		right[0] = 1.0f;
-		right[1] = 0.0f;
-		right[2] = 0.0f;
-	}
-	up[0] = 0.0f;
-	up[1] = 0.0f;
-	up[2] = 1.0f;
-}
+/* Shared basis — defined in q3ide_geometry.c */
+extern void q3ide_win_basis(q3ide_win_t *win, vec3_t right, vec3_t up);
 
 /*
  * q3ide_clamp_window_size — shrink world_w/h to fit within adjacent walls,
@@ -37,7 +21,7 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	static vec3_t mins = {0, 0, 0}, maxs = {0, 0, 0};
 	float orig_hw, orig_hh, hw, hh, lim, rw, rh, r;
 
-	q3ide_win_basis_clamp(win, right, up);
+	q3ide_win_basis(win, right, up);
 
 	orig_hw = hw = win->world_w * 0.5f;
 	orig_hh = hh = win->world_h * 0.5f;
@@ -124,7 +108,7 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	}
 }
 
-int Q3IDE_WM_TraceWindowHit(vec3_t start, vec3_t dir, int skip_idx)
+int Q3IDE_WM_TraceWindowHit(const vec3_t start, const vec3_t dir, int skip_idx)
 {
 	/*
 	 * Ray-plane intersection using the same right/up basis as q3ide_win_basis()

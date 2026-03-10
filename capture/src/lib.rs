@@ -262,11 +262,17 @@ pub unsafe extern "C" fn q3ide_free_window_list(list: Q3ideWindowList) {
 pub unsafe extern "C" fn q3ide_start_capture(
     handle: *mut Q3ideCapture,
     window_id: c_uint,
-    target_fps: c_uint,
+    target_fps: c_int, /* -1=Apple decides (no cap), 0=static, N=max fps */
 ) -> Q3ideError {
     if handle.is_null() {
         return Q3ideError::NullPointer;
     }
+
+    log::info!(
+        "q3ide_start_capture: wid={} fps={}",
+        window_id,
+        if target_fps < 0 { "UNCAPPED (Apple decides)".to_string() } else { target_fps.to_string() }
+    );
 
     let ctx = &mut *handle;
     match ctx.backend.start_capture(window_id, target_fps) {
@@ -551,7 +557,7 @@ pub unsafe extern "C" fn q3ide_free_change_list(list: Q3ideWindowChangeList) {
 pub unsafe extern "C" fn q3ide_attach_by_title(
     handle: *mut Q3ideCapture,
     title_query: *const c_char,
-    target_fps: c_uint,
+    target_fps: c_int, /* -1=Apple decides (no cap), 0=static, N=max fps */
 ) -> c_uint {
     if handle.is_null() || title_query.is_null() {
         return 0;
@@ -683,11 +689,17 @@ pub unsafe extern "C" fn q3ide_free_display_list(list: Q3ideDisplayList) {
 pub unsafe extern "C" fn q3ide_start_display_capture(
     handle: *mut Q3ideCapture,
     display_id: c_uint,
-    target_fps: c_uint,
+    target_fps: c_int, /* -1=Apple decides (no cap), 0=static, N=max fps */
 ) -> Q3ideError {
     if handle.is_null() {
         return Q3ideError::NullPointer;
     }
+
+    log::info!(
+        "q3ide_start_display_capture: display={} fps={}",
+        display_id,
+        if target_fps < 0 { "UNCAPPED (Apple decides)".to_string() } else { target_fps.to_string() }
+    );
 
     let ctx = &mut *handle;
     match ctx.backend.start_display_capture(display_id, target_fps) {
@@ -971,11 +983,16 @@ pub unsafe extern "C" fn q3ide_inject_key(
 #[no_mangle]
 pub unsafe extern "C" fn q3ide_start_desktop_capture(
     handle: *mut Q3ideCapture,
-    target_fps: c_uint,
+    target_fps: c_int, /* -1=Apple decides (no cap), 0=static, N=max fps */
 ) -> c_uint {
     if handle.is_null() {
         return 0;
     }
+
+    log::info!(
+        "q3ide_start_desktop_capture: fps={}",
+        if target_fps < 0 { "UNCAPPED (Apple decides)".to_string() } else { target_fps.to_string() }
+    );
 
     let ctx = &mut *handle;
     match ctx.backend.start_desktop_capture(target_fps) {

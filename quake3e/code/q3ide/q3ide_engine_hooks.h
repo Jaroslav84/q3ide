@@ -73,7 +73,6 @@ typedef struct {
 	int portal2_cooldown;
 	int grapple_tele_cooldown;
 	int stream_last_area;
-	int stream_cooldown;
 } q3ide_hooks_state_t;
 
 #endif /* Q3IDE_HOOKS_H */
