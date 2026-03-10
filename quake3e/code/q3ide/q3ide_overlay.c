@@ -233,23 +233,45 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 			ly = oy - ux[1] * row_off;
 			lz = oz - ux[2] * row_off;
 
-			/* Highlight focused window warm white; dead streams in orange-red; others bright */
-			if (wi == q3ide_interaction.focused_win)
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 255, 230, 140);
-			else if (w->owns_stream && !w->stream_active)
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 255, 80, 40); /* stream dead — orange-red */
-			else
-				q3ide_ovl_str_sm(lx, ly, lz, rx, ux, entry, 210, 210, 210);
-
-			/* Red throttle flash: Apple gave us no frame for >1s — show '!' for 2s */
+			/* ── Two indicator lamps before the label ─────────────────────────
+			 * Lamp 1: ever_failed  — red=yes  green=never had issues
+			 * Lamp 2: failing now  — red=yes  green=stream healthy right now
+			 *   "failing now" = stream dead OR throttled within last 2s
+			 * ──────────────────────────────────────────────────────────── */
 			{
 				unsigned long long now_ov = Sys_Milliseconds();
-				if (w->last_throttle_ms > 0 && (now_ov - w->last_throttle_ms) < 2000ULL) {
-					float flash_x = lx + rx[0] * (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE * 21.5f);
-					float flash_y = ly + rx[1] * (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE * 21.5f);
-					float flash_z = lz + rx[2] * (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE * 21.5f);
-					q3ide_ovl_str_sm(flash_x, flash_y, flash_z, rx, ux, "!", 255, 30, 30);
-				}
+				float lamp_cw = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
+				/* Lamp 1 — ever failed */
+				float l1x = lx, l1y = ly, l1z = lz;
+				/* Lamp 2 — failing now */
+				float l2x = lx + rx[0] * lamp_cw * 1.5f;
+				float l2y = ly + rx[1] * lamp_cw * 1.5f;
+				float l2z = lz + rx[2] * lamp_cw * 1.5f;
+				/* Label — shifted right past the two lamps */
+				float llx = lx + rx[0] * lamp_cw * 3.2f;
+				float lly = ly + rx[1] * lamp_cw * 3.2f;
+				float llz = lz + rx[2] * lamp_cw * 3.2f;
+				qboolean failing_now =
+				    (w->owns_stream && !w->stream_active) ||
+				    (w->last_throttle_ms > 0 && (now_ov - w->last_throttle_ms) < 2000ULL);
+
+				if (w->ever_failed)
+					q3ide_ovl_str_sm(l1x, l1y, l1z, rx, ux, "*", 255, 50, 50);
+				else
+					q3ide_ovl_str_sm(l1x, l1y, l1z, rx, ux, "*", 50, 220, 80);
+
+				if (failing_now)
+					q3ide_ovl_str_sm(l2x, l2y, l2z, rx, ux, "*", 255, 30, 30);
+				else
+					q3ide_ovl_str_sm(l2x, l2y, l2z, rx, ux, "*", 50, 220, 80);
+
+				/* Label */
+				if (wi == q3ide_interaction.focused_win)
+					q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 255, 230, 140);
+				else if (w->owns_stream && !w->stream_active)
+					q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 255, 80, 40);
+				else
+					q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 210, 210, 210);
 			}
 			wrow++;
 		}

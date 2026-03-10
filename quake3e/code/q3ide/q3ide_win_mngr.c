@@ -136,6 +136,7 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	win->uv_x0 = 0.0f;
 	win->uv_x1 = 1.0f;
 	win->owns_stream = do_start;
+	win->stream_active = do_start; /* stream starts live; cleared on failure */
 	q3ide_wm.num_active++;
 	if (!skip_clamp)
 		q3ide_clamp_window_size(win);

@@ -82,6 +82,7 @@ void Q3IDE_WM_PollFrames(void)
 			    (now_ms - win->last_frame_ms) > 1000ULL &&
 			    (now_ms - win->last_throttle_ms) > 2000ULL) {
 				win->last_throttle_ms = now_ms;
+				win->ever_failed = qtrue;
 				Q3IDE_LOGI("win[%d] id=%u THROTTLED by Apple: no frame for %llums",
 				           i, win->capture_id,
 				           (unsigned long long)(now_ms - win->last_frame_ms));
@@ -94,6 +95,7 @@ void Q3IDE_WM_PollFrames(void)
 			continue;
 		}
 		win->last_frame_ms = now_ms;
+		win->stream_active = qtrue; /* frame arrived — stream confirmed alive */
 		if (win->first_frame_ms == 0)
 			win->first_frame_ms = now_ms;
 		win->status = Q3IDE_WIN_STATUS_ACTIVE;

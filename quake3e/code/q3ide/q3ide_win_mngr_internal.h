@@ -115,6 +115,7 @@ typedef struct {
 	float uv_x0, uv_x1;  /* horizontal UV crop [0..1], default 0.0/1.0 */
 	qboolean owns_stream;                /* qtrue = calls cap_stop on detach */
 	qboolean stream_active;              /* qtrue = SCK stream currently delivering frames */
+	qboolean ever_failed;                /* qtrue = stream has ever been throttled or died; never resets */
 	unsigned long long last_throttle_ms; /* Sys_Milliseconds() last time Apple gave no frame for >1s */
 } q3ide_win_t;
 
