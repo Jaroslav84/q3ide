@@ -20,7 +20,7 @@ void Q3IDE_Cmd_f(void)
 {
 	const char *sub;
 	if (Cmd_Argc() < 2) {
-		Com_Printf("usage: q3ide <list|attach|detach|desktop|status|istate|entities|laser>\n");
+		Com_Printf("usage: q3ide <list|attach|detach|desktop|status|cycle|istate|entities|laser>\n");
 		return;
 	}
 	sub = Cmd_Argv(1);
@@ -37,7 +37,15 @@ void Q3IDE_Cmd_f(void)
 		Q3IDE_WM_CmdDesktop();
 	else if (!Q_stricmp(sub, "status"))
 		Q3IDE_WM_CmdStatus();
-	else if (!Q_stricmp(sub, "istate")) {
+	else if (!Q_stricmp(sub, "cycle")) {
+		int fw = q3ide_interaction.focused_win;
+		if (fw < 0 || fw >= Q3IDE_MAX_WIN || !q3ide_wm.wins[fw].active)
+			Com_Printf("q3ide cycle: no focused window\n");
+		else if (q3ide_wm.wins[fw].window_count <= 1)
+			Com_Printf("q3ide cycle: panel [%d] has only 1 window\n", fw);
+		else
+			Q3IDE_WM_CycleWindow(fw);
+	} else if (!Q_stricmp(sub, "istate")) {
 		static const char *mode_names[] = {"FPS", "POINTER", "KEYBOARD"};
 		Com_Printf("q3ide istate: mode=%s focused_win=%d hover_t=%.2f dist=%.0f"
 		           " focused_uv=(%.3f,%.3f) pointer_uv=(%.3f,%.3f)\n",

@@ -82,6 +82,18 @@
 #define Q3IDE_SPAWN_WIN_DIST     200.0f /* distance ahead of player eye for initial placement */
 #define Q3IDE_DISPLAY_ASPECT  (16.0f / 9.0f) /* assumed aspect ratio for display captures (monitors are 16:9) */
 
+/* ── Overview mode (hold O) ─────────────────────────────────────── */
+#define Q3IDE_OVERVIEW_COLS         3      /* grid columns — always 3 (3×N matrix) */
+#define Q3IDE_OVERVIEW_CELL_W   150.0f    /* world width of each cell */
+#define Q3IDE_OVERVIEW_CELL_H   100.0f    /* world height of each cell */
+#define Q3IDE_OVERVIEW_GAP        6.0f    /* gap between cells (world units) */
+#define Q3IDE_OVERVIEW_DIST     380.0f    /* distance from player eye to grid plane */
+#define Q3IDE_OVERVIEW_FLOOR_LIFT 8.0f    /* Z above player feet where grid bottom starts */
+
+/* ── Focus3 mode (press I) ──────────────────────────────────────── */
+#define Q3IDE_FOCUS3_HEIGHT     130.0f    /* world height of each panel */
+#define Q3IDE_FOCUS3_DIST       320.0f    /* distance from player eye to panel plane */
+
 /* ── Interaction / timing ───────────────────────────────────────── */
 
 #define Q3IDE_DWELL_MS           150.0f /* ms crosshair must dwell on window to activate hover */

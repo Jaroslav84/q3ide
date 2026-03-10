@@ -12,7 +12,17 @@
 /// Detector watches composite windows for empty/dark frames and logs warnings.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+
+/// Global pause flag — set by q3ide_pause_all_streams / q3ide_resume_all_streams.
+/// When true, get_frame() returns None for all windows (no texture uploads).
+/// SCStreams stay warm; handlers still fire but frames are discarded at get_frame().
+static STREAMS_PAUSED: AtomicBool = AtomicBool::new(false);
+
+pub(crate) fn set_streams_paused(paused: bool) {
+    STREAMS_PAUSED.store(paused, Ordering::Relaxed);
+    log::info!("streams_paused={}", paused);
+}
 use std::sync::{Arc, Mutex};
 
 use screencapturekit::prelude::*;
@@ -230,7 +240,7 @@ impl DesktopLayout {
         let row_bytes = self.total_width * 4;
         let mut out = vec![0u8; (row_bytes * self.total_height) as usize];
         for (i, frame_opt) in frames.iter().enumerate() {
-            let frame = frame_opt.as_ref().unwrap();
+            let frame = frame_opt.as_ref().expect("all frames Some — guarded by all(is_some) above");
             let entry = &self.entries[i];
             let src_row_bytes = frame.width * 4;
             for dst_y in 0..entry.scaled_height {
@@ -267,12 +277,12 @@ impl SCStreamOutputTrait for DesktopDisplayHandler {
             log::info!("desktop: display={} frame={} {}x{}", self.display_index, n, raw.width, raw.height);
         }
         {
-            let mut frames = self.display_frames.lock().unwrap();
+            let mut frames = self.display_frames.lock().expect("display_frames mutex poisoned");
             if self.display_index < frames.len() {
                 frames[self.display_index] = Some(DesktopDisplayFrame { pixels: raw.pixels, width: raw.width, height: raw.height });
             }
         }
-        let frames = self.display_frames.lock().unwrap();
+        let frames = self.display_frames.lock().expect("display_frames mutex poisoned");
         if let Some(composite) = self.layout.composite(&frames) {
             drop(frames);
             self.composite_ring.push_frame(FrameData {
@@ -441,7 +451,7 @@ impl SCKBackend {
             self.composite_sessions.insert(display_id, CompositeSession { stream, latest_frame, window_count: 0 });
         }
 
-        self.composite_sessions.get_mut(&display_id).unwrap().window_count += 1;
+        self.composite_sessions.get_mut(&display_id).expect("session inserted above").window_count += 1;
         log::info!("composite: display={} now has {} window(s)", display_id,
             self.composite_sessions[&display_id].window_count);
         Ok(())
@@ -704,6 +714,9 @@ impl CaptureBackend for SCKBackend {
     }
 
     fn get_frame(&self, window_id: u32) -> Option<FrameData> {
+        if STREAMS_PAUSED.load(Ordering::Relaxed) {
+            return None;
+        }
         if window_id == DESKTOP_CAPTURE_ID {
             return self.desktop_capture.as_ref().and_then(|s| s.ring_buffer.pop_frame());
         }

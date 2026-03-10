@@ -1,6 +1,6 @@
 /*
- * q3ide_win_mngr.c — Window manager: dylib load, attach, move, find, init/shutdown.
- * Frame polling: q3ide_poll.c.  Scene rendering: q3ide_scene.c.  Mirror: q3ide_mirror.c.
+ * q3ide_win_mngr.c — Window manager: global state, attach, move, find.
+ * Dylib load / poll thread / init / shutdown: q3ide_dylib.c.
  */
 
 #include "q3ide_win_mngr.h"
@@ -8,74 +8,13 @@
 #include "q3ide_win_mngr_internal.h"
 
 #include "../qcommon/qcommon.h"
-#include "../client/client.h"
-#include <dlfcn.h>
 #include <math.h>
 #include <string.h>
-#include <time.h>
-
-#ifdef __APPLE__
-#define Q3IDE_DYLIB "libq3ide_capture.dylib"
-#else
-#define Q3IDE_DYLIB "libq3ide_capture.so"
-#endif
-
 
 q3ide_wm_t q3ide_wm;
 
 /* Geometry clamp — q3ide_geometry_clamp.c */
 extern void q3ide_clamp_window_size(q3ide_win_t *win);
-
-static qboolean q3ide_load_dylib(void)
-{
-	void *dl = dlopen(Q3IDE_DYLIB, RTLD_LAZY);
-	if (!dl)
-		dl = dlopen("./" Q3IDE_DYLIB, RTLD_LAZY);
-	if (!dl) {
-		Com_Printf("q3ide: cannot load dylib\n");
-		return qfalse;
-	}
-	q3ide_wm.dylib = dl;
-
-#define SYM(f, n) q3ide_wm.f = dlsym(dl, n)
-	SYM(cap_init, "q3ide_init");
-	SYM(cap_shutdown, "q3ide_shutdown");
-	SYM(cap_list_fmt, "q3ide_list_windows_formatted");
-	SYM(cap_free_str, "q3ide_free_string");
-	SYM(cap_list_wins, "q3ide_list_windows");
-	SYM(cap_free_wlist, "q3ide_free_window_list");
-	SYM(cap_start, "q3ide_start_capture");
-	SYM(cap_stop, "q3ide_stop_capture");
-	SYM(cap_get_frame, "q3ide_get_frame");
-	SYM(cap_list_disp, "q3ide_list_displays");
-	SYM(cap_free_dlist, "q3ide_free_display_list");
-	SYM(cap_start_disp, "q3ide_start_display_capture");
-	SYM(cap_inject_click, "q3ide_inject_click");
-	SYM(cap_inject_key, "q3ide_inject_key");
-	SYM(cap_poll_changes, "q3ide_poll_window_changes");
-	SYM(cap_free_changes, "q3ide_free_change_list");
-	SYM(cap_raise_win, "q3ide_raise_window");
-#undef SYM
-
-	if (!q3ide_wm.cap_init || !q3ide_wm.cap_shutdown || !q3ide_wm.cap_get_frame) {
-		Q3IDE_LOGE("missing dylib symbols");
-		Q3IDE_Event("dylib_failed", "\"reason\":\"missing_symbols\"");
-		dlclose(dl);
-		q3ide_wm.dylib = NULL;
-		return qfalse;
-	}
-	// clang-format off
-	Q3IDE_LOGI("dylib loaded (inject_click=%s inject_key=%s poll_changes=%s raise_win=%s)",
-	           q3ide_wm.cap_inject_click ? "yes" : "no",
-	           q3ide_wm.cap_inject_key   ? "yes" : "no",
-	           q3ide_wm.cap_poll_changes ? "yes" : "no",
-	           q3ide_wm.cap_raise_win    ? "yes" : "no");
-	// clang-format on
-	Q3IDE_Event("dylib_loaded", "");
-	return qtrue;
-}
-
-/* Q3IDE_WM_TraceWall — q3ide_geometry_clamp.c */
 
 qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start,
                          qboolean skip_clamp)
@@ -120,8 +59,8 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	}
 	win = &q3ide_wm.wins[i];
 	memset(win, 0, sizeof(*win));
-	win->active = qtrue;
-	win->capture_id = id;
+	win->active      = qtrue;
+	win->capture_id  = id;
 	win->scratch_slot = slot;
 	VectorCopy(origin, win->origin);
 	VectorCopy(normal, win->normal);
@@ -131,13 +70,16 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		win->normal[0] /= len;
 		win->normal[1] /= len;
 	}
-	win->world_w = ww;
-	win->world_h = wh;
+	win->world_w     = ww;
+	win->world_h     = wh;
 	win->wall_mounted = skip_clamp;
-	win->is_tunnel = qtrue; /* OS screen-capture window — removed by detach-all */
-	win->uv_x0 = 0.0f;
-	win->uv_x1 = 1.0f;
-	win->owns_stream = do_start;
+	win->is_tunnel   = qtrue; /* OS screen-capture window — removed by detach-all */
+	win->uv_x0         = 0.0f;
+	win->uv_x1         = 1.0f;
+	win->window_ids[0] = id;
+	win->window_count  = 1;
+	win->window_cur    = 0;
+	win->owns_stream   = do_start;
 	win->stream_active = do_start; /* stream starts live; cleared on failure */
 	q3ide_wm.num_active++;
 	if (!skip_clamp)
@@ -172,69 +114,109 @@ int Q3IDE_WM_FindById(unsigned int cid)
 	return -1;
 }
 
-/* Background thread: fetch SCK change list every 500ms, store for main thread drain.
- * Runs whenever there are active windows — not gated on auto_attach so that position
- * changes on composite windows are always detected (Calendar drag, etc.). */
-static void *q3ide_poll_thread_fn(void *arg)
+void Q3IDE_WM_CycleWindow(int idx)
 {
-	(void) arg;
-	while (q3ide_wm.poll_running) {
-		struct timespec ts = {0, 500000000}; /* 500ms */
-		nanosleep(&ts, NULL);
-		if (!q3ide_wm.poll_running)
+	q3ide_win_t *w;
+	unsigned int old_id, new_id;
+
+	if (idx < 0 || idx >= Q3IDE_MAX_WIN || !q3ide_wm.wins[idx].active)
+		return;
+	w = &q3ide_wm.wins[idx];
+	if (w->window_count <= 1)
+		return;
+
+	old_id         = w->capture_id;
+	w->window_cur  = (w->window_cur + 1) % w->window_count;
+	new_id         = w->window_ids[w->window_cur];
+
+	if (w->owns_stream) {
+		if (q3ide_wm.cap_stop)
+			q3ide_wm.cap_stop(q3ide_wm.cap, old_id);
+		if (q3ide_wm.cap_start)
+			q3ide_wm.cap_start(q3ide_wm.cap, new_id, Q3IDE_CAPTURE_FPS);
+	}
+	w->capture_id      = new_id;
+	w->stream_active   = qtrue;
+	w->window_user_sel = qtrue;
+	if (q3ide_wm.cap_raise_win)
+		q3ide_wm.cap_raise_win(q3ide_wm.cap, new_id);
+	Q3IDE_LOGI("cycle win=%d [%d/%d] id=%u", idx, w->window_cur + 1, w->window_count, new_id);
+}
+
+void Q3IDE_WM_PauseStreams(void)
+{
+	if (q3ide_wm.streams_paused)
+		return;
+	q3ide_wm.streams_paused = qtrue;
+	if (q3ide_wm.cap_pause_streams && q3ide_wm.cap)
+		q3ide_wm.cap_pause_streams(q3ide_wm.cap);
+	Q3IDE_LOGI("streams paused (;)");
+}
+
+void Q3IDE_WM_ResumeStreams(void)
+{
+	if (!q3ide_wm.streams_paused)
+		return;
+	q3ide_wm.streams_paused = qfalse;
+	if (q3ide_wm.cap_resume_streams && q3ide_wm.cap)
+		q3ide_wm.cap_resume_streams(q3ide_wm.cap);
+	Q3IDE_LOGI("streams resumed (;)");
+}
+
+qboolean Q3IDE_WM_RemoveFromGroup(unsigned int wid)
+{
+	int pi, k, pos;
+	q3ide_win_t *pw;
+
+	/* Find which panel contains this window ID */
+	for (pi = 0; pi < Q3IDE_MAX_WIN; pi++) {
+		pw = &q3ide_wm.wins[pi];
+		if (!pw->active)
 			continue;
-		if (!q3ide_wm.cap_poll_changes || !q3ide_wm.cap)
-			continue;
-		if (q3ide_wm.num_active == 0 && !q3ide_wm.auto_attach)
-			continue; /* nothing to watch */
-		{
-			Q3ideWindowChangeList clist = q3ide_wm.cap_poll_changes(q3ide_wm.cap);
-			if (clist.changes && clist.count) {
-				pthread_mutex_lock(&q3ide_wm.poll_mutex);
-				if (q3ide_wm.poll_has_pending && q3ide_wm.cap_free_changes)
-					q3ide_wm.cap_free_changes(q3ide_wm.poll_pending);
-				q3ide_wm.poll_pending = clist;
-				q3ide_wm.poll_has_pending = qtrue;
-				pthread_mutex_unlock(&q3ide_wm.poll_mutex);
+		pos = -1;
+		for (k = 0; k < pw->window_count; k++) {
+			if (pw->window_ids[k] == wid) {
+				pos = k;
+				break;
 			}
 		}
-	}
-	return NULL;
-}
+		if (pos < 0)
+			continue;
 
-qboolean Q3IDE_WM_Init(void)
-{
-	memset(&q3ide_wm, 0, sizeof(q3ide_wm));
-	if (!q3ide_load_dylib())
+		/* Found it */
+		if (pw->window_count == 1) {
+			/* Last window of this app — detach the whole panel */
+			Q3IDE_WM_DetachById(pw->capture_id);
+			return qtrue;
+		}
+
+		if (pw->capture_id == wid) {
+			/* Currently displayed window closed — advance to next */
+			unsigned int new_id;
+			memmove(&pw->window_ids[pos], &pw->window_ids[pos + 1],
+			        (pw->window_count - pos - 1) * sizeof(unsigned int));
+			pw->window_count--;
+			if (pw->window_cur >= pw->window_count)
+				pw->window_cur = 0;
+			new_id = pw->window_ids[pw->window_cur];
+			if (pw->owns_stream && q3ide_wm.cap_start)
+				q3ide_wm.cap_start(q3ide_wm.cap, new_id, Q3IDE_CAPTURE_FPS);
+			pw->capture_id   = new_id;
+			pw->stream_active = qtrue;
+			if (q3ide_wm.cap_raise_win)
+				q3ide_wm.cap_raise_win(q3ide_wm.cap, new_id);
+			Q3IDE_LOGI("group: wid=%u closed, panel=%d → wid=%u [%d/%d]",
+			           wid, pi, new_id, pw->window_cur + 1, pw->window_count);
+		} else {
+			/* Background window closed — just remove */
+			memmove(&pw->window_ids[pos], &pw->window_ids[pos + 1],
+			        (pw->window_count - pos - 1) * sizeof(unsigned int));
+			pw->window_count--;
+			if (pw->window_cur >= pw->window_count)
+				pw->window_cur = pw->window_count - 1;
+			Q3IDE_LOGI("group: bg wid=%u removed from panel=%d (%d remaining)", wid, pi, pw->window_count);
+		}
 		return qfalse;
-	q3ide_wm.cap = q3ide_wm.cap_init();
-	if (!q3ide_wm.cap) {
-		Com_Printf("q3ide: capture init failed\n");
-		dlclose(q3ide_wm.dylib);
-		q3ide_wm.dylib = NULL;
-		return qfalse;
 	}
-	pthread_mutex_init(&q3ide_wm.poll_mutex, NULL);
-	q3ide_wm.poll_running = 1;
-	pthread_create(&q3ide_wm.poll_thread, NULL, q3ide_poll_thread_fn, NULL);
-	return qtrue;
-}
-
-void Q3IDE_WM_Shutdown(void)
-{
-	/* Stop poll thread before cap_shutdown — thread uses cap */
-	q3ide_wm.poll_running = 0;
-	pthread_join(q3ide_wm.poll_thread, NULL);
-	if (q3ide_wm.poll_has_pending && q3ide_wm.cap_free_changes)
-		q3ide_wm.cap_free_changes(q3ide_wm.poll_pending);
-	pthread_mutex_destroy(&q3ide_wm.poll_mutex);
-
-	Q3IDE_WM_CmdDetachAll();
-	if (q3ide_wm.cap && q3ide_wm.cap_shutdown)
-		q3ide_wm.cap_shutdown(q3ide_wm.cap);
-	if (q3ide_wm.dylib)
-		dlclose(q3ide_wm.dylib);
-	if (q3ide_wm.fbuf)
-		Z_Free(q3ide_wm.fbuf);
-	memset(&q3ide_wm, 0, sizeof(q3ide_wm));
+	return qfalse; /* not in any group */
 }

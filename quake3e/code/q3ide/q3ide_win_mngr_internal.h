@@ -60,6 +60,11 @@ typedef void (*q3ide_fn_inject_click)(Q3ideCapture *, unsigned int, float, float
 typedef void (*q3ide_fn_inject_key)(Q3ideCapture *, unsigned int, int, int);
 /* Hover: activate + unminimize macOS window when player hovers (optional) */
 typedef void (*q3ide_fn_raise_win)(Q3ideCapture *, unsigned int);
+/* Unminimize all running apps + refocus Quake (called at init) */
+typedef void (*q3ide_fn_unminimize_all)(Q3ideCapture *);
+/* Stream pause/resume — hold ";" to freeze frame delivery, release to resume */
+typedef void (*q3ide_fn_pause_streams)(Q3ideCapture *);
+typedef void (*q3ide_fn_resume_streams)(Q3ideCapture *);
 
 /* ── Window change detection ──────────────────────────────────── */
 typedef struct {
@@ -119,6 +124,12 @@ typedef struct {
 	qboolean stream_active;              /* qtrue = SCK stream currently delivering frames */
 	qboolean ever_failed;                /* qtrue = stream has ever been throttled or died; never resets */
 	unsigned long long last_throttle_ms; /* Sys_Milliseconds() last time Apple gave no frame for >1s */
+	/* Multi-window app grouping (Option A cycling) */
+	char         app_name[64];    /* app_name for group lookup; "" for display/non-app panels */
+	unsigned int window_ids[8];   /* all window IDs for this app; [window_cur] == capture_id */
+	int          window_count;    /* 1 for single-window panels, up to 8 */
+	int          window_cur;      /* index into window_ids[] currently captured */
+	qboolean     window_user_sel; /* user manually cycled — suppress auto-reorder */
 } q3ide_win_t;
 
 /* ── Global window manager state (defined in q3ide_win_mngr.c) ──────── */
@@ -138,9 +149,13 @@ typedef struct {
 	q3ide_fn_start_disp cap_start_disp;
 	q3ide_fn_inject_click cap_inject_click; /* optional: NULL if dylib lacks symbol */
 	q3ide_fn_inject_key   cap_inject_key;   /* optional: NULL if dylib lacks symbol */
-	q3ide_fn_raise_win    cap_raise_win;    /* optional: activate + unminimize on hover */
+	q3ide_fn_raise_win      cap_raise_win;      /* optional: activate + unminimize on hover */
+	q3ide_fn_unminimize_all cap_unminimize_all; /* optional: unminimize all apps at init */
+	q3ide_fn_pause_streams  cap_pause_streams;  /* optional: freeze get_frame() → no uploads */
+	q3ide_fn_resume_streams cap_resume_streams; /* optional: resume frame delivery */
 	q3ide_fn_poll_changes cap_poll_changes; /* optional: window open/close events */
 	q3ide_fn_free_changes cap_free_changes; /* optional */
+	qboolean streams_paused; /* qtrue while ";" is held */
 	Q3ideCapture *cap;
 	vec3_t player_eye;               /* eye position, set each frame by UpdatePlayerPos */
 	qboolean auto_attach;            /* true after "q3ide attach all" — auto-place new windows */

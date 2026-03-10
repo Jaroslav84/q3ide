@@ -9,6 +9,7 @@
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
 #include "q3ide_interaction.h"
+#include "q3ide_view_modes.h"
 #include "q3ide_aas.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -45,6 +46,7 @@ void Q3IDE_Init(void)
 		Q3IDE_LOGW("running without capture");
 
 	Q3IDE_Interaction_Init();
+	Q3IDE_ViewModes_Init();
 
 	Cmd_AddCommand("q3ide", Q3IDE_Cmd_f);
 	Cvar_Get("q3ide_spawn_count", "1", CVAR_ARCHIVE); /* 0=all, N=attach N then shoot walls */
@@ -103,6 +105,13 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 {
 	if (!q3ide_state.initialized)
 		return qfalse;
+	if (key == ';') {
+		if (down)
+			Q3IDE_WM_PauseStreams();
+		else
+			Q3IDE_WM_ResumeStreams();
+		return qtrue; /* swallow — prevent Q3 treating ';' as a bind */
+	}
 	if (key == 'k' || key == 'K') {
 		q3ide_laser_active = down;
 		Q3IDE_LOGI("laser %s", down ? "ON" : "OFF");
@@ -139,6 +148,7 @@ void Q3IDE_Shutdown(void)
 	if (!q3ide_state.initialized)
 		return;
 	q3ide_render_bye();
+	Q3IDE_ViewModes_Shutdown();
 	Q3IDE_WM_Shutdown();
 	Cmd_RemoveCommand("q3ide");
 	q3ide_state.initialized = qfalse;

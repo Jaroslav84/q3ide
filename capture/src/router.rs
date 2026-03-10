@@ -62,7 +62,7 @@ pub const WHITELIST_DEDICATED: &[&str] = &[
     "rider",
     "rubymine",
     "fleet",       // JetBrains Fleet
-    "sourcetree",  // may be occluded by other windows; DEDICATED sees through occlusion
+    "sourcetree",  // custom-sized, GPU-composited
     // Communication (Electron with GPU layers)
     "slack",
     "discord",

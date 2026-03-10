@@ -28,6 +28,16 @@ Implements the macOS ScreenCaptureKit capture backend and C-ABI bridge.
 - `q3ide_stop_capture(cap, wid)`
 - `q3ide_inject_click(cap, wid, x, y, button)` → int — NEW for Batch 2
 - `q3ide_inject_key(cap, wid, key_code, modifiers)` → int — NEW for Batch 2
+- `q3ide_pause_all_streams(cap)` — freeze all frame delivery at zero cost ✅
+- `q3ide_resume_all_streams(cap)` — resume frame delivery ✅
+
+## Stream Freeze Pattern (✅ IMPLEMENTED)
+
+`static STREAMS_PAUSED: AtomicBool` in `screencapturekit.rs`. When true, `get_frame()` returns `None` for all windows → zero texture uploads → 100% FPS restoration. SCStreams stay warm; handlers still fire but results are discarded. Last frame stays on GPU.
+
+**Set via:** `crate::screencapturekit::set_streams_paused(true/false)` (pub(crate)).
+
+**When to use:** any time you need to freeze windows during an expensive operation — area transitions, placement queue drain, etc. Engine calls `Q3IDE_WM_PauseStreams()` / `Q3IDE_WM_ResumeStreams()` which call these ABI functions.
 
 ## Parallel Build Triage
 

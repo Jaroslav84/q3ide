@@ -158,6 +158,8 @@ Detector thresholds (tunable in `router.rs`): 20 consecutive empty crops → war
 
 **FPS caps: DO NOT ADD.** `Q3IDE_CAPTURE_FPS = -1` — Apple's content-driven model delivers frames only when content changes. Idle windows cost zero. Uncapped is smoother than any cap. The spec item 1.8 "SCK minimumFrameInterval" is **open question** — measure actual impact before implementing.
 
+**Stream Freeze (✅ IMPLEMENTED):** `Q3IDE_WM_PauseStreams()` / `Q3IDE_WM_ResumeStreams()` — hold ";" to freeze all frames at zero CPU/GPU cost. `get_frame()` returns `None`, SCStreams stay warm, last frame stays on GPU. 100% FPS restoration instantly. Use this in placement queue drain (Stage 1.4) instead of per-window 2fps throttle. See `plan/05` for full details.
+
 ---
 
 ### BATCH 1 — Window Entity, Placement & Rendering Pipeline (CURRENT)
@@ -169,7 +171,7 @@ Window data model, placement system rewrite, and rendering pipeline optimization
 | 1.1 | Kill BGRA→RGBA swizzle | ✅ Done | Add format param to RE_UploadCinematic, pass GL_BGRA native. Delete CPU swizzle loop. |
 | 1.2 | Visibility-gated texture uploads | ⬜ | Dot product (behind player?) + BSP trace (behind wall?) before UploadCinematic. Skip invisible windows. |
 | 1.3 | Wall scanner + cache | ⬜ | Pre-scan all walls on area entry within 60m radius. Cache wall slots. Foundation for new placement. |
-| 1.4 | Area transition placement | ⬜ | **Destroy old 13 rules.** New placement: spread-even across walls, closest first, FPS-gated drain (30fps), texture throttle 2fps during placement. |
+| 1.4 | Area transition placement | ⬜ | **Destroy old 13 rules.** New placement: spread-even across walls, closest first, FPS-gated drain (30fps), call `Q3IDE_WM_PauseStreams()` at transition start + `ResumeStreams()` when queue empty (replaces 2fps throttle — simpler, full FPS restoration). |
 | 1.5 | Within-area leapfrog | ⬜ | Furthest window jumps to closest free slot when player moves >7m. Check every 30 frames. Dogs stay put in small rooms. |
 | 1.6 | Trained positions | ⬜ | User repositions window → save position per area. On return, window goes to trained spot. Dogs remember their place. |
 | 1.7 | Adaptive resolution (8 tiers) | ⬜ | SCK source-side downscale. Tier 0 (full) to tier 7 (thumbnail). Aim-override: crosshair on window = full res from any distance. |

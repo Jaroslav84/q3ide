@@ -15,8 +15,10 @@ mod window;
 
 extern "C" {
     fn sc_check_screen_recording_permission() -> bool;
-    /// Activate the app (PID) and try to unminimize its windows via AX.
+    /// Unminimize the app's windows via AX, then activate Quake.
     fn sc_raise_window(pid: i32);
+    /// Unminimize all running apps + refocus Quake (called at init).
+    fn sc_unminimize_all_and_focus();
 }
 
 /// Safe wrapper — callable from any module without repeating the unsafe block.
@@ -1041,6 +1043,39 @@ pub unsafe extern "C" fn q3ide_raise_window(handle: *mut Q3ideCapture, window_id
         }
         log::info!("q3ide_raise_window: wid={} pid={}", window_id, pid);
         sc_raise_window(pid);
+    }
+}
+
+/// Pause frame delivery for all streams (hold ";").
+/// SCStreams stay warm; get_frame() returns None → no texture uploads.
+///
+/// # Safety
+/// `handle` is unused; present for ABI consistency.
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_pause_all_streams(_handle: *mut Q3ideCapture) {
+    crate::screencapturekit::set_streams_paused(true);
+}
+
+/// Resume frame delivery for all streams (release ";").
+///
+/// # Safety
+/// `handle` is unused; present for ABI consistency.
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_resume_all_streams(_handle: *mut Q3ideCapture) {
+    crate::screencapturekit::set_streams_paused(false);
+}
+
+/// Unminimize all running application windows, then bring Quake to front.
+/// Called once during Q3IDE_WM_Init so all targets are visible before capture starts.
+///
+/// # Safety
+/// `handle` must be a valid pointer from `q3ide_init` (unused; present for ABI consistency).
+#[no_mangle]
+pub unsafe extern "C" fn q3ide_unminimize_all_and_focus(_handle: *mut Q3ideCapture) {
+    #[cfg(target_os = "macos")]
+    {
+        log::info!("q3ide_unminimize_all_and_focus: raising all apps");
+        sc_unminimize_all_and_focus();
     }
 }
 

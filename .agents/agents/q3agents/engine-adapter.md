@@ -29,6 +29,20 @@ Implements Quake3e-specific parts of Q3IDE. Keeps the adapter minimal and swappa
 
 Never edit outside your scope to unblock a build. That corrupts another agent's WIP.
 
+## Stream Freeze Pattern (✅ IMPLEMENTED)
+
+```c
+Q3IDE_WM_PauseStreams();   // freeze all windows — last frame stays on GPU
+// ... do expensive work (placement, area transition, etc.) ...
+Q3IDE_WM_ResumeStreams();  // unfreeze
+```
+
+Calls `cap_pause_streams` / `cap_resume_streams` dylib fn pointers. Sets `STREAMS_PAUSED` in Rust → `get_frame()` returns `None` → zero texture uploads. SCStreams stay warm, no teardown. 100% FPS restoration.
+
+Hold ";" in-game to trigger manually. Left overlay shows amber "PAUSED" banner.
+
+**Use for Stage 1.4 (area transition placement):** call PauseStreams at transition start, ResumeStreams when placement queue empty. Much simpler than per-window 2fps throttle.
+
 ## Rules
 
 - NEVER modify core Quake3e files outside `quake3e/code/q3ide/`

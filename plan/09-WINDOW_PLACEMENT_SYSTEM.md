@@ -331,6 +331,23 @@ That window is flagged as `manually_placed = true` with its position saved **per
 
 ---
 
+## Stream Freeze Pattern (✅ IMPLEMENTED — use this everywhere)
+
+`Q3IDE_WM_PauseStreams()` / `Q3IDE_WM_ResumeStreams()` — implemented in `q3ide_win_mngr.c`.
+
+Calls `q3ide_pause_all_streams(cap)` / `q3ide_resume_all_streams(cap)` in the Rust dylib. Sets `STREAMS_PAUSED` atomic bool — `get_frame()` returns `None` → zero texture uploads → 100% FPS restoration. SCStreams stay warm. Last frame frozen on GPU (windows look alive, content is static).
+
+**Use this in Stage 4** instead of manually throttling to 2fps per-window. The implementation is:
+```c
+// Area transition begins:
+Q3IDE_WM_PauseStreams();   // freeze all — last frames stay on GPU
+// ... drain placement queue with FPS gate ...
+Q3IDE_WM_ResumeStreams();  // unfreeze when queue is empty
+```
+This is far simpler than a 2fps-per-window throttle AND gives better FPS headroom during placement.
+
+---
+
 ## Performance Rules
 
 **Current baseline:** 0 windows = 40-50fps. 31 windows = 23fps. Each window ~0.5-0.7fps cost (texture uploads at 25fps/window).

@@ -172,9 +172,14 @@ typedef struct Q3ideCGPoint {
 extern bool sc_check_screen_recording_permission(void);
 
 /**
- * Activate the app (PID) and try to unminimize its windows via AX.
+ * Unminimize the app's windows via AX, then activate Quake.
  */
 extern void sc_raise_window(int32_t pid);
+
+/**
+ * Unminimize all running apps + refocus Quake (called at init).
+ */
+extern void sc_unminimize_all_and_focus(void);
 
 /**
  * Initialize the capture system. Returns an opaque handle.
@@ -387,6 +392,32 @@ void q3ide_inject_key(struct Q3ideQ3ideCapture *_handle,
  * `handle` must be a valid pointer from `q3ide_init`.
  */
 q3ide_ void q3ide_raise_window(struct Q3ideQ3ideCapture *handle, unsigned int window_id);
+
+/**
+ * Pause frame delivery for all streams (hold ";").
+ * SCStreams stay warm; get_frame() returns None → no texture uploads.
+ *
+ * # Safety
+ * `handle` is unused; present for ABI consistency.
+ */
+q3ide_ void q3ide_pause_all_streams(struct Q3ideQ3ideCapture *_handle);
+
+/**
+ * Resume frame delivery for all streams (release ";").
+ *
+ * # Safety
+ * `handle` is unused; present for ABI consistency.
+ */
+q3ide_ void q3ide_resume_all_streams(struct Q3ideQ3ideCapture *_handle);
+
+/**
+ * Unminimize all running application windows, then bring Quake to front.
+ * Called once during Q3IDE_WM_Init so all targets are visible before capture starts.
+ *
+ * # Safety
+ * `handle` must be a valid pointer from `q3ide_init` (unused; present for ABI consistency).
+ */
+q3ide_ void q3ide_unminimize_all_and_focus(struct Q3ideQ3ideCapture *_handle);
 
 /**
  * Start capturing all displays, composited vertically into a single frame.

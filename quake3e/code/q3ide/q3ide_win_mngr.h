@@ -43,6 +43,19 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_cl
 /* Find slot index of a window by capture id; returns -1 if not found. */
 int Q3IDE_WM_FindById(unsigned int cid);
 
+/* Cycle to the next window of a multi-window app panel.
+ * Stops the current stream, starts the next, raises it via AX. No-op if single-window. */
+void Q3IDE_WM_CycleWindow(int idx);
+
+/* Remove wid from any panel that contains it (current or background slot).
+ * If it was the last window → detaches panel. If panel survives → auto-advances stream.
+ * Returns qtrue if panel was detached. */
+qboolean Q3IDE_WM_RemoveFromGroup(unsigned int wid);
+
+/* Pause/resume frame delivery for all streams (";"-hold). */
+void Q3IDE_WM_PauseStreams(void);
+void Q3IDE_WM_ResumeStreams(void);
+
 /* Pending-spawn queue (in q3ide_commands_attach.c).
  * Returns number of items waiting; pops+attaches the next one at pos/norm. */
 int      Q3IDE_WM_PendingCount(void);

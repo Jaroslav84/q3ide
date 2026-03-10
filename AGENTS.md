@@ -34,6 +34,32 @@ If another agent's WIP breaks the shared build, that's their fix. Report the fai
 
 **Agent definition files always go in `.agents/agents/`** (dot-prefixed, at project root) — NOT in `.claude/` or `agents/` (no dot). Commands go in `.agents/commands/`. Project manifest at `.agents/PROJECT_LOOP.md`. Claude-only settings in `.claude/`. The `.agents/` convention is the cross-IDE standard (Claude Code, OpenCode, etc.).
 
+## Stream Freeze Pattern — Pause All Windows at Zero Cost
+
+**The canonical cost-saving technique for expensive operations.** Verified in production: 100% FPS restoration instantly.
+
+```c
+// Pause — call before any expensive op (area transition, placement queue drain, etc.)
+Q3IDE_WM_PauseStreams();   // sets STREAMS_PAUSED atomic bool in Rust
+                           // get_frame() returns None → zero texture uploads
+                           // SCStreams stay warm, last frame frozen on GPU
+
+// Resume — call when done
+Q3IDE_WM_ResumeStreams();
+```
+
+**Properties:**
+- No SCStream teardown, no latency. Pure flag check per `get_frame()` call.
+- Last captured frame stays frozen on GPU — content looks alive, just static.
+- Left overlay shows amber "PAUSED" banner while active.
+- Hold ";" in-game to trigger manually.
+
+**Use this everywhere:** area transitions, placement queue drain (Stage 1.4), any operation that would otherwise spike texture upload bandwidth.
+
+**Files:** `capture/src/screencapturekit.rs` (`STREAMS_PAUSED`, `set_streams_paused`), `capture/src/lib.rs` (`q3ide_pause_all_streams`, `q3ide_resume_all_streams`), `quake3e/code/q3ide/q3ide_win_mngr.c` (`Q3IDE_WM_PauseStreams`, `Q3IDE_WM_ResumeStreams`).
+
+---
+
 ## q3ide_params.h — THE HOLY BOOK
 
 `quake3e/code/q3ide/q3ide_params.h` is the **single source of truth** for every tunable constant in q3ide.

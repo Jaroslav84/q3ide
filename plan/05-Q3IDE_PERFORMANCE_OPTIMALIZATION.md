@@ -4,6 +4,29 @@ Ideas and techniques for future performance improvements. This is a brainstorm d
 
 ---
 
+## ✅ Implemented: Hold-to-Pause Stream Freeze (100% FPS restoration)
+
+**Status: DONE. In production. Triggered by holding ";".**
+
+**The most important pattern in the codebase for cost-savings.** When ";" is held, `get_frame()` returns `None` for all windows. Zero texture uploads. FPS immediately returns to baseline (e.g. 23fps → 50fps with 14 windows). The last captured frame stays frozen on the GPU — windows look alive but are static. Release ";" → resumes instantly.
+
+**How it works:**
+- `static STREAMS_PAUSED: AtomicBool` in `capture/src/screencapturekit.rs`
+- `q3ide_pause_all_streams(cap)` / `q3ide_resume_all_streams(cap)` — C-ABI exports
+- `Q3IDE_WM_PauseStreams()` / `Q3IDE_WM_ResumeStreams()` — engine side
+- SCStreams stay warm — handlers still fire into ring buffers. Only `get_frame()` is blocked.
+- No stream teardown, no SCK API calls, no latency. Pure flag check.
+- Left overlay shows amber "PAUSED" banner. ";" shown as `[;] Pause` in keyboard staircase.
+
+**Future use — freeze all windows during expensive operations:**
+- Area transition / window migration → pause streams while placement queue drains, restore when done
+- Visibility culling — don't call `get_frame()` for off-screen windows (same pattern, per-window flag)
+- Placement queue drain (Stage 4 PLACEMENT.md) — use this instead of per-window 2fps throttle
+
+**Key insight:** The "last frame stays on GPU" property is a feature, not a limitation. Static freeze looks natural. Users read frozen content while moving between areas.
+
+---
+
 ## ✅ Implemented: Hybrid CaptureRouter (+20% FPS)
 
 **Status: DONE. In production.**

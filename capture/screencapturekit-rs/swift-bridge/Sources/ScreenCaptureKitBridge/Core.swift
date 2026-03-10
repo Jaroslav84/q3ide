@@ -190,6 +190,40 @@ public func raiseWindow(pid: Int32) {
     }
 }
 
+/// Unminimize every window of every running app, then bring Quake back to front.
+/// Called once at Q3IDE init so all targets are visible for screen capture.
+/// Does not steal keyboard focus from Quake (AX unminimize only for others;
+/// only Quake itself is activated at the end).
+@_cdecl("sc_unminimize_all_and_focus")
+public func unminimizeAllAndFocus() {
+    guard AXIsProcessTrusted() else { return }
+
+    // Unminimize all windows of every running app (except Quake itself)
+    let selfPid = ProcessInfo.processInfo.processIdentifier
+    let apps = NSWorkspace.shared.runningApplications
+    for app in apps {
+        let appPid = app.processIdentifier
+        if appPid == selfPid { continue }
+        let axApp = AXUIElementCreateApplication(appPid)
+        var windowsRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(axApp, kAXWindowsAttribute as CFString, &windowsRef) == .success,
+              let windows = windowsRef as? [AXUIElement] else { continue }
+        for axWin in windows {
+            var minimizedRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(axWin, kAXMinimizedAttribute as CFString, &minimizedRef) == .success,
+               let isMinimized = minimizedRef as? Bool, isMinimized {
+                AXUIElementSetAttributeValue(axWin, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
+            }
+        }
+    }
+
+    // Bring Quake back to front — twice, 300ms apart, to survive any macOS focus race
+    NSRunningApplication(processIdentifier: pid_t(selfPid))?.activate()
+    DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+        NSRunningApplication(processIdentifier: pid_t(selfPid))?.activate()
+    }
+}
+
 // MARK: - Thread-safe result holder for async→sync bridging
 
 /// Thread-safe box used to pass a result from an async Task to a waiting semaphore caller.

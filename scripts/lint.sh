@@ -226,8 +226,17 @@ run_rust_checks() {
         info "skipped — cargo check requires macOS (ScreenCaptureKit)"
         return
     fi
+    # Rustup installs cargo to ~/.cargo/bin which may not be in a non-login PATH.
     if ! command -v cargo >/dev/null 2>&1; then
-        info "skipped — cargo not found"
+        if [ -f "$HOME/.cargo/env" ]; then
+            # shellcheck source=/dev/null
+            . "$HOME/.cargo/env"
+        elif [ -x "$HOME/.cargo/bin/cargo" ]; then
+            export PATH="$HOME/.cargo/bin:$PATH"
+        fi
+    fi
+    if ! command -v cargo >/dev/null 2>&1; then
+        info "skipped — cargo not found (install via rustup.rs)"
         return
     fi
 

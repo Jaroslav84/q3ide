@@ -1145,20 +1145,26 @@ Q3OBJ += \
   $(B)/client/q3ide_frame.o \
   $(B)/client/q3ide_engine_hooks_input.o \
   $(B)/client/q3ide_engine_hooks_grapple.o \
+  $(B)/client/q3ide_dylib.o \
   $(B)/client/q3ide_win_mngr.o \
   $(B)/client/q3ide_scene.o \
   $(B)/client/q3ide_poll.o \
   $(B)/client/q3ide_commands.o \
+  $(B)/client/q3ide_attach_filter.o \
   $(B)/client/q3ide_commands_attach.o \
   $(B)/client/q3ide_commands_query.o \
+  $(B)/client/q3ide_commands_desktop.o \
   $(B)/client/q3ide_render.o \
   $(B)/client/q3ide_interaction.o \
   $(B)/client/q3ide_interaction_frame.o \
+  $(B)/client/q3ide_view_modes.o \
   $(B)/client/q3ide_distance.o \
   $(B)/client/q3ide_geometry.o \
   $(B)/client/q3ide_geometry_clamp.o \
   $(B)/client/q3ide_log.o \
   $(B)/client/q3ide_overlay.o \
+  $(B)/client/q3ide_overlay_keyboard.o \
+  $(B)/client/q3ide_overlay_winlist.o \
   $(B)/client/q3ide_aas.o \
   $(B)/client/q3ide_aas_query.o \
   $(B)/client/q3ide_aas_face.o \
@@ -1489,6 +1495,9 @@ $(B)/client/q3ide_engine_hooks_input.o: $(Q3IDEDIR)/q3ide_engine_hooks_input.c
 $(B)/client/q3ide_engine_hooks_grapple.o: $(Q3IDEDIR)/q3ide_engine_hooks_grapple.c
 	$(DO_CC)
 
+$(B)/client/q3ide_dylib.o: $(Q3IDEDIR)/q3ide_dylib.c
+	$(DO_CC)
+
 $(B)/client/q3ide_win_mngr.o: $(Q3IDEDIR)/q3ide_win_mngr.c
 	$(DO_CC)
 
@@ -1501,16 +1510,25 @@ $(B)/client/q3ide_poll.o: $(Q3IDEDIR)/q3ide_poll.c
 $(B)/client/q3ide_commands.o: $(Q3IDEDIR)/q3ide_commands.c
 	$(DO_CC)
 
+$(B)/client/q3ide_attach_filter.o: $(Q3IDEDIR)/q3ide_attach_filter.c
+	$(DO_CC)
+
 $(B)/client/q3ide_commands_attach.o: $(Q3IDEDIR)/q3ide_commands_attach.c
 	$(DO_CC)
 
 $(B)/client/q3ide_commands_query.o: $(Q3IDEDIR)/q3ide_commands_query.c
 	$(DO_CC)
 
+$(B)/client/q3ide_commands_desktop.o: $(Q3IDEDIR)/q3ide_commands_desktop.c
+	$(DO_CC)
+
 $(B)/client/q3ide_interaction.o: $(Q3IDEDIR)/q3ide_interaction.c
 	$(DO_CC)
 
 $(B)/client/q3ide_interaction_frame.o: $(Q3IDEDIR)/q3ide_interaction_frame.c
+	$(DO_CC)
+
+$(B)/client/q3ide_view_modes.o: $(Q3IDEDIR)/q3ide_view_modes.c
 	$(DO_CC)
 
 $(B)/client/q3ide_distance.o: $(Q3IDEDIR)/q3ide_distance.c
@@ -1529,6 +1547,12 @@ $(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c
 	$(DO_CC)
 
 $(B)/client/q3ide_overlay.o: $(Q3IDEDIR)/q3ide_overlay.c
+	$(DO_CC)
+
+$(B)/client/q3ide_overlay_keyboard.o: $(Q3IDEDIR)/q3ide_overlay_keyboard.c
+	$(DO_CC)
+
+$(B)/client/q3ide_overlay_winlist.o: $(Q3IDEDIR)/q3ide_overlay_winlist.c
 	$(DO_CC)
 
 $(B)/client/q3ide_aas.o: $(Q3IDEDIR)/q3ide_aas.c

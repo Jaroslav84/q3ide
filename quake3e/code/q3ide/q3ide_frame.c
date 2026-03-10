@@ -32,9 +32,11 @@ void Q3IDE_Frame(void)
 	if (!q3ide_state.initialized)
 		return;
 
-	/* Fire nextdemo after map settles (~60 frames) */
+	/* Fire nextdemo after map settles (1 second) */
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
-		if (++q3ide_state.autoexec_delay > 60) {
+		if (q3ide_state.autoexec_delay == 0)
+			q3ide_state.autoexec_delay = Sys_Milliseconds();
+		if (Sys_Milliseconds() - q3ide_state.autoexec_delay >= 1000) {
 			q3ide_state.stream_last_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
 			Cbuf_AddText("give grappling hook\nweapon 10\nq3ide attach all\n");
 			{
