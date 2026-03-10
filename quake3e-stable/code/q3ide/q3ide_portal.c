@@ -18,7 +18,6 @@
 #include "q3ide_wm_internal.h"
 #include "q3ide_interaction.h"
 #include "q3ide_aas.h"
-#include "q3ide_layout.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -77,57 +76,9 @@ static void q3ide_portal_tele(playerState_t *sps, float x, float y, float z, flo
 	cl.snap.ps.eFlags = sps->eFlags;
 }
 
+/* Portal frame logic removed — mirror portal gone. Reserved for future use. */
 __attribute__((unused)) static void q3ide_portal_frame(void)
 {
-	vec3_t pos, origin1, normal1, origin2, normal2, diff, right;
-	float ww1, wh1, ww2, wh2, dist, lx, ly, nx, ny, len;
-	playerState_t *sps;
-
-	if (cls.state != CA_ACTIVE)
-		return;
-
-	/* Tick cooldowns */
-	if (q3ide_state.portal_cooldown > 0)
-		q3ide_state.portal_cooldown--;
-	if (q3ide_state.portal2_cooldown > 0)
-		q3ide_state.portal2_cooldown--;
-
-	VectorCopy(cl.snap.ps.origin, pos);
-
-	/* Helper: test player against a portal face */
-#define PORTAL_HIT(orig, norm, ww, wh)                                                                                 \
-	((nx = (norm)[0], ny = (norm)[1], len = sqrtf(nx * nx + ny * ny),                                                  \
-	  len > 0.01f ? (right[0] = -ny / len, right[1] = nx / len, right[2] = 0.0f)                                       \
-	              : (right[0] = 1.0f, right[1] = 0.0f, right[2] = 0.0f),                                               \
-	  0),                                                                                                              \
-	 VectorSubtract(pos, orig, diff), dist = DotProduct(diff, (norm)), lx = DotProduct(diff, right), ly = diff[2],     \
-	 fabsf(dist) < 24.0f && fabsf(lx) < (ww) * 0.5f && fabsf(ly) < (wh) * 0.5f + 24.0f)
-
-	/* Portal 1 */
-	if (Q3IDE_WM_MirrorActive() && q3ide_state.portal_cooldown == 0) {
-		Q3IDE_WM_GetMirrorOrigin(origin1, normal1, &ww1, &wh1);
-		if (PORTAL_HIT(origin1, normal1, ww1, wh1)) {
-			sps = SV_GameClientNum(0);
-			if (sps)
-				q3ide_portal_tele(sps, -1152.0f, -1200.0f, 21.0f, 270.0f, "portal1");
-			q3ide_state.portal_cooldown = 30; /* 0.5s grace */
-			q3ide_state.portal2_cooldown = 30;
-		}
-	}
-
-	/* Portal 2 */
-	if (Q3IDE_WM_Mirror2Active() && q3ide_state.portal2_cooldown == 0) {
-		Q3IDE_WM_GetMirror2Origin(origin2, normal2, &ww2, &wh2);
-		if (PORTAL_HIT(origin2, normal2, ww2, wh2)) {
-			sps = SV_GameClientNum(0);
-			if (sps)
-				q3ide_portal_tele(sps, -1152.0f, -900.0f, 21.0f, 270.0f, "portal2");
-			q3ide_state.portal_cooldown = 30;
-			q3ide_state.portal2_cooldown = 30;
-		}
-	}
-
-#undef PORTAL_HIT
 }
 
 /* Console command dispatcher — q3ide_hooks_cmd.c */

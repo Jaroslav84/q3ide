@@ -1,7 +1,6 @@
-/* q3ide_cmd_attach.c — Q3IDE_WM_CmdAttach: enumerate + place all windows. */
+/* q3ide_cmd_attach.c — Q3IDE_WM_CmdAttach: enumerate + attach all windows. */
 
 #include "q3ide_wm.h"
-#include "q3ide_layout.h"
 #include "q3ide_log.h"
 #include "q3ide_wm_internal.h"
 #include "../qcommon/qcommon.h"
@@ -10,6 +9,9 @@
 #include <string.h>
 
 extern qboolean q3ide_is_attached(unsigned int id);
+
+#define Q3IDE_ATTACH_WIN_W    100.0f /* default world width for attached windows */
+#define Q3IDE_ATTACH_WIN_DIST 200.0f /* distance in front of player eye */
 
 typedef struct {
 	unsigned int id;
@@ -23,16 +25,15 @@ void Q3IDE_WM_CmdAttach(void)
 	q3ide_attach_item_t items[Q3IDE_MAX_WIN];
 	int item_n = 0;
 	int i;
-	vec3_t eye;
+	vec3_t eye, fwd, pos, norm;
+	float yaw_rad;
 
 	if (!q3ide_wm.cap || !q3ide_wm.cap_list_wins) {
 		Com_Printf("q3ide: not ready\n");
 		return;
 	}
 
-	q3ide_layout_queue_reset();
-
-	/* Collect all app windows — size-filtered, no app whitelist */
+	/* Collect all app windows — size-filtered */
 	{
 		Q3ideWindowList wlist = q3ide_wm.cap_list_wins(q3ide_wm.cap);
 		if (wlist.windows && wlist.count) {
@@ -87,7 +88,7 @@ void Q3IDE_WM_CmdAttach(void)
 		return;
 	}
 
-	/* Detach windows not in the new target set; survivors are moved in-place. */
+	/* Detach windows not in the new target set. */
 	{
 		int si, ki;
 		for (si = 0; si < Q3IDE_MAX_WIN; si++) {
@@ -106,31 +107,37 @@ void Q3IDE_WM_CmdAttach(void)
 
 	Com_Printf("q3ide: attaching %d windows...\n", item_n);
 
+	/* Spawn position: 200u in front of player, all windows stacked at same spot. */
 	VectorCopy(cl.snap.ps.origin, eye);
 	eye[2] += cl.snap.ps.viewheight;
+	yaw_rad = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+	fwd[0] = cosf(yaw_rad);
+	fwd[1] = sinf(yaw_rad);
+	fwd[2] = 0.0f;
+	pos[0] = eye[0] + fwd[0] * Q3IDE_ATTACH_WIN_DIST;
+	pos[1] = eye[1] + fwd[1] * Q3IDE_ATTACH_WIN_DIST;
+	pos[2] = eye[2];
+	norm[0] = -fwd[0];
+	norm[1] = -fwd[1];
+	norm[2] = 0.0f;
 
-	{
-		q3ide_room_t room;
-		unsigned int ids[Q3IDE_MAX_WIN];
-		float aspects[Q3IDE_MAX_WIN];
-		int is_disp[Q3IDE_MAX_WIN];
-		memset(ids, 0, sizeof(ids));
-		memset(aspects, 0, sizeof(aspects));
-		memset(is_disp, 0, sizeof(is_disp));
-		q3ide_room_scan(eye, &room);
-		if (room.n) {
-			for (i = 0; i < item_n; i++) {
-				ids[i] = items[i].id;
-				aspects[i] = items[i].aspect;
-				is_disp[i] = items[i].is_display ? 1 : 0;
-			}
-			q3ide_room_layout(&room, ids, aspects, is_disp, item_n);
-		} else {
-			Com_Printf("q3ide: no walls found\n");
+	for (i = 0; i < item_n; i++) {
+		float ww = Q3IDE_ATTACH_WIN_W;
+		float wh = (items[i].aspect > 0.001f) ? ww / items[i].aspect : ww * 9.0f / 16.0f;
+
+		if (q3ide_is_attached(items[i].id)) {
+			Q3IDE_WM_SetLabel(items[i].id, items[i].label);
+			continue;
 		}
 
-		for (i = 0; i < item_n; i++)
-			Q3IDE_WM_SetLabel(items[i].id, items[i].label);
+		if (items[i].is_display) {
+			if (!q3ide_wm.cap_start_disp || q3ide_wm.cap_start_disp(q3ide_wm.cap, items[i].id, Q3IDE_CAPTURE_FPS) != 0)
+				continue;
+			Q3IDE_WM_Attach(items[i].id, pos, norm, ww, wh, qfalse, qfalse);
+		} else {
+			Q3IDE_WM_Attach(items[i].id, pos, norm, ww, wh, qtrue, qfalse);
+		}
+		Q3IDE_WM_SetLabel(items[i].id, items[i].label);
 	}
 
 	q3ide_wm.auto_attach = qtrue;

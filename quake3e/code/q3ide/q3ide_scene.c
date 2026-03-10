@@ -21,8 +21,6 @@ extern void q3ide_add_blood_splat(q3ide_win_t *win);
 /* Shoot-to-place selection — q3ide_portal.c */
 extern int q3ide_selected_win;
 
-/* Mirror quads — q3ide_wm_render.c */
-extern void q3ide_wm_render_mirrors(void);
 
 /* ── Shader invalidation ─────────────────────────────────────── */
 
@@ -31,8 +29,6 @@ void Q3IDE_WM_InvalidateShaders(void)
 	int i;
 	q3ide_wm.border_shader = 0;
 	q3ide_wm.portal_shader = 0;
-	q3ide_wm.mirror_shader = 0;
-	q3ide_wm.mirror_energy_shader = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		q3ide_wm.wins[i].shader = 0;
 }
@@ -75,8 +71,6 @@ void Q3IDE_WM_AddPolys(void)
 		q3ide_add_poly(win);
 		q3ide_add_blood_splat(win);
 	}
-
-	q3ide_wm_render_mirrors();
 }
 
 /* ── Label ───────────────────────────────────────────────────── */
@@ -114,7 +108,6 @@ void Q3IDE_WM_CmdDetachAll(void)
 			continue;
 		if (q3ide_wm.cap_stop)
 			q3ide_wm.cap_stop(q3ide_wm.cap, w->capture_id);
-		q3ide_wm.slot_mask &= ~(1ULL << w->scratch_slot);
 		memset(w, 0, sizeof(q3ide_win_t));
 		q3ide_wm.num_active--;
 		n++;

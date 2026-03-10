@@ -644,9 +644,8 @@ static void	RB_SetGL2D (void) {
 		width = glConfig.vidWidth;
 		height = glConfig.vidHeight;
 #ifdef USE_Q3IDE
-		/* Multi-monitor: constrain 2D (HUD/crosshair) to center screen only. */
-		if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) &&
-		     !ri.Cvar_VariableIntegerValue( "r_mmUIActive" ) ) {
+		/* Multi-monitor: always constrain 2D (HUD, console, menus) to center screen. */
+		if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
 			int cx = ri.Cvar_VariableIntegerValue( "r_mmCenterX" );
 			int cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
 			int ch = ri.Cvar_VariableIntegerValue( "r_mmCenterH" );

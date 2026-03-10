@@ -5,7 +5,7 @@
 
 ## ⚠️ LLM Implementation Instructions
 
-**This document is the full feature spec for Q3IDE. It contains 147 features across 24 batches. DO NOT implement everything at once.**
+**This document is the full feature spec for Q3IDE. It contains ~150 features across 24 batches. DO NOT implement everything at once.**
 
 ### How to use this document:
 
@@ -72,7 +72,7 @@ When implementing a batch, **delegate work to the right agent based on which fil
 
 At major milestones, run a **full performance measuring session** — FPS benchmarks, frame time histograms, GPU/CPU usage, texture upload bandwidth, **VRAM usage** (texture memory per Window, total allocation). Record results in `.q3ide/perf_history.json` to track FPS degradation and memory growth over time. Target resolution: 1080p baseline, scalable up. Performance checkpoints occur after:
 
-- **Batch 3** (Live Window Management) — window lifecycle stability baseline
+- **Batch 1** (Window Entity & Rendering Pipeline) — baseline with all 10 optimization stages
 - **Batch 7** (Spaces & Navigation) — multi-Space overhead measurement
 - **Batch 11** (UML Navigator) — 3D overlay rendering impact
 - **Batch 14** (Multiplayer) — network + rendering combined load
@@ -141,21 +141,25 @@ The capture pipeline and basic texture rendering. Getting pixels on walls.
 
 ---
 
-### BATCH 1 — Window Entity & Multiple Windows (CURRENT)
+### BATCH 1 — Window Entity, Placement & Rendering Pipeline (CURRENT)
 
-The Window data model, multiple simultaneous captures, basic lifecycle management.
+Window data model, placement system rewrite, and rendering pipeline optimizations. Implemented in 10 stages — see `PLACEMENT.md` for full details per stage. Each stage = one Claude Code session with git commit + testing between.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 1.1 | WindowEntity data structure | ⬜ | Implement the full metadata model (ID, capture source, position, status, etc.) |
-| 1.2 | Multiple window slots (up to 16) | ⬜ | Multiple SCStreams, each with its own texture, tracked by WindowEntity. Hard cap of 16 (`Q3IDE_MAX_WIN`) — sufficient for any real workspace. Adaptive budget manages performance. |
-| 1.3 | Anchored Window placement | ⬜ | Place Windows on arbitrary walls via crosshair aim + command |
-| 1.4 | Window close / detach | ⬜ | Stop capture, remove texture, destroy WindowEntity |
-| 1.5 | Window status tracking | ⬜ | Active, Idle, Error states reflected in WindowEntity |
-| 1.6 | Smart rendering — distance-based | ⬜ | Reduce capture FPS for far Windows, pause off-screen ones |
-| 1.7 | Aspect ratio preservation | ⬜ | Window quad matches captured window's aspect ratio, updates on resize |
+| 1.1 | Kill BGRA→RGBA swizzle | ✅ Done | Add format param to RE_UploadCinematic, pass GL_BGRA native. Delete CPU swizzle loop. |
+| 1.2 | Visibility-gated texture uploads | ⬜ | Dot product (behind player?) + BSP trace (behind wall?) before UploadCinematic. Skip invisible windows. |
+| 1.3 | Wall scanner + cache | ⬜ | Pre-scan all walls on area entry within 60m radius. Cache wall slots. Foundation for new placement. |
+| 1.4 | Area transition placement | ⬜ | **Destroy old 13 rules.** New placement: spread-even across walls, closest first, FPS-gated drain (30fps), texture throttle 2fps during placement. |
+| 1.5 | Within-area leapfrog | ⬜ | Furthest window jumps to closest free slot when player moves >7m. Check every 30 frames. Dogs stay put in small rooms. |
+| 1.6 | Trained positions | ⬜ | User repositions window → save position per area. On return, window goes to trained spot. Dogs remember their place. |
+| 1.7 | Adaptive resolution (8 tiers) | ⬜ | SCK source-side downscale. Tier 0 (full) to tier 7 (thumbnail). Aim-override: crosshair on window = full res from any distance. |
+| 1.8 | Static detection + SCK frame interval + mipmaps | ⬜ | Idle windows → 1fps capture. SCK minimumFrameInterval per tier. glGenerateMipmap after upload. |
+| 1.9 | Texture Array (GL_TEXTURE_2D_ARRAY) | ⬜ | One texture array per tier. Batched draw calls. 31 binds → ~8 binds. Renderer refactor — do LAST. |
+| 1.10 | Per-window performance metrics | ⬜ | Track capture_fps, upload_fps, dirty_ratio, bandwidth, latency, vram, skip_count, tier, static_flag. Console + Widget. |
 
-**🧪 TEST CHECKPOINT 1:** Multiple windows from different apps displayed simultaneously. Each tracks its own metadata. Windows can be placed, closed, and replaced. FPS stays above 60 with 4+ windows active.
+**🧪 TEST CHECKPOINT 1:** Walk between areas → windows migrate smoothly (10 dogs through a doorway). FPS stays above 30 during migration. Furthest windows leapfrog as you walk. Trained positions persist. Resolution scales with distance. Aim at distant window → full res. Idle terminals at 1fps. `/q3ide_perf` shows live per-window metrics. Performance Widget shows total bandwidth.
+**📊 PERFORMANCE CHECKPOINT:** Measure FPS with 31+ windows before/after each stage. Record to `.q3ide/perf_history.json`. Target: 40+ FPS with 31 windows (from current 23 FPS).
 
 ---
 
@@ -517,15 +521,15 @@ Full Q3IDE compiled to WebAssembly via Emscripten. Play in the browser.
 | Batch | Name | Features | Status |
 |-------|------|----------|--------|
 | 0 | Foundation | 7 | ✅ Done |
-| 1 | Window Entity & Multiple Windows | 7 | ✅ Done |
-| 2 | Interaction Model | 9 | ✅ Done |
-| 3 | **Live Window Management** | **7** | 🔧 In Progress |
-| 4 | Window Placement & Layout | 8 | ⬜ |
+| 1 | **Window Entity, Placement & Rendering** | **10** (stages 1.1-1.10) | 🔧 In Progress |
+| 2 | Interaction Model | 9 | ⬜ |
+| 3 | Live Window Management | 7 | ⬜ |
+| 4 | Window Layout (drag, resize, snap, persist) | 8 | ⬜ |
 | 5 | Grapple Hook & Spatial Tools | 7 | ⬜ |
 | 6 | Theater, Office & Focus | 5 | ⬜ |
 | 7 | Spaces & Navigation | 7 | ⬜ |
 | 8 | Programmable Hotkeys & Screenshots | 6 | ⬜ |
-| 9 | Ornaments, UI Chrome & Visual Polish | 9 | ⬜ |
+| 9 | Ornaments, Vibrancy & Visual Polish | 9 | ⬜ |
 | 10 | Project Classification & Live Scanning | 4 | ⬜ |
 | 11 | **UML Navigator** | **21** | ⬜ |
 | 12 | AI Agent Integration | 12 | ⬜ |
@@ -540,7 +544,7 @@ Full Q3IDE compiled to WebAssembly via Emscripten. Play in the browser.
 | 21 | **AI Runtime Geometry** | **2** | ⬜ Moonshot |
 | 22 | **Browser WASM Port** | **3** | ⬜ Future |
 | VR | Engine Swap | 1 | ⬜ Last |
-| **Total** | | **147** | |
+| **Total** | | **~150** | |
 
 ---
 
@@ -602,7 +606,21 @@ q3ide/
 │   │   ├── drag.h                     # Long press drag, snap alignment
 │   │   ├── drag.c
 │   │   ├── layout.h                   # Layout persistence (save/restore JSON)
-│   │   └── layout.c
+│   │   ├── layout.c
+│   │   ├── placement.h               # Placement system public API (area transition + leapfrog)
+│   │   ├── placement.c
+│   │   ├── wall_scanner.h            # Wall pre-scanner (BSP ray casting, qualification)
+│   │   ├── wall_scanner.c
+│   │   ├── wall_cache.h              # CachedWall_t, WallSlot_t, TrainedPosition_t
+│   │   ├── wall_cache.c
+│   │   ├── placement_queue.h         # FPS-adaptive placement queue + texture throttle
+│   │   ├── placement_queue.c
+│   │   ├── visibility.h              # Pre-upload visibility gating (dot product + BSP trace)
+│   │   ├── visibility.c
+│   │   ├── adaptive_res.h            # 8-tier resolution + SCK reconfiguration + static detection
+│   │   ├── adaptive_res.c
+│   │   ├── perf_metrics.h            # Per-window performance tracking
+│   │   └── perf_metrics.c
 │   │
 │   ├── space/                         # Space system (8 workflow zones)
 │   │   ├── space.h                    # Space definitions, teleport
@@ -808,7 +826,7 @@ q3ide/
 
 **`spatial/` is the brain.** All engine-agnostic logic lives here, organized by domain. When the engine swaps to VR, nothing in `spatial/` changes.
 
-**`spatial/window/`** is the core — entity model, focus, pointer, drag, layout. Everything touches Windows.
+**`spatial/window/`** is the core — entity model, focus, pointer, drag, layout, AND the full placement system (wall scanner, cache, placement queue, visibility gating, adaptive resolution, perf metrics). Everything touches Windows.
 
 **`spatial/space/`** owns the 8 Spaces and Portal system. Portals are first-class citizens with their own module.
 
@@ -1048,6 +1066,49 @@ WindowEntity {
     file_classification: Option<String>
 }
 ```
+
+---
+
+## Window Placement & Movement
+
+Full spec in `PLACEMENT.md`. Summary here.
+
+### Two Placement Modes
+
+**Mode 1 — Area Transition:** Player enters new area → pre-scan ALL walls (cache) → queue ALL windows → drain 1/frame FPS-gated (>30fps) → spread evenly across walls → closest walls first. Trained windows get their saved spots first. Texture throttle: all windows drop to 2fps during placement, restore to 25fps when done.
+
+Visual: 10 dogs follow you through a doorway. Each finds a spot and sits down one at a time. TVs freeze while dogs are moving, unfreeze when settled.
+
+**Mode 2 — Within-Area Leapfrog:** Player moves >7m → furthest window jumps to closest free slot. Checked every 30 frames. One window per check. Trained windows never leapfrog. Small rooms: windows never move.
+
+### Window Constraints
+
+- Minimum 100u diagonal (100" TV). Aspect ratio sacred. Never stretched.
+- Single horizontal row per wall. Vertically centered. Like a projector.
+- Never stacked, never on ceilings/floors, never intersecting.
+- 85% of wall height (aspect-fit). 3u wall offset.
+- Only vertical walls (±5°). Exception: in-map monitors/billboards ±30°.
+- Double-sided: render from behind with flipped image.
+- Collision: trace against EVERYTHING (BSP, entities, models, players).
+
+### Trained Positions (Dog Memory)
+
+User manually moves window → position saved per area. Leave area, come back → window returns to trained spot. Trained windows get priority over auto-placed. Teaching dogs where their place is.
+
+### Wall Scanner
+
+Pre-scan on area entry within 60m radius. Cache walls with pre-computed slots. Walls qualify: height ≥ 79u, width ≥ 114u, vertical ±5°. Results persist until next area transition.
+
+### Performance During Placement
+
+- FPS-gated: only place if last frame >30fps
+- Texture throttle: 2fps during queue drain (vs 25fps normal)
+- Window moves = just update x,y,z,angle. Never destroy/recreate entity.
+- Queue cap: 32. Excess waits for leapfrog.
+
+### Constants (in q3ide_params.h)
+
+See `PLACEMENT.md` for full list. Key values: placement_radius=2400u (60m), leapfrog_distance=280u (7m), fps_gate=30, texture_fps_normal=25, texture_fps_placing=2, max_windows=64, max_cached_walls=128, max_wall_slots=8.
 
 ---
 
@@ -1972,111 +2033,111 @@ Other players' Window audio spatialized from their position. Coworker's music fa
 
 The game FPS is sacred. Quake III Arena must run at full speed at all times. Bots, projectiles, physics, netcode — none of it degrades because of IDE features. If the GPU budget is tight, Windows degrade first. The game never stutters.
 
-### The One Rule: Distance = Quality
+### Current Bottleneck (measured)
 
-Everything scales with distance. The closer you are to a Window, the more resources it gets. Far away = cheap. Close up = full quality. The GPU budget self-manages through spatial proximity.
+- 0 windows = 40-50 FPS
+- 31 windows = 23 FPS
+- Each window costs ~0.5-0.7 FPS
 
-| Distance | Capture FPS | Resolution | Texture Upload | Detail |
-|----------|-------------|------------|----------------|--------|
-| Reading distance (<2m) | 60fps (or monitor refresh) | Native (e.g. 2560×1440) | Every dirty frame | Full quality, Ornaments visible, text crisp |
-| Medium (2-10m) | 30fps | Half resolution | Every other dirty frame | Readable, Ornaments icon-only |
-| Far (10-30m) | 15fps | Quarter resolution | Batched uploads | Visible but not readable |
-| Across map (>30m) | 5fps | Thumbnail (128×72) | Minimal | Color blob, status only |
-| Different Space | Paused | None | None | No capture running |
-| Off-screen (facing away) | 5fps | Quarter | Minimal | Kept alive for Portal previews |
+**The murder weapon:** CMSampleBuffer → CVPixelBuffer → CPU BGRA→RGBA swizzle (per pixel!) → glTexSubImage2D (GL_RGBA). ALL 31 windows upload unconditionally at full 1920×1080. Even windows behind you, behind walls, in other rooms. 31 × 8MB × 25fps = **~6.4 GB/sec CPU→GPU bandwidth.** Insane.
 
-### Adaptive Frame Budget
+### 7 Optimization Wins (implementation order)
 
-No hard cap on Window count. The system measures GPU headroom each frame and distributes capture budget dynamically:
+| # | Win | What | Impact |
+|---|-----|------|--------|
+| 1 | Kill BGRA→RGBA swizzle | Format flag on UploadCinematic → GL_BGRA native | Eliminates 64M per-pixel CPU ops/frame |
+| 2 | Visibility-gated uploads | Dot product + BSP trace before UploadCinematic | Skips 50-70% of uploads |
+| 3 | Adaptive 8-tier resolution | SCK source-side downscale, 1 stream per window | 4-64x smaller uploads for distant windows |
+| 4 | Static content detection | Dirty frame counter → 1fps for idle windows | Idle terminals cost nothing |
+| 5 | SCK frame interval per tier | minimumFrameInterval matches distance tier | SCK never generates unneeded frames |
+| 6 | Mipmap generation | glGenerateMipmap after upload | Distant windows look smooth, almost free |
+| 7 | Texture Array (GL_TEXTURE_2D_ARRAY) | One array per tier, batched draw calls | 31 binds → ~8 binds |
 
-1. **Measure** available GPU time after game scene renders
-2. **Rank** visible Windows by distance (closest = highest priority)
-3. **Allocate** texture upload slots to highest-priority Windows first
-4. **Degrade** lower-priority Windows (reduce FPS, reduce resolution)
-5. **If overloaded**, Performance Widget turns red — player sees the cost
+**Projected result:** 6,400 MB/sec → ~155 MB/sec CPU→GPU bandwidth. **~40x reduction.** 23 FPS → 40+ FPS with 31 windows.
 
-This means you can have 30 Windows open across 8 Spaces. Only the 3-4 you're near get full resources. Everything else is paused or thumbnailed.
+### Resolution Tiers (8 levels)
 
-### Dirty Frame Detection
+| Tier | Distance | Scale | Resolution (1080p) | Upload size |
+|------|----------|-------|-------------------|-------------|
+| 0 | 0-120u (0-3m) | 1.0 | 1920×1080 | ~8.3 MB |
+| 1 | 120-240u (3-6m) | 0.75 | 1440×810 | ~4.7 MB |
+| 2 | 240-480u (6-12m) | 0.5 | 960×540 | ~2.1 MB |
+| 3 | 480-720u (12-18m) | 0.375 | 720×405 | ~1.2 MB |
+| 4 | 720-960u (18-24m) | 0.25 | 480×270 | ~0.5 MB |
+| 5 | 960-1200u (24-30m) | 0.1875 | 360×202 | ~0.3 MB |
+| 6 | 1200-1800u (30-45m) | 0.125 | 240×135 | ~0.13 MB |
+| 7 | >1800u (>45m) | 0.0625 | 120×67 | ~0.03 MB |
 
-**#1 optimization.** A terminal sitting idle with a blinking cursor doesn't need 60 texture uploads per second. ScreenCaptureKit delivers frames only when content changes. The capture layer tracks a dirty flag per Window:
+**Aim override:** Crosshair aimed directly at any window (dot product > 0.95) → full res regardless of distance. Sniper zoom on a terminal across the map.
 
-- **Frame received from SCK** → mark dirty
-- **Renderer polls Window** → if dirty, upload texture and clear flag. If clean, skip upload entirely.
+**Distance override:** Within 120u (3m) → always tier 0.
 
-A busy terminal might produce 5-10 dirty frames per second. An idle one produces 0-1. This alone can reduce total texture uploads by 80%+ compared to blind 60fps uploads.
+**SCK frame interval per tier:** tier 0 = 1/25, tier 1-2 = 1/15, tier 3-4 = 1/10, tier 5-6 = 1/5, tier 7 = 1/2.
 
-### IOSurface Zero-Copy — #1 Performance Priority
+### Visibility-Gated Texture Uploads
 
-The highest priority optimization. Eliminates the CPU memcpy bottleneck entirely.
+Before calling UploadCinematic for each window:
+1. **Dot product:** player view direction · (window_pos - player_pos). If < 0 → behind player → **skip upload**
+2. **BSP trace:** ray from player eye to window center. If hits anything → occluded → **skip upload**
 
-**Current path (ring buffer):**
-```
-SCK callback → IOSurface lock → CPU memcpy to ring buffer → CPU memcpy to GL texture
-                                  ^^^^ SLOW ^^^^              ^^^^ SLOW ^^^^
-```
+Skipped windows keep their last texture on GPU (stale but invisible). Refresh instantly when visible again.
 
-**Zero-copy path:**
-```
-SCK callback → IOSurface → CGLTexImageIOSurface2D → GL texture (GPU direct)
-                            ^^^^ NO CPU COPY ^^^^
-```
+### Static Content Detection
 
-For Vulkan: `VK_EXT_metal_objects` via MoltenVK achieves the same GPU→GPU path.
+Per window: count dirty frames over rolling 1-second window. If < 2 dirty frames → classify as "static" → drop to 1fps capture. Idle terminal with blinking cursor = nearly free. Resets instantly when content changes.
 
-This is the difference between "4 Windows at 60fps" and "12 Windows at 60fps" on the same hardware. Investigate and implement as early as possible. Fall back to ring buffer if zero-copy fails on specific hardware.
+### Texture Throttle During Placement
+
+While placement queue is draining (area transition, dogs sitting down):
+- ALL windows throttle to 2fps texture updates (from normal 25fps)
+- 31 × 25fps = crushing. 31 × 2fps = breathing room for placement work.
+- Restore to 25fps when queue empty (all dogs settled).
 
 ### Render Order
 
-Windows are **real 3D scene geometry**. They render as part of the game world, not as overlays. Consequences:
-
+Windows are **real 3D scene geometry**. They render as part of the game world, not as overlays:
 - Rockets fly between you and a Window
 - Depth sorting, occlusion, and lighting work naturally
 - A Window behind a pillar is occluded by the pillar
 - Dynamic light from Window content illuminates nearby surfaces
-- Floating Windows cast shadows on the floor
 
-This is essential to the philosophy: Windows are IN the world, not ON TOP of it.
+### IOSurface Zero-Copy (Future)
 
-### Texture Upload Strategy
-
-Before IOSurface zero-copy is working:
-
-- **OpenGL:** PBO double-buffer. Upload to PBO A while GPU reads PBO B. Swap each frame. Avoids pipeline stalls.
-- **Vulkan:** Staging buffer with fence. Upload to staging, copy to device-local on transfer queue. Non-blocking.
-- **Both renderers supported.** Player picks renderer, Q3IDE adapts.
-
-After IOSurface zero-copy:
-- Skip PBO/staging entirely. IOSurface → texture directly on GPU. The ring buffer becomes a fallback path.
+Eliminates CPU memcpy entirely. Current: SCK → CPU swizzle → glTexSubImage2D. Future: SCK → IOSurface → CGLTexImageIOSurface2D (GPU direct). For Vulkan: `VK_EXT_metal_objects` via MoltenVK. This is a future optimization — implement the 7 wins above first, they may be sufficient.
 
 ### Portal Preview Budget
 
-Portals are distance-adaptive like everything else:
+⚠️ Each visible Portal is a full second render pass. Biggest performance risk. Search Quake 3 community repos for existing implementations — don't build from scratch.
 
-- **Close to Portal:** destination renders at quarter resolution, 15fps — enough to read Billboard text and see activity
-- **Medium distance:** thumbnail resolution, 5fps — enough to see colors and movement
-- **Far away / different Space:** static snapshot, refreshed every few seconds
-- **Looking directly at Portal (dwell):** bumps up to half resolution, 30fps — reward for paying attention
+- Close to Portal: quarter resolution, 15fps
+- Medium distance: thumbnail, 5fps
+- Far away: static snapshot, refresh every few seconds
+- Looking directly at Portal (dwell): half resolution, 30fps
+- Cap simultaneous active Portals
 
-### Performance Widget
+### Per-Window Performance Metrics
 
-Always available as a toggleable Widget. Shows:
+Exposed via Performance Widget and `/q3ide_perf` console command:
 
-- **Game FPS** (must stay high)
-- **Window update FPS** (per-Window, adaptive)
-- **Texture uploads/sec** (total across all Windows)
-- **Capture bandwidth** (MB/s from SCK to ring buffer)
-- **VRAM usage** (total texture memory consumed by Windows)
-- **Budget status** — green (headroom), yellow (tight), red (overloaded, degrading)
-
-When red, the Widget shows which Windows are being degraded and by how much. The player can close Windows or move away to recover budget.
+| Metric | Description |
+|--------|-------------|
+| capture_fps | Actual frames received from SCK |
+| upload_fps | Actual texture uploads to GPU |
+| dirty_ratio | % of frames that were dirty |
+| bandwidth | MB/s for this window's texture data |
+| latency | ms from SCK callback to texture visible |
+| vram | MB consumed by texture + mipmaps |
+| skip_count | Frames skipped (visibility culling) |
+| current_tier | Resolution tier (0-7) |
+| static_flag | Is window classified as static |
 
 ### Memory Budget
 
-Each Window texture at native resolution:
-- 2560×1440 BGRA = ~14.7 MB per texture
-- 8 Windows at native = ~118 MB VRAM
-- 30 Windows (most paused/thumbnailed) = ~150-200 MB VRAM
+At full optimization:
+- Tier 0 (close, ~3 windows): 3 × 8.3 MB = ~25 MB
+- Tier 2-4 (medium, ~10 windows): 10 × 1 MB avg = ~10 MB
+- Tier 5-7 (far/thumbnail, ~18 windows): 18 × 0.1 MB avg = ~2 MB
+- **Total ~37 MB** for 31 windows (vs current ~250 MB)
 
 RX 580 has 8GB VRAM. Quake 3 uses ~200-500MB depending on map and textures. Leaves plenty of room. But the adaptive system ensures we never hit VRAM limits — distant Windows get thumbnailed aggressively.
 

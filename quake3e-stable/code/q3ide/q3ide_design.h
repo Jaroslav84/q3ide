@@ -10,15 +10,15 @@
 
 /* ─── Window Geometry [MVP subset] ────────────────────────────────────── */
 
-#define Q3IDE_CORNER_RADIUS 12.0f     /* Post-MVP: rounded corners */
-#define Q3IDE_WINDOW_BAR_HEIGHT 32.0f /* Post-MVP: Window bar */
+#define Q3IDE_CORNER_RADIUS      12.0f /* Post-MVP: rounded corners */
+#define Q3IDE_WINDOW_BAR_HEIGHT  32.0f /* Post-MVP: Window bar */
 #define Q3IDE_WINDOW_BAR_OVERLAP 20.0f /* Post-MVP: bar overlap */
 
 /* [MVP] Default Window size in game units */
-#define Q3IDE_WINDOW_DEFAULT_WIDTH 256.0f
+#define Q3IDE_WINDOW_DEFAULT_WIDTH  256.0f
 #define Q3IDE_WINDOW_DEFAULT_HEIGHT 192.0f
-#define Q3IDE_WINDOW_MIN_WIDTH 64.0f
-#define Q3IDE_WINDOW_MAX_WIDTH 512.0f
+#define Q3IDE_WINDOW_MIN_WIDTH      64.0f
+#define Q3IDE_WINDOW_MAX_WIDTH      512.0f
 
 /* [MVP] Wall offset — how far the quad floats from the wall surface */
 #define Q3IDE_WALL_OFFSET 2.0f
@@ -26,21 +26,21 @@
 /* ─── Ornaments (Post-MVP) ────────────────────────────────────────────── */
 
 #define Q3IDE_ORNAMENT_Z_OFFSET 8.0f
-#define Q3IDE_ORNAMENT_OVERLAP 20.0f
+#define Q3IDE_ORNAMENT_OVERLAP  20.0f
 
 /* ─── Hover / Focus (Post-MVP) ────────────────────────────────────────── */
 
-#define Q3IDE_HOVER_GLOW 1.15f
-#define Q3IDE_HOVER_LIFT_Z 4.0f
+#define Q3IDE_HOVER_GLOW        1.15f
+#define Q3IDE_HOVER_LIFT_Z      4.0f
 #define Q3IDE_HOVER_FADE_IN_SEC 0.15f
-#define Q3IDE_MIN_TAP_TARGET 60.0f
+#define Q3IDE_MIN_TAP_TARGET    60.0f
 /* [MVP] Hover border thickness in world units (~2px at 400u viewing distance) */
 #define Q3IDE_HOVER_BORDER_THICK 1.0f
 
 /* ─── Animation (Post-MVP) ────────────────────────────────────────────── */
 
-#define Q3IDE_ANIM_SPAWN_SEC 0.35f
-#define Q3IDE_ANIM_CLOSE_SEC 0.25f
+#define Q3IDE_ANIM_SPAWN_SEC  0.35f
+#define Q3IDE_ANIM_CLOSE_SEC  0.25f
 #define Q3IDE_ANIM_GRAB_SCALE 1.02f
 #define Q3IDE_ANIM_LERP_SPEED 8.0f
 
@@ -63,7 +63,7 @@
 
 /* ─── Capture defaults [MVP] ──────────────────────────────────────────── */
 
-#define Q3IDE_CAPTURE_TARGET_FPS 60
+#define Q3IDE_CAPTURE_TARGET_FPS    60
 #define Q3IDE_CAPTURE_RING_BUF_SIZE 3
 
 #endif /* Q3IDE_DESIGN_H */

@@ -9,7 +9,6 @@
 #include "q3ide_wm_internal.h"
 #include "q3ide_interaction.h"
 #include "q3ide_aas.h"
-#include "q3ide_layout.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 
@@ -20,14 +19,12 @@ extern int q3ide_last_attack;
 extern void q3ide_grapple_type_frame(void);
 extern void q3ide_grapple_window_frame(void);
 
-/* Teleport blocker — q3ide_teleport.c */
-extern void q3ide_teleport_block_frame(void);
-
 /* Spawn-focus — q3ide_spawn.c */
 extern void q3ide_spawn_focus_terminal(const vec3_t eye);
 
 /* Shoot-to-place — q3ide_hooks_input.c */
 extern void q3ide_shoot_frame(void);
+
 void Q3IDE_Frame(void)
 {
 	if (!q3ide_state.initialized)
@@ -52,17 +49,12 @@ void Q3IDE_Frame(void)
 		}
 	}
 
-	/* Streaming placement: reflow when player enters a new AAS area. */
-	if (q3ide_wm.num_active && cls.state == CA_ACTIVE) {
-		if (q3ide_state.stream_cooldown > 0) {
-			q3ide_state.stream_cooldown--;
-		} else if (Q3IDE_AAS_IsLoaded()) {
-			int cur_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
-			if (cur_area > 0 && cur_area != q3ide_state.stream_last_area) {
-				q3ide_state.stream_last_area = cur_area;
-				Q3IDE_WM_Reflow();
-				q3ide_state.stream_cooldown = 30;
-			}
+	/* Track current AAS area (for future placement use). */
+	if (cls.state == CA_ACTIVE && Q3IDE_AAS_IsLoaded()) {
+		int cur_area = Q3IDE_AAS_PointArea(cl.snap.ps.origin);
+		if (cur_area > 0 && cur_area != q3ide_state.stream_last_area) {
+			q3ide_state.stream_last_area = cur_area;
+			Q3IDE_LOGI("area change: %d", cur_area);
 		}
 	}
 
@@ -71,8 +63,6 @@ void Q3IDE_Frame(void)
 		int buttons;
 		float cur_yaw, cur_pitch, mouse_dx, mouse_dy;
 		qboolean attacking, use_key, escape, lock_key;
-
-		q3ide_teleport_block_frame();
 
 		VectorCopy(cl.snap.ps.origin, eye);
 		eye[2] += cl.snap.ps.viewheight;
@@ -137,8 +127,6 @@ void Q3IDE_Frame(void)
 		q3ide_grapple_window_frame();
 	}
 
-	q3ide_layout_tick();
-	Q3IDE_WM_ReflowTick();
 	Q3IDE_WM_PollFrames();
 
 	/* Heartbeat + FPS stats every 5 seconds */

@@ -155,30 +155,17 @@ typedef struct {
 	unsigned long long last_scan_ms; /* last time we polled for changes */
 	q3ide_win_t wins[Q3IDE_MAX_WIN];
 	int num_active;
-	int frame_uploads;            /* texture uploads since last heartbeat */
-	unsigned long long slot_mask; /* bit N = scratch slot N is in use */
+	int frame_uploads; /* texture uploads since last heartbeat */
 	byte *fbuf;
 	int fbuf_size;
 	qhandle_t border_shader; /* *white for hover border strips */
-	qhandle_t portal_shader; /* teleporter energy glow for first mirror */
-	/* Standalone Q3 mirror portal (real recursive rendering, no capture) */
-	qboolean mirror_active;
-	vec3_t mirror_origin;
-	vec3_t mirror_normal;
-	float mirror_w, mirror_h;
-	qhandle_t mirror_shader;        /* q3ide/mirror — sort portal */
-	qhandle_t mirror_energy_shader; /* energy glow overlay */
+	qhandle_t portal_shader; /* teleporter energy glow */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;
 	pthread_mutex_t poll_mutex;
 	volatile int poll_running;
 	Q3ideWindowChangeList poll_pending; /* protected by poll_mutex */
 	qboolean poll_has_pending;          /* protected by poll_mutex */
-	/* Second standalone portal (return trip) */
-	qboolean mirror2_active;
-	vec3_t mirror2_origin;
-	vec3_t mirror2_normal;
-	float mirror2_w, mirror2_h;
 } q3ide_wm_t;
 
 extern q3ide_wm_t q3ide_wm;

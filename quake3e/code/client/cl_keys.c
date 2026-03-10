@@ -819,11 +819,4 @@ void Key_SetCatcher( int catcher )
 
 	keyCatchers = catcher;
 
-#ifdef USE_Q3IDE
-	/* Tell renderer whether UI/console is active so RB_SetGL2D uses full viewport */
-	if ( catcher & ( KEYCATCH_UI | KEYCATCH_CONSOLE ) )
-		Cvar_Set( "r_mmUIActive", "1" );
-	else
-		Cvar_Set( "r_mmUIActive", "0" );
-#endif
 }

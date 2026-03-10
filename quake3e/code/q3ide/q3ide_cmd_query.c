@@ -1,7 +1,6 @@
-/* q3ide_cmd_query.c — Q3IDE poll changes, desktop, and snap commands. */
+/* q3ide_cmd_query.c — Q3IDE poll changes and desktop command. */
 
 #include "q3ide_wm.h"
-#include "q3ide_layout.h"
 #include "q3ide_log.h"
 #include "q3ide_wm_internal.h"
 #include "../qcommon/qcommon.h"
@@ -25,33 +24,6 @@ qboolean q3ide_match(const char *app, const char **list)
 	return qfalse;
 }
 
-qboolean q3ide_is_attached(unsigned int id);
-
-static void q3ide_auto_attach_new(unsigned int id, float aspect)
-{
-	vec3_t eye;
-	q3ide_room_t room;
-	unsigned int ids[1];
-	float aspects[1];
-	int is_disp[1];
-
-	VectorCopy(cl.snap.ps.origin, eye);
-	eye[2] += cl.snap.ps.viewheight;
-
-	q3ide_room_scan(eye, &room);
-	if (!room.n) {
-		Q3IDE_LOGI("auto-attach failed wid=%u (no walls)", id);
-		return;
-	}
-
-	ids[0] = id;
-	aspects[0] = aspect;
-	is_disp[0] = 0;
-	q3ide_room_layout(&room, ids, aspects, is_disp, 1);
-	Q3IDE_LOGI("auto-attached wid=%u", id);
-}
-
-/* ── PollChanges — background thread fetches, main thread drains ── */
 qboolean q3ide_is_attached(unsigned int id)
 {
 	int i;
@@ -60,6 +32,33 @@ qboolean q3ide_is_attached(unsigned int id)
 			return qtrue;
 	return qfalse;
 }
+
+/* Auto-attach a new window at spawn position (200u in front of player). */
+static void q3ide_auto_attach_new(unsigned int id, float aspect)
+{
+	vec3_t eye, fwd, pos, norm;
+	float yaw_rad;
+	float ww = 100.0f;
+	float wh = (aspect > 0.001f) ? ww / aspect : ww * 9.0f / 16.0f;
+
+	VectorCopy(cl.snap.ps.origin, eye);
+	eye[2] += cl.snap.ps.viewheight;
+	yaw_rad = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+	fwd[0] = cosf(yaw_rad);
+	fwd[1] = sinf(yaw_rad);
+	fwd[2] = 0.0f;
+	pos[0] = eye[0] + fwd[0] * 200.0f;
+	pos[1] = eye[1] + fwd[1] * 200.0f;
+	pos[2] = eye[2];
+	norm[0] = -fwd[0];
+	norm[1] = -fwd[1];
+	norm[2] = 0.0f;
+
+	Q3IDE_WM_Attach(id, pos, norm, ww, wh, qtrue, qfalse);
+	Q3IDE_LOGI("auto-attached wid=%u", id);
+}
+
+/* ── PollChanges — background thread fetches, main thread drains ── */
 
 static void q3ide_apply_change_list(const Q3ideWindowChangeList *clist)
 {
@@ -115,7 +114,7 @@ void Q3IDE_WM_DrainPendingChanges(void)
 		q3ide_wm.cap_free_changes(clist);
 }
 
-/* Kept for callers that need a synchronous fetch (not used in normal flow). */
+/* Kept for callers that need a synchronous fetch. */
 void Q3IDE_WM_PollChanges(void)
 {
 	Q3ideWindowChangeList clist;
@@ -199,13 +198,4 @@ void Q3IDE_WM_CmdDesktop(void)
 		}
 	}
 	Q3IDE_LOGI("mirror: %d/%d display(s)", attached, n_disp);
-}
-
-/* ── CmdSnap — snap wins[0] into the q3dm0 teleporter ── */
-void Q3IDE_WM_CmdSnap(void)
-{
-	vec3_t pos = {-1152.0f, -1868.0f, 84.0f};
-	vec3_t normal = {0.0f, 1.0f, 0.0f};
-	Q3IDE_WM_PlaceMirror(pos, normal, 112.0f, 176.0f);
-	Q3IDE_LOGI("snapped mirror into teleporter arch at (%.0f,%.0f,%.0f)", pos[0], pos[1], pos[2]);
 }

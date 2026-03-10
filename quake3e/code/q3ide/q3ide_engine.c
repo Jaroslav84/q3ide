@@ -10,7 +10,6 @@
 #include "q3ide_wm_internal.h"
 #include "q3ide_interaction.h"
 #include "q3ide_aas.h"
-#include "q3ide_layout.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -67,7 +66,7 @@ void Q3IDE_OnVidRestart(void)
 		static byte q3ide_black[4] = {0, 0, 0, 255};
 		int i;
 		for (i = 0; i < Q3IDE_MAX_WIN; i++)
-			re.UploadCinematic(1, 1, 1, 1, q3ide_black, i, qtrue, 0x1908 /* GL_RGBA */);
+			re.UploadCinematic(1, 1, 1, 1, q3ide_black, i, qtrue, 0x80E1 /* GL_BGRA */);
 	}
 
 	mapname = Cvar_VariableString("mapname");

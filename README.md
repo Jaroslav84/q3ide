@@ -31,7 +31,23 @@ Yeah. That's my vision. Can you imagine? I'm beliver.
 
 It's the beggining of something more with an awesome FPS engine behind it. 
 
----
+## Ready
+
+### Core (working)
+  - 3 monitor setup (3*1980 x 1080p for my setup) - 90fps
+  - Window tunneling (SCStream → texture → GPU) - 40fps (no optimalization) 
+  - Shoot to reposition windows on walls
+  - Hover/highlight effect
+  - Grapple hook
+  - Laser (window finder debug tool)
+  - AAS area detection (just tracking, no placement)
+  - Distance-based FPS throttle
+  - LOS visibility culling (per-frame trace)
+  - Auto-attach new windows (PollChanges)
+  - Left monitor keybinding overlay
+  - Blood splat on window hit
+  - GL_BGRA native (no CPU swizzle)
+
 ## Roadmap
 
 While keeping FPS at 90..
@@ -44,7 +60,7 @@ While keeping FPS at 90..
 | 3 | **Multi-window windows capture (unique windowID per SCStream)** | 0 | ✅ Done |
 | 4 | **Three-monitor support** | 0 | ✅ Done |
 | 5 | **Window Entity data model** & lifecycle management | 1 | 🔧 In Progress |
-| 5.1 | ↳ Kill BGRA→RGBA swizzle (GL_BGRA native) | 1 | — |
+| 5.1 | ↳ Kill BGRA→RGBA swizzle (GL_BGRA native) | 1 | ✅ Done |
 | 5.2 | ↳ Visibility-gated texture uploads (dot product + BSP trace) | 1 | — |
 | 5.3 | ↳ Wall scanner + cache (pre-scan on area entry) | 1 | — |
 | 5.4 | ↳ Area transition placement (destroy old rules, build new) | 1 | — |
@@ -77,9 +93,9 @@ While keeping FPS at 90..
 | 26 | Browser-ready WASM port via Emscripten | 21 | — |
 | VR | Swap engine adapter to VR Quake 3 fork | VR | — |
 
-See `PLACEMENT.md` for Stage 5.1–5.10 details. Each sub-stage = one Claude Code session. Git commit + manual testing between each.
 
-See [`plan/00-VISION.md`](./plan/00-VISION.md) for full roadmap.
+See [`plan/00-VISION.md`](./plan/00-VISION.md) for Vision.
+See [`plan/04-Q3IDE_SPECIFICATION.md`](plan/04-Q3IDE_SPECIFICATION.md) for full Specification
 
 ---
 

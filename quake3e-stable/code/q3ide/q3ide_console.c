@@ -22,7 +22,7 @@ void Q3IDE_Cmd_f(void)
 {
 	const char *sub;
 	if (Cmd_Argc() < 2) {
-		Com_Printf("usage: q3ide <list|attach|detach|desktop|status>\n");
+		Com_Printf("usage: q3ide <list|attach|detach|desktop|status|istate|entities|laser>\n");
 		return;
 	}
 	sub = Cmd_Argv(1);
@@ -37,8 +37,6 @@ void Q3IDE_Cmd_f(void)
 			Q3IDE_WM_CmdDetachAll();
 	} else if (!Q_stricmp(sub, "desktop"))
 		Q3IDE_WM_CmdDesktop();
-	else if (!Q_stricmp(sub, "snap"))
-		Q3IDE_WM_CmdSnap();
 	else if (!Q_stricmp(sub, "status"))
 		Q3IDE_WM_CmdStatus();
 	else if (!Q_stricmp(sub, "istate")) {
@@ -110,43 +108,6 @@ void Q3IDE_Cmd_f(void)
 			}
 		}
 		Com_Printf("q3ide: %d entities found\n", found);
-	} else if (!Q_stricmp(sub, "portal")) {
-		if (!Q3IDE_WM_MirrorActive()) {
-			Com_Printf("q3ide portal: NOT ACTIVE\n");
-		} else {
-			vec3_t origin, normal, diff;
-			float ww, wh;
-			Q3IDE_WM_GetMirrorOrigin(origin, normal, &ww, &wh);
-			Com_Printf("q3ide portal: origin=(%.0f,%.0f,%.0f) normal=(%.2f,%.2f,%.2f)"
-			           " size=%.0fx%.0f\n",
-			           origin[0], origin[1], origin[2], normal[0], normal[1], normal[2], ww, wh);
-			if (cls.state == CA_ACTIVE) {
-				vec3_t pos, right;
-				float dist, lx, ly, nx, ny, len;
-				VectorCopy(cl.snap.ps.origin, pos);
-				VectorSubtract(pos, origin, diff);
-				dist = DotProduct(diff, normal);
-				nx = normal[0];
-				ny = normal[1];
-				len = sqrtf(nx * nx + ny * ny);
-				if (len > 0.01f) {
-					right[0] = -ny / len;
-					right[1] = nx / len;
-					right[2] = 0.0f;
-				} else {
-					right[0] = 1.0f;
-					right[1] = 0.0f;
-					right[2] = 0.0f;
-				}
-				lx = DotProduct(diff, right);
-				ly = diff[2];
-				Com_Printf("  player=(%.0f,%.0f,%.0f) dist=%.1f lx=%.1f ly=%.1f"
-				           " hw=%.0f hh=%.0f\n",
-				           pos[0], pos[1], pos[2], dist, lx, ly, ww * 0.5f, wh * 0.5f);
-				Com_Printf("  in_bounds=%d trigger=%d\n", (fabsf(lx) < ww * 0.5f && fabsf(ly) < wh * 0.5f + 24.0f),
-				           (fabsf(dist) < 24.0f));
-			}
-		}
 	} else if (!Q_stricmp(sub, "laser")) {
 		extern qboolean q3ide_laser_active;
 		Com_Printf("q3ide laser: active=%d\n", q3ide_laser_active);

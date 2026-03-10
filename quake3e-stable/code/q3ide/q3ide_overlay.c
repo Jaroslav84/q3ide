@@ -11,7 +11,6 @@
 #include "q3ide_wm.h"
 #include "q3ide_wm_internal.h"
 #include "q3ide_interaction.h"
-#include "q3ide_aas.h"
 #include "../qcommon/qcommon.h"
 #include "../qcommon/cm_public.h"
 #include "../client/client.h"
@@ -151,14 +150,6 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		float rlz = oz - ux[2] * rx_off;
 		Com_sprintf(room_buf, sizeof(room_buf), "area %d  cls %d", area, cluster);
 		q3ide_ovl_str(rlx, rly, rlz, rx, ux, room_buf, 100, 200, 255);
-
-		/* AAS warning: orange text one line below area info */
-		if (!Q3IDE_AAS_IsLoaded()) {
-			float wlx = rlx - ux[0] * OVL_LH;
-			float wly = rly - ux[1] * OVL_LH;
-			float wlz = rlz - ux[2] * OVL_LH;
-			q3ide_ovl_str(wlx, wly, wlz, rx, ux, "NO AAS - approx layout", 255, 140, 0);
-		}
 	}
 
 	/* Hover label: show hovered window/entity name at top-right of left monitor */

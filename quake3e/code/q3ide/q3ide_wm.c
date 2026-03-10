@@ -96,9 +96,18 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		return qfalse;
 	}
 
-	for (slot = 0; slot < Q3IDE_MAX_WIN; slot++)
-		if (!(q3ide_wm.slot_mask & (1ULL << slot)))
+	/* Find lowest scratch slot not currently in use */
+	for (slot = 0; slot < Q3IDE_MAX_WIN; slot++) {
+		int k;
+		qboolean used = qfalse;
+		for (k = 0; k < Q3IDE_MAX_WIN; k++)
+			if (q3ide_wm.wins[k].active && q3ide_wm.wins[k].scratch_slot == slot) {
+				used = qtrue;
+				break;
+			}
+		if (!used)
 			break;
+	}
 	if (slot >= Q3IDE_MAX_WIN) {
 		Com_Printf("q3ide: no scratch slots\n");
 		return qfalse;
@@ -108,8 +117,6 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		Com_Printf("q3ide: capture start failed id=%u\n", id);
 		return qfalse;
 	}
-
-	q3ide_wm.slot_mask |= (1ULL << slot);
 	win = &q3ide_wm.wins[i];
 	memset(win, 0, sizeof(*win));
 	win->active = qtrue;

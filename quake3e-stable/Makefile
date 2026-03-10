@@ -1146,12 +1146,10 @@ Q3OBJ += \
   $(B)/client/q3ide_hooks_input.o \
   $(B)/client/q3ide_hooks_grapple.o \
   $(B)/client/q3ide_wm.o \
-  $(B)/client/q3ide_mirror.o \
   $(B)/client/q3ide_scene.o \
   $(B)/client/q3ide_poll.o \
   $(B)/client/q3ide_cmd.o \
   $(B)/client/q3ide_cmd_attach.o \
-  $(B)/client/q3ide_cmd_reflow.o \
   $(B)/client/q3ide_cmd_query.o \
   $(B)/client/q3ide_render.o \
   $(B)/client/q3ide_interaction.o \
@@ -1165,11 +1163,6 @@ Q3OBJ += \
   $(B)/client/q3ide_aas_query.o \
   $(B)/client/q3ide_aas_face.o \
   $(B)/client/q3ide_aas_walls.o \
-  $(B)/client/q3ide_placement.o \
-  $(B)/client/q3ide_wall_measure.o \
-  $(B)/client/q3ide_room_scan.o \
-  $(B)/client/q3ide_wall_score.o \
-  $(B)/client/q3ide_room_layout.o \
   $(B)/client/q3ide_entity.o \
   $(B)/client/q3ide_laser.o \
   $(B)/client/q3ide_rope.o \
@@ -1499,9 +1492,6 @@ $(B)/client/q3ide_hooks_grapple.o: $(Q3IDEDIR)/q3ide_hooks_grapple.c
 $(B)/client/q3ide_wm.o: $(Q3IDEDIR)/q3ide_wm.c
 	$(DO_CC)
 
-$(B)/client/q3ide_mirror.o: $(Q3IDEDIR)/q3ide_mirror.c
-	$(DO_CC)
-
 $(B)/client/q3ide_scene.o: $(Q3IDEDIR)/q3ide_scene.c
 	$(DO_CC)
 
@@ -1512,9 +1502,6 @@ $(B)/client/q3ide_cmd.o: $(Q3IDEDIR)/q3ide_cmd.c
 	$(DO_CC)
 
 $(B)/client/q3ide_cmd_attach.o: $(Q3IDEDIR)/q3ide_cmd_attach.c
-	$(DO_CC)
-
-$(B)/client/q3ide_cmd_reflow.o: $(Q3IDEDIR)/q3ide_cmd_reflow.c
 	$(DO_CC)
 
 $(B)/client/q3ide_cmd_query.o: $(Q3IDEDIR)/q3ide_cmd_query.c
@@ -1554,24 +1541,6 @@ $(B)/client/q3ide_aas_face.o: $(Q3IDEDIR)/q3ide_aas_face.c
 	$(DO_CC)
 
 $(B)/client/q3ide_aas_walls.o: $(Q3IDEDIR)/q3ide_aas_walls.c
-	$(DO_CC)
-
-$(B)/client/q3ide_placement.o: $(Q3IDEDIR)/q3ide_placement.c
-	$(DO_CC)
-
-$(B)/client/q3ide_wall_measure.o: $(Q3IDEDIR)/q3ide_wall_measure.c
-	$(DO_CC)
-
-$(B)/client/q3ide_room_scan.o: $(Q3IDEDIR)/q3ide_room_scan.c
-	$(DO_CC)
-
-$(B)/client/q3ide_layout_place.o: $(Q3IDEDIR)/q3ide_layout_place.c
-	$(DO_CC)
-
-$(B)/client/q3ide_wall_score.o: $(Q3IDEDIR)/q3ide_wall_score.c
-	$(DO_CC)
-
-$(B)/client/q3ide_room_layout.o: $(Q3IDEDIR)/q3ide_room_layout.c
 	$(DO_CC)
 
 $(B)/client/q3ide_entity.o: $(Q3IDEDIR)/q3ide_entity.c
