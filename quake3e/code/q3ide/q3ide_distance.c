@@ -27,12 +27,3 @@ void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz)
 			win->status = Q3IDE_WIN_STATUS_IDLE;
 	}
 }
-
-void Q3IDE_WM_SetHover(int idx, float hover_t)
-{
-	if (idx < 0 || idx >= Q3IDE_MAX_WIN)
-		return;
-	if (!q3ide_wm.wins[idx].active)
-		return;
-	q3ide_wm.wins[idx].hover_t = hover_t;
-}

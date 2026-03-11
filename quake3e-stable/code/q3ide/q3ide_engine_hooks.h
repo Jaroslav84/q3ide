@@ -32,13 +32,9 @@ void Q3IDE_OnVidRestart(void);
  * Returns 1 if q3ide consumed the key (caller should return immediately). */
 qboolean Q3IDE_OnKeyEvent(int key, qboolean down);
 
-/* Returns 1 if q3ide is consuming input (Pointer or Keyboard mode).
+/* Returns 1 if q3ide is consuming input.
  * Called from CL_CreateNewCommands to suppress BUTTON_ATTACK. */
 qboolean Q3IDE_ConsumesInput(void);
-
-/* Called from CL_CreateNewCommands before BUTTON_ATTACK is cleared.
- * Saves the raw button state so Q3IDE_Frame can still detect attack presses. */
-void Q3IDE_SaveRawButtons(int buttons);
 
 /*
  * Called from CG_R_RENDERSCENE in cl_cgame.c instead of re.RenderScene()
@@ -52,27 +48,16 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr);
  */
 void Q3IDE_DrawLeftOverlay(const void *refdef_ptr);
 
-/* Scan snapshot entities for the one under the crosshair; writes name into
- * q3ide_interaction.hovered_entity_name ("" when nothing found). */
-void Q3IDE_UpdateEntityHover(void);
-
-/* Draw red laser beams from player eye to all active windows (hold K). */
-void Q3IDE_DrawLasers(const void *refdef_ptr);
-/* Draw brown rope from player to grapple point when rope mode (type 1) active. */
-void Q3IDE_DrawGrappleRope(const void *refdef_ptr);
+/* Show a temporary amber message at the top-centre of the viewport (duration_ms). */
+void Q3IDE_SetHudMsg(const char *msg, int duration_ms);
+/* Draw the current HUD message if not expired — call before re.RenderScene. */
+void Q3IDE_DrawHudMsg(const void *refdef_ptr);
 
 /* Internal frame state — shared between q3ide_hooks*.c TUs. */
 typedef struct {
 	qboolean initialized;
 	qboolean autoexec_done;
 	int autoexec_delay;
-	float last_yaw, last_pitch;
-	int raw_buttons;
-	int last_health;
-	int portal_cooldown;
-	int portal2_cooldown;
-	int grapple_tele_cooldown;
-	int stream_last_area;
 } q3ide_hooks_state_t;
 
 #endif /* Q3IDE_HOOKS_H */

@@ -56,8 +56,7 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 	if (n <= 1) {
 		if (!(fd->rdflags & RDF_NOWORLDMODEL)) {
 			Q3IDE_WM_AddPolys();
-			Q3IDE_DrawLasers(fd);
-			Q3IDE_DrawGrappleRope(fd);
+			Q3IDE_DrawHudMsg(fd);
 		}
 		re.RenderScene(fd);
 		return;
@@ -111,8 +110,7 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		/* Tell RE_RenderScene how many passes remain so it preserves entities. */
 		Cvar_Set("r_multiViewRemaining", va("%d", n - i - 1));
 		Q3IDE_WM_AddPolys();
-		Q3IDE_DrawLasers(&view);
-		Q3IDE_DrawGrappleRope(&view);
+		Q3IDE_DrawHudMsg(&view);
 		/* Left monitor (sorted[0]): draw keybinding cheat sheet overlay */
 		if (i == 0)
 			Q3IDE_DrawLeftOverlay(&view);

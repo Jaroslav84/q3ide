@@ -7,20 +7,24 @@
 #include "q3ide_log.h"
 #include "q3ide_params.h"
 #include "q3ide_win_mngr_internal.h"
-#include "q3ide_interaction.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <string.h>
 
+/* Runtime params singleton — read-only everywhere else. */
+const q3ide_params_t q3ide_params = {
+    .borderThickness = 0.421875f,
+    .windowDepth = 1.0f,
+    .accentColor = {160, 0, 0},
+};
+
 /* Geometry helpers — q3ide_geometry.c */
-extern void q3ide_add_portal_frame(q3ide_win_t *win, qhandle_t shader);
 extern void q3ide_add_frame(q3ide_win_t *win, qboolean highlighted);
 extern void q3ide_add_poly(q3ide_win_t *win);
-extern void q3ide_add_blood_splat(q3ide_win_t *win);
 
-/* Shoot-to-place selection — q3ide_portal.c */
+/* Shoot-to-place selection — q3ide_engine.c */
 extern int q3ide_selected_win;
-
+extern int q3ide_aimed_win;
 
 
 /* ── Shader invalidation ─────────────────────────────────────── */
@@ -29,7 +33,7 @@ void Q3IDE_WM_InvalidateShaders(void)
 {
 	int i;
 	q3ide_wm.border_shader = 0;
-	q3ide_wm.edge_shader   = 0;
+	q3ide_wm.edge_shader = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		q3ide_wm.wins[i].shader = 0;
 }
@@ -43,10 +47,13 @@ void Q3IDE_WM_AddPolys(void)
 	if (!re.AddPolyToScene)
 		return;
 
+	if (q3ide_wm.wins_hidden)
+		return;
+
 	if (!q3ide_wm.border_shader && re.RegisterShader && re.UploadCinematic) {
-		/* Slot 63: accent colour (Quake red) — borders, splats, lasers. */
-		byte accent_bgra[4] = {q3ide_params.accentColor[2], q3ide_params.accentColor[1],
-		                       q3ide_params.accentColor[0], 255};
+		/* Slot 63: accent colour (Quake red) — borders. */
+		byte accent_bgra[4] = {q3ide_params.accentColor[2], q3ide_params.accentColor[1], q3ide_params.accentColor[0],
+		                       255};
 		re.UploadCinematic(1, 1, 1, 1, accent_bgra, 63, qtrue, 0x80E1);
 		q3ide_wm.border_shader = re.RegisterShader("q3ide/win63");
 		/* Slot 62: solid black — TV chassis edge quads. */
@@ -60,17 +67,19 @@ void Q3IDE_WM_AddPolys(void)
 		if (!win->active)
 			continue;
 
-		/* LOS cached once per frame in Q3IDE_Frame — no per-pass trace needed. */
-		if (!win->los_visible)
+		/* LOS cached once per frame in Q3IDE_Frame — no per-pass trace needed.
+		 * Skip LOS for overview windows: grid floats map-independently. */
+		if (!win->los_visible && !win->in_overview)
 			continue;
 
 		{
-			qboolean highlighted = (i == q3ide_interaction.focused_win || i == q3ide_selected_win);
+			qboolean highlighted = (i == q3ide_selected_win || i == q3ide_aimed_win);
+#if !Q3IDE_DISABLE_EDGE_QUADS
 			q3ide_add_frame(win, highlighted);
+#endif
 			if (!win->shader)
 				continue;
 			q3ide_add_poly(win);
-			q3ide_add_blood_splat(win);
 		}
 	}
 }
@@ -108,7 +117,10 @@ void Q3IDE_WM_CmdDetachAll(void)
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active || !w->is_tunnel)
 			continue;
-		if (w->owns_stream && q3ide_win_mngr.cap_stop)
+		/* Always stop — display captures have owns_stream=qfalse but their
+		 * stream lives in Rust display_streams; leaving it running causes
+		 * AlreadyCapturing on the next cap_start_disp call. */
+		if (q3ide_win_mngr.cap_stop)
 			q3ide_win_mngr.cap_stop(q3ide_win_mngr.cap, w->capture_id);
 		memset(w, 0, sizeof(q3ide_win_t));
 		q3ide_wm.num_active--;
@@ -121,8 +133,8 @@ void Q3IDE_WM_CmdStatus(void)
 {
 	int i, count = 0;
 	static const char *snames[] = {"INACTIVE", "ACTIVE", "IDLE", "ERROR"};
-	Com_Printf("q3ide status: dylib=%s cap=%s auto_attach=%d num_active=%d\n", q3ide_wm.dylib ? "yes" : "no",
-	           q3ide_win_mngr.cap ? "yes" : "no", q3ide_wm.auto_attach, q3ide_wm.num_active);
+	Com_Printf("q3ide status: dylib=%s cap=%s num_active=%d\n", q3ide_wm.dylib ? "yes" : "no",
+	           q3ide_win_mngr.cap ? "yes" : "no", q3ide_wm.num_active);
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (!w->active)

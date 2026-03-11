@@ -14,6 +14,12 @@
 extern int q3ide_selected_win; /* wins[] index, -1 = none selected */
 extern int q3ide_select_time;  /* Sys_Milliseconds() when selected */
 extern int q3ide_last_attack;  /* previous frame BUTTON_ATTACK state */
+extern int q3ide_aimed_win;    /* window under crosshair this frame, -1 = none */
+
+/* Placement cooldown: suppress window selection for Q3IDE_PLACE_COOLDOWN_MS after
+ * placing a window, so rapid wall shots keep placing new windows instead of
+ * accidentally entering reposition mode on the freshly-placed one. */
+static int q3ide_place_cooldown_end = 0;
 
 /* Rapid-fire weapons: machinegun=2, lightning=6, plasmagun=8 */
 static qboolean q3ide_is_rapid_fire(int weapon)
@@ -28,8 +34,24 @@ void q3ide_shoot_frame(void)
 	int buttons, attacking, hit;
 	qboolean rapid_hold;
 
-	if (cls.state != CA_ACTIVE)
+	if (cls.state != CA_ACTIVE) {
+		q3ide_aimed_win = -1;
 		return;
+	}
+
+	/* Compute eye + forward every frame — needed for aim highlight and shoot. */
+	VectorCopy(cl.snap.ps.origin, eye);
+	eye[2] += cl.snap.ps.viewheight;
+	p = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
+	y = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
+	fwd[0] = cosf(p) * cosf(y);
+	fwd[1] = cosf(p) * sinf(y);
+	fwd[2] = -sinf(p);
+
+	/* Aim highlight already computed in Q3IDE_Frame before this call — reuse it.
+	 * Suppress window hits during placement cooldown so rapid wall shots keep
+	 * spawning new windows rather than selecting a freshly-placed one. */
+	hit = (Sys_Milliseconds() < q3ide_place_cooldown_end) ? -1 : q3ide_aimed_win;
 
 	buttons = cl.cmds[cl.cmdNumber & CMD_MASK].buttons;
 	attacking = buttons & BUTTON_ATTACK;
@@ -51,16 +73,6 @@ void q3ide_shoot_frame(void)
 		return;
 	}
 	q3ide_last_attack = attacking;
-
-	VectorCopy(cl.snap.ps.origin, eye);
-	eye[2] += cl.snap.ps.viewheight;
-	p = cl.snap.ps.viewangles[PITCH] * (float) M_PI / 180.0f;
-	y = cl.snap.ps.viewangles[YAW] * (float) M_PI / 180.0f;
-	fwd[0] = cosf(p) * cosf(y);
-	fwd[1] = cosf(p) * sinf(y);
-	fwd[2] = -sinf(p);
-
-	hit = Q3IDE_WM_TraceWindowHit(eye, fwd, -1);
 
 	if (hit >= 0 && hit == q3ide_selected_win) {
 		/* Re-hit the already-selected window: cycle to the next one behind it */
@@ -93,9 +105,9 @@ void q3ide_shoot_frame(void)
 		} else {
 			/* No wall — move to floating position in front */
 			vec3_t float_pos, float_normal;
-			float_pos[0]    = eye[0] + fwd[0] * 300.0f;
-			float_pos[1]    = eye[1] + fwd[1] * 300.0f;
-			float_pos[2]    = eye[2];
+			float_pos[0] = eye[0] + fwd[0] * 300.0f;
+			float_pos[1] = eye[1] + fwd[1] * 300.0f;
+			float_pos[2] = eye[2];
 			float_normal[0] = -fwd[0];
 			float_normal[1] = -fwd[1];
 			float_normal[2] = 0.0f;
@@ -104,13 +116,19 @@ void q3ide_shoot_frame(void)
 		}
 		q3ide_select_time = Sys_Milliseconds(); /* restart 3s window — keep shooting to keep moving */
 		Cbuf_AddText("give ammo\n");
-	} else if (hit < 0 && q3ide_selected_win < 0 && Q3IDE_WM_PendingCount() > 0) {
-		/* No window hit, no selection — pop next pending window onto this wall. */
+	} else if (hit < 0 && q3ide_selected_win < 0) {
+		/* No window hit, no selection — pop next pending window onto this wall.
+		 * Auto-populate queue on first shot (lazy init — cap may not be ready at startup). */
 		vec3_t wall_pos, wall_normal;
 		if (Q3IDE_WM_TraceWall(eye, fwd, wall_pos, wall_normal)) {
 			wall_pos[2] = eye[2];
-			Q3IDE_WM_AttachNextPending(wall_pos, wall_normal);
-			Cbuf_AddText("give ammo\n");
+			if (Q3IDE_WM_PendingCount() == 0)
+				Q3IDE_WM_PopulateQueue(qfalse);
+			if (Q3IDE_WM_PendingCount() > 0) {
+				Q3IDE_WM_AttachNextPending(wall_pos, wall_normal);
+				q3ide_place_cooldown_end = Sys_Milliseconds() + Q3IDE_PLACE_COOLDOWN_MS;
+				Cbuf_AddText("give ammo\n");
+			}
 		}
 	}
 }

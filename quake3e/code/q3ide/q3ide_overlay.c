@@ -41,8 +41,8 @@ void q3ide_ovl_char(float ox, float oy, float oz, const float *rx, const float *
 		v[i].xyz[0] = ox + rx[0] * rsc[i] + ux[0] * usc[i];
 		v[i].xyz[1] = oy + rx[1] * rsc[i] + ux[1] * usc[i];
 		v[i].xyz[2] = oz + rx[2] * rsc[i] + ux[2] * usc[i];
-		v[i].st[0]  = uv_s[i];
-		v[i].st[1]  = uv_t[i];
+		v[i].st[0] = uv_s[i];
+		v[i].st[1] = uv_t[i];
 		v[i].modulate.rgba[0] = r;
 		v[i].modulate.rgba[1] = g;
 		v[i].modulate.rgba[2] = b;
@@ -65,21 +65,21 @@ void q3ide_ovl_str(float ox, float oy, float oz, const float *rx, const float *u
 void q3ide_ovl_char_sm(float ox, float oy, float oz, const float *rx, const float *ux, int ch, byte r, byte g, byte b)
 {
 	polyVert_t v[4];
-	float      cw  = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
-	float      chh = Q3IDE_OVL_CHAR_H * Q3IDE_OVL_SMALL_SCALE;
-	float      col = (float)(ch & 15);
-	float      row = (float)(ch >> 4);
-	float      u0 = col / 16.0f, u1 = (col + 1.0f) / 16.0f;
-	float      t0 = row / 16.0f, t1 = (row + 1.0f) / 16.0f;
+	float cw = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
+	float chh = Q3IDE_OVL_CHAR_H * Q3IDE_OVL_SMALL_SCALE;
+	float col = (float) (ch & 15);
+	float row = (float) (ch >> 4);
+	float u0 = col / 16.0f, u1 = (col + 1.0f) / 16.0f;
+	float t0 = row / 16.0f, t1 = (row + 1.0f) / 16.0f;
 	static const float rsc[4] = {0.0f, 1.0f, 1.0f, 0.0f};
 	static const float usc[4] = {0.0f, 0.0f, -1.0f, -1.0f};
 	int k;
 	for (k = 0; k < 4; k++) {
-		v[k].xyz[0]          = ox + rx[0] * cw * rsc[k] + ux[0] * chh * usc[k];
-		v[k].xyz[1]          = oy + rx[1] * cw * rsc[k] + ux[1] * chh * usc[k];
-		v[k].xyz[2]          = oz + rx[2] * cw * rsc[k] + ux[2] * chh * usc[k];
-		v[k].st[0]           = (k == 0 || k == 3) ? u0 : u1;
-		v[k].st[1]           = (k < 2) ? t0 : t1;
+		v[k].xyz[0] = ox + rx[0] * cw * rsc[k] + ux[0] * chh * usc[k];
+		v[k].xyz[1] = oy + rx[1] * cw * rsc[k] + ux[1] * chh * usc[k];
+		v[k].xyz[2] = oz + rx[2] * cw * rsc[k] + ux[2] * chh * usc[k];
+		v[k].st[0] = (k == 0 || k == 3) ? u0 : u1;
+		v[k].st[1] = (k < 2) ? t0 : t1;
 		v[k].modulate.rgba[0] = r;
 		v[k].modulate.rgba[1] = g;
 		v[k].modulate.rgba[2] = b;
@@ -112,8 +112,8 @@ void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float
 			v[k].xyz[0] = bx + rx[0] * cw * rsc[k] + ux[0] * ch * usc[k];
 			v[k].xyz[1] = by + rx[1] * cw * rsc[k] + ux[1] * ch * usc[k];
 			v[k].xyz[2] = bz + rx[2] * cw * rsc[k] + ux[2] * ch * usc[k];
-			v[k].st[0]  = (k == 0 || k == 3) ? u0 : u1;
-			v[k].st[1]  = (k < 2) ? t0 : t1;
+			v[k].st[0] = (k == 0 || k == 3) ? u0 : u1;
+			v[k].st[1] = (k < 2) ? t0 : t1;
 			v[k].modulate.rgba[0] = r;
 			v[k].modulate.rgba[1] = g;
 			v[k].modulate.rgba[2] = b;
@@ -125,7 +125,7 @@ void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float
 
 /* ── HUD message banner ─────────────────────────────────────────── */
 
-static char               g_hud_msg[64];
+static char g_hud_msg[64];
 static unsigned long long g_hud_msg_expire_ms;
 
 void Q3IDE_SetHudMsg(const char *msg, int duration_ms)
@@ -158,10 +158,10 @@ void Q3IDE_DrawHudMsg(const void *refdef_ptr)
 	if (!g_ovl_chars || !re.AddPolyToScene)
 		return;
 
-	len     = (int) strlen(g_hud_msg);
+	len = (int) strlen(g_hud_msg);
 	total_w = (float) len * Q3IDE_OVL_CHAR_W;
-	ox      = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST - rx[0] * total_w * 0.5f +
-	          fd->viewaxis[2][0] * Q3IDE_OVL_DIST * 0.42f;
+	ox = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST - rx[0] * total_w * 0.5f +
+	     fd->viewaxis[2][0] * Q3IDE_OVL_DIST * 0.42f;
 	oy = fd->vieworg[1] + fd->viewaxis[0][1] * Q3IDE_OVL_DIST - rx[1] * total_w * 0.5f +
 	     fd->viewaxis[2][1] * Q3IDE_OVL_DIST * 0.42f;
 	oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST - rx[2] * total_w * 0.5f +

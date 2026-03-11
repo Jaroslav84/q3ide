@@ -961,8 +961,12 @@ RB_SetGL2D
 void RB_SetGL2D( void ) {
 	backEnd.projection2D = qtrue;
 
+// q3ide [BEGIN] Center Monitor 2D - code/renderer/tr_backend.c
+// In multi-monitor mode, clamp 2D viewport to center monitor so HUD and menus stay centered.
 #ifdef USE_Q3IDE
-	/* Multi-monitor: always constrain 2D (HUD, console, menus) to center screen. */
+	/* Multi-monitor: constrain all 2D (HUD + UI/menus) to center monitor.
+	 * cls.glconfig.vidWidth is overridden to cw at init, so Q3 coordinates
+	 * are already in 0..cw space — GL_Ortho(0,cw,ch) maps them correctly. */
 	if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
 		int cx = ri.Cvar_VariableIntegerValue( "r_mmCenterX" );
 		int cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
@@ -983,6 +987,7 @@ void RB_SetGL2D( void ) {
 		}
 	}
 #endif
+// q3ide [END] Center Monitor 2D
 
 	// set 2D virtual screen size
 	qglViewport( 0, 0, glConfig.vidWidth, glConfig.vidHeight );
@@ -1036,7 +1041,10 @@ void RE_StretchRaw( int x, int y, int w, int h, int cols, int rows, byte *data, 
 		ri.Error (ERR_DROP, "Draw_StretchRaw: size not a power of 2: %i by %i", cols, rows);
 	}
 
+	// q3ide [BEGIN] Cinematic Format - code/renderer/tr_backend.c
+	// Pass GL_RGBA format explicitly for window stream uploads.
 	RE_UploadCinematic( w, h, cols, rows, data, client, dirty, 0x1908 /* GL_RGBA */ );
+	// q3ide [END] Cinematic Format
 
 	if ( r_speeds->integer ) {
 		end = ri.Milliseconds();
@@ -1048,6 +1056,8 @@ void RE_StretchRaw( int x, int y, int w, int h, int cols, int rows, byte *data, 
 }
 
 
+// q3ide [BEGIN] Cinematic Format - code/renderer/tr_backend.c
+// Added format parameter to RE_UploadCinematic to allow Q3IDE to specify GL_RGBA for window streams.
 void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty, unsigned int format ) {
 
 	image_t *image;
@@ -1075,6 +1085,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 		// it and don't try and do a texture compression
 		qglTexSubImage2D( GL_TEXTURE_2D, 0, 0, 0, cols, rows, format, GL_UNSIGNED_BYTE, data );
 	}
+// q3ide [END] Cinematic Format
 }
 
 

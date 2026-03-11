@@ -132,9 +132,10 @@ impl CaptureRouter {
             return CaptureMode::Dedicated;
         }
 
-        // Unknown app: start composite, detector will watch.
-        log::info!("router: '{}' → COMPOSITE (unknown, detector active)", app_name);
-        CaptureMode::Composite
+        // Unknown app → DEDICATED. Composite only works when no GPU app covers the display.
+        // Mail, Finder, Calendar etc. behind Cursor would show Cursor's pixels on composite.
+        log::info!("router: '{}' → DEDICATED (unknown app, safe default)", app_name);
+        CaptureMode::Dedicated
     }
 
     /// Sample up to 5 pixels spread across the frame.

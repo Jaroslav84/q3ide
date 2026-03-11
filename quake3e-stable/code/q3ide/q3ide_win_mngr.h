@@ -43,11 +43,28 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_cl
 /* Find slot index of a window by capture id; returns -1 if not found. */
 int Q3IDE_WM_FindById(unsigned int cid);
 
-/* Pending-spawn queue (in q3ide_commands_attach.c).
+/* Pause/resume frame delivery for all streams (";"-hold). */
+void Q3IDE_WM_PauseStreams(void);
+void Q3IDE_WM_ResumeStreams(void);
+
+/* Hide/show all windows visually ("H" tap=toggle, hold=temp). */
+void Q3IDE_WM_HideWins(void);
+void Q3IDE_WM_ShowWins(void);
+qboolean Q3IDE_WM_WinsHidden(void);
+
+/* Pending-spawn queue (in q3ide_attach_filter.c).
  * Returns number of items waiting; pops+attaches the next one at pos/norm. */
-int      Q3IDE_WM_PendingCount(void);
+int Q3IDE_WM_PendingCount(void);
 qboolean Q3IDE_WM_AttachNextPending(vec3_t pos, vec3_t norm);
-int      Q3IDE_StreamCount(void); /* active per-window SCK streams */
+/* Scan OS window/display list and fill queue. displays_only=qtrue: only displays. */
+void Q3IDE_WM_PopulateQueue(qboolean displays_only);
+/* Add a single window to the pending queue (e.g. from PollChanges is_added==1). */
+void Q3IDE_WM_EnqueueWindow(unsigned int id, float aspect, const char *label);
+/* Junk check using only app_name (for change events that lack window title). */
+qboolean Q3IDE_IsJunkAppName(const char *app_name);
+/* Attach all pending items at pos/norm; returns count attached. */
+int Q3IDE_WM_FlushAllPending(vec3_t pos, vec3_t norm);
+int Q3IDE_StreamCount(void); /* active per-window SCK streams */
 
 /* Simple commands (in q3ide_win_mngr.c) */
 void Q3IDE_WM_CmdList(void);
@@ -58,8 +75,6 @@ void Q3IDE_WM_CmdStatus(void);
 qboolean Q3IDE_WM_DetachById(unsigned int capture_id);
 
 /* Complex commands (in q3ide_commands.c) */
-void Q3IDE_WM_CmdAttach(void);
-void Q3IDE_WM_CmdDesktop(void);
 
 /* Poll for new/closed macOS windows and auto-attach/detach. (in q3ide_commands.c) */
 void Q3IDE_WM_PollChanges(void);
@@ -68,9 +83,6 @@ void Q3IDE_WM_DrainPendingChanges(void);
 
 /* Called from Q3IDE_Frame with current player eye position */
 void Q3IDE_WM_UpdatePlayerPos(float px, float py, float pz);
-
-/* Update hover state for a specific window (called from interaction system) */
-void Q3IDE_WM_SetHover(int idx, float hover_t);
 
 /* Set the display label for a window (called after attach). */
 void Q3IDE_WM_SetLabel(unsigned int capture_id, const char *label);

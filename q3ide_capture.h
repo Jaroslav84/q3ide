@@ -394,19 +394,19 @@ void q3ide_inject_key(struct Q3ideQ3ideCapture *_handle,
 q3ide_ void q3ide_raise_window(struct Q3ideQ3ideCapture *handle, unsigned int window_id);
 
 /**
- * Pause frame delivery for all streams (hold ";").
- * SCStreams stay warm; get_frame() returns None → no texture uploads.
+ * Pause frame delivery — get_frame() returns None, no texture uploads, FPS restored.
+ * SCStreams stay warm; last frame frozen on GPU.
  *
  * # Safety
- * `handle` is unused; present for ABI consistency.
+ * `_handle` unused; present for ABI consistency.
  */
 q3ide_ void q3ide_pause_all_streams(struct Q3ideQ3ideCapture *_handle);
 
 /**
- * Resume frame delivery for all streams (release ";").
+ * Resume frame delivery.
  *
  * # Safety
- * `handle` is unused; present for ABI consistency.
+ * `_handle` unused; present for ABI consistency.
  */
 q3ide_ void q3ide_resume_all_streams(struct Q3ideQ3ideCapture *_handle);
 

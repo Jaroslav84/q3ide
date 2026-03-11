@@ -13,17 +13,16 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
-/// Global pause flag — set by q3ide_pause_all_streams / q3ide_resume_all_streams.
-/// When true, get_frame() returns None for all windows (no texture uploads).
-/// SCStreams stay warm; handlers still fire but frames are discarded at get_frame().
+/// When true, get_frame() returns None → no texture uploads → FPS restored.
+/// SCStreams stay warm; last frame frozen on GPU.
 static STREAMS_PAUSED: AtomicBool = AtomicBool::new(false);
 
 pub(crate) fn set_streams_paused(paused: bool) {
     STREAMS_PAUSED.store(paused, Ordering::Relaxed);
     log::info!("streams_paused={}", paused);
 }
-use std::sync::{Arc, Mutex};
 
 use screencapturekit::prelude::*;
 use screencapturekit::SCFrameStatus;
@@ -343,11 +342,28 @@ struct DetectorState {
 
 // ─── Backend ──────────────────────────────────────────────────────────────────
 
+/// Cached display geometry (points + pixels) for zero-cost composite crop updates.
+/// Populated when a composite session starts; stale if display resolution changes
+/// (rare — session restart picks up new values via start_composite).
+struct DisplayGeomCache {
+    /// Display origin in Quartz y-up points.
+    dx: f64,
+    dy: f64,
+    /// Display size in points.
+    dpw: f64,
+    dph: f64,
+    /// Display size in pixels.
+    dw: u32,
+    dh: u32,
+}
+
 pub struct SCKBackend {
     /// COMPOSITE: per-display streams (shared by windows on that display).
     composite_sessions: HashMap<u32, CompositeSession>,
     /// COMPOSITE: maps window_id → crop info + display_id.
     window_map: HashMap<u32, WindowCompositeInfo>,
+    /// COMPOSITE: cached display geometry — avoids re-fetching SCShareableContent on crop update.
+    display_geom: HashMap<u32, DisplayGeomCache>,
     /// COMPOSITE: detector state per window (interior mutability for get_frame).
     detector: Mutex<HashMap<u32, DetectorState>>,
     /// DEDICATED: per-window streams.
@@ -362,6 +378,7 @@ impl SCKBackend {
         Ok(Self {
             composite_sessions: HashMap::new(),
             window_map: HashMap::new(),
+            display_geom: HashMap::new(),
             detector: Mutex::new(HashMap::new()),
             dedicated_sessions: HashMap::new(),
             display_streams: HashMap::new(),
@@ -410,6 +427,9 @@ impl SCKBackend {
         );
 
         self.window_map.insert(window_id, WindowCompositeInfo { display_id, crop_x, crop_y, crop_w, crop_h });
+
+        // Cache display geometry for this display so future crop updates skip SCShareableContent::get().
+        self.display_geom.entry(display_id).or_insert(DisplayGeomCache { dx, dy, dpw, dph, dw, dh });
 
         // Init detector state for this window.
         if let Ok(mut det) = self.detector.lock() {
@@ -628,7 +648,8 @@ impl CaptureBackend for SCKBackend {
 
     fn start_display_capture(&mut self, display_id: u32, target_fps: i32) -> Result<()> {
         if self.display_streams.contains_key(&display_id) {
-            return Err(CaptureError::AlreadyCapturing(display_id));
+            log::info!("display: already running id={}, reusing", display_id);
+            return Ok(());
         }
         if !crate::has_screen_recording_permission() {
             return Err(CaptureError::PermissionDenied);
@@ -778,53 +799,29 @@ impl CaptureBackend for SCKBackend {
         s.latest_frame.lock().ok()?.clone()
     }
 
-    fn update_window_crop(&mut self, window_id: u32) {
+    fn update_composite_crop(&mut self, window_id: u32, wx: f64, wy: f64, ww: f64, wh: f64) {
         // Only composite windows have a crop rect to update.
-        let info = match self.window_map.get(&window_id) {
-            Some(i) => i,
+        let (display_id,) = match self.window_map.get(&window_id) {
+            Some(i) => (i.display_id,),
             None => return, // dedicated or unknown — no-op
         };
-        let display_id = info.display_id;
 
-        let content = match SCShareableContent::get() {
-            Ok(c) => c,
-            Err(e) => {
-                log::warn!("update_window_crop: SCShareableContent failed: {}", e);
-                return;
-            }
-        };
-
-        let windows = content.windows();
-        let sc_window = match windows.iter().find(|w| w.window_id() == window_id) {
-            Some(w) => w,
+        // Use cached display geometry — avoids calling SCShareableContent::get() per window.
+        let geom = match self.display_geom.get(&display_id) {
+            Some(g) => g,
             None => {
-                log::warn!("update_window_crop: wid={} not found in SCK", window_id);
+                log::warn!("update_composite_crop: wid={} display={} not in geom cache", window_id, display_id);
                 return;
             }
         };
 
-        let displays = content.displays();
-        let wf = sc_window.frame();
-        let (wx, wy, ww, wh) = (wf.origin().x, wf.origin().y, wf.size().width, wf.size().height);
+        let scale_x = geom.dw as f64 / geom.dpw.max(1.0);
+        let scale_y = geom.dh as f64 / geom.dph.max(1.0);
 
-        let display = match displays.iter().find(|d| d.display_id() == display_id) {
-            Some(d) => d,
-            None => {
-                log::warn!("update_window_crop: display_id={} not found", display_id);
-                return;
-            }
-        };
-
-        let df = display.frame();
-        let (dx, dy, dpw, dph) = (df.origin().x, df.origin().y, df.size().width, df.size().height);
-        let (dw, dh) = (display.width(), display.height());
-        let scale_x = dw as f64 / dpw.max(1.0);
-        let scale_y = dh as f64 / dph.max(1.0);
-
-        let rel_x = wx - dx;
-        let rel_y = wy - dy;
+        let rel_x = wx - geom.dx;
+        let rel_y = wy - geom.dy;
         let crop_x = (rel_x * scale_x).max(0.0) as u32;
-        let crop_y = ((dph - (rel_y + wh)) * scale_y).max(0.0) as u32;
+        let crop_y = ((geom.dph - (rel_y + wh)) * scale_y).max(0.0) as u32;
         let crop_w = (ww * scale_x) as u32;
         let crop_h = (wh * scale_y) as u32;
 
@@ -843,6 +840,7 @@ impl CaptureBackend for SCKBackend {
 
     fn shutdown(&mut self) {
         self.window_map.clear();
+        self.display_geom.clear();
         if let Ok(mut det) = self.detector.lock() { det.clear(); }
         for (did, s) in self.composite_sessions.drain() {
             let _ = s.stream.stop_capture();

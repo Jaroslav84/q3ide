@@ -84,7 +84,10 @@ typedef struct {
 
 	// Draw images for cinematic rendering, pass as 32 bit rgba
 	void	(*DrawStretchRaw)( int x, int y, int w, int h, int cols, int rows, byte *data, int client, qboolean dirty );
+	// q3ide [BEGIN] Cinematic Format - code/renderercommon/tr_public.h
+	// Added format parameter to allow specifying pixel format (e.g., GL_RGBA) for window stream uploads.
 	void	(*UploadCinematic)( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty, unsigned int format );
+	// q3ide [END] Cinematic Format
 
 	void	(*BeginFrame)( stereoFrame_t stereoFrame );
 

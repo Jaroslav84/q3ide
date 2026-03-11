@@ -14,9 +14,16 @@ int q3ide_aas_point_area(const float *point)
 {
 	int nodenum = 1; /* root node */
 	while (nodenum > 0) {
-		const aas_node_t *node = &g_aas.nodes[nodenum];
-		const aas_plane_t *plane = &g_aas.planes[node->planenum];
-		float d = plane->normal[0] * point[0] + plane->normal[1] * point[1] + plane->normal[2] * point[2] - plane->dist;
+		const aas_node_t *node;
+		const aas_plane_t *plane;
+		float d;
+		if (nodenum >= g_aas.num_nodes)
+			return 0; /* corrupt AAS — bail */
+		node = &g_aas.nodes[nodenum];
+		if (node->planenum < 0 || node->planenum >= g_aas.num_planes)
+			return 0; /* corrupt AAS — bail */
+		plane = &g_aas.planes[node->planenum];
+		d = plane->normal[0] * point[0] + plane->normal[1] * point[1] + plane->normal[2] * point[2] - plane->dist;
 		nodenum = node->children[d < 0 ? 1 : 0];
 	}
 	if (nodenum == 0)

@@ -1424,7 +1424,10 @@ void	GL_Cull( cullType_t cullType );
 #define CLS_NORMAL_ARRAY						0x00000004
 
 void		RE_StretchRaw( int x, int y, int w, int h, int cols, int rows, byte *data, int client, qboolean dirty );
+// q3ide [BEGIN] Cinematic Format - code/renderer/tr_local.h
+// Added format parameter to specify pixel format for window stream uploads.
 void		RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty, unsigned int format );
+// q3ide [END] Cinematic Format
 
 void		RE_BeginFrame( stereoFrame_t stereoFrame );
 void		RE_BeginRegistration( glconfig_t *glconfig );

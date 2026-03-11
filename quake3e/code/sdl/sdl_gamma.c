@@ -29,9 +29,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #include "../client/client.h"
 #include "sdl_glw.h"
 
+// q3ide [BEGIN] Gamma Includes - code/sdl/sdl_gamma.c
+// Include CoreGraphics for multi-display gamma synchronization on macOS.
 #if defined(USE_Q3IDE) && defined(MACOS_X)
 #include <CoreGraphics/CoreGraphics.h>
 #endif
+// q3ide [END] Gamma Includes
 
 static Uint16 r[256];
 static Uint16 g[256];
@@ -116,6 +119,8 @@ void GLimp_SetGamma( unsigned char red[256], unsigned char green[256], unsigned 
 		Com_DPrintf( "SDL_SetWindowGammaRamp() failed: %s\n", SDL_GetError() );
 	}
 
+// q3ide [BEGIN] Multi-Display Gamma - code/sdl/sdl_gamma.c
+// Apply gamma correction to all displays in multi-monitor mode for consistent brightness.
 #if defined(USE_Q3IDE) && defined(MACOS_X)
 	/* SDL_SetWindowGammaRamp only touches the display the window is on.
 	 * In multi-monitor mode, broadcast the same LUT to all active displays
@@ -140,6 +145,7 @@ void GLimp_SetGamma( unsigned char red[256], unsigned char green[256], unsigned 
 		}
 	}
 #endif
+// q3ide [END] Multi-Display Gamma
 }
 
 

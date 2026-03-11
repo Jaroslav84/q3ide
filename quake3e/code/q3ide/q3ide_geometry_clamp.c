@@ -119,7 +119,7 @@ int Q3IDE_WM_TraceWindowHit(const vec3_t start, const vec3_t dir, int skip_idx)
 	 * Works for walls (normal mostly horizontal) and is intentionally simple.
 	 */
 	int i, best = -1;
-	float best_t = 512.0f;
+	float best_t = 1e9f; /* no distance limit — highlight works from any range */
 
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
@@ -147,8 +147,8 @@ int Q3IDE_WM_TraceWindowHit(const vec3_t start, const vec3_t dir, int skip_idx)
 		hit[2] = start[2] + dir[2] * t;
 
 		/* Same basis as q3ide_win_basis() — XY projection of normal. */
-		nx        = win->normal[0];
-		ny        = win->normal[1];
+		nx = win->normal[0];
+		ny = win->normal[1];
 		horiz_len = sqrtf(nx * nx + ny * ny);
 		if (horiz_len > 0.01f) {
 			right[0] = -ny / horiz_len;
@@ -171,7 +171,7 @@ int Q3IDE_WM_TraceWindowHit(const vec3_t start, const vec3_t dir, int skip_idx)
 
 		if (fabsf(lx) <= hw && fabsf(ly) <= hh) {
 			best_t = t;
-			best   = i;
+			best = i;
 		}
 	}
 	return best;

@@ -987,8 +987,11 @@ int main( int argc, const char* argv[] )
 	int   len, i;
 	tty_err	err;
 
+// q3ide [BEGIN] Unbuffered Stdout - code/unix/unix_main.c
+// Disable stdout buffering so logs are visible immediately when piped to remote_api.py.
 	/* Unbuffered stdout so all output is visible even on crash (pipe to API). */
 	setvbuf( stdout, NULL, _IONBF, 0 );
+// q3ide [END] Unbuffered Stdout
 
 #ifdef __APPLE__
 	// This is passed if we are launched by double-clicking

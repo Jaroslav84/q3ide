@@ -19,6 +19,8 @@ MUSIC_ON=false
 LEVEL=""
 EXECUTE=""
 BOTS=""
+RELEASE_BUILD="nightbuild"
+QUEUE_ID=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -26,6 +28,7 @@ while [[ $# -gt 0 ]]; do
         --clean)        DO_CLEAN=1; shift ;;
         --api)          DO_API=1; shift ;;
         --engine-only)  DO_ENGINE_ONLY=1; shift ;;
+        --queue-id)     QUEUE_ID="$2"; shift 2 ;;
         --music)
             case "${2:-}" in
                 0|false) MUSIC_ON=false; shift 2 ;;
@@ -35,9 +38,37 @@ while [[ $# -gt 0 ]]; do
         --level)        LEVEL="$2"; shift 2 ;;
         --execute)      EXECUTE="$2"; shift 2 ;;
         --bots)         BOTS="$2"; shift 2 ;;
-        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--run] [--api] [--engine-only] [--music] [--level <map>] [--execute '<cmd>'] [--bots <n>]"; exit 1 ;;
+        --release)
+            if [ -z "${2:-}" ]; then
+                echo "--release requires a value: orig | stable | nightbuild | /path/to/quake3e-dir"
+                exit 1
+            fi
+            RELEASE_BUILD="$2"; shift 2 ;;
+        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--run] [--api] [--engine-only] [--music] [--level <map>] [--execute '<cmd>'] [--bots <n>] [--release orig|stable|nightbuild|/path]"; exit 1 ;;
     esac
 done
+
+# Header helper: every === banner includes timestamp + queue id so agents know what's building
+build_hdr() {
+    local ts; ts="$(date '+%H:%M:%S')"
+    if [ -n "$QUEUE_ID" ]; then
+        echo "=== [$ts] [q:$QUEUE_ID] $1 ==="
+    else
+        echo "=== [$ts] $1 ==="
+    fi
+}
+
+# Resolve engine source directory from --release value (alias or path)
+case "$RELEASE_BUILD" in
+    orig)       Q3E_DIR="$ROOT/quake3e-orig";   build_hdr "Release: orig (quake3e-orig)" ;;
+    stable)     Q3E_DIR="$ROOT/quake3e-stable"; build_hdr "Release: stable (quake3e-stable)" ;;
+    nightbuild) Q3E_DIR="$ROOT/quake3e";        build_hdr "Release: nightbuild (quake3e)" ;;
+    *)          Q3E_DIR="$RELEASE_BUILD";        build_hdr "Release: custom path ($Q3E_DIR)" ;;
+esac
+if [ ! -d "$Q3E_DIR" ]; then
+    echo "ERROR: Engine source directory not found: $Q3E_DIR"
+    exit 1
+fi
 
 # Detect native architecture
 ARCH="$(uname -m)"
@@ -48,7 +79,7 @@ case "$ARCH" in
     *)       echo "Unsupported arch: $ARCH"; exit 1 ;;
 esac
 
-echo "=== Detected arch: $Q3E_ARCH ==="
+build_hdr "Detected arch: $Q3E_ARCH"
 
 # 1. Build qagame + ui dylibs from ioq3 source (skipped with --engine-only)
 if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
@@ -57,14 +88,14 @@ if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
 
     # Clone ioq3 once
     if [ ! -d "$IOQ3_DIR/.git" ]; then
-        echo "=== Cloning ioquake3 (first time) ==="
+        build_hdr "Cloning ioquake3 (first time)"
         git clone --depth=1 https://github.com/ioquake/ioq3.git "$IOQ3_DIR"
     fi
 
     # Ensure grapple patch
     G_CLIENT="$IOQ3_DIR/code/game/g_client.c"
     if ! grep -q "WP_GRAPPLING_HOOK.*STAT_WEAPONS\|STAT_WEAPONS.*WP_GRAPPLING_HOOK" "$G_CLIENT" 2>/dev/null; then
-        echo "=== Applying grapple spawn patch ==="
+        build_hdr "Applying grapple spawn patch"
         sed -i.bak '/ammo\[WP_GRAPPLING_HOOK\] = -1/i\\tclient->ps.stats[STAT_WEAPONS] |= ( 1 << WP_GRAPPLING_HOOK );' "$G_CLIENT"
     fi
 
@@ -73,7 +104,7 @@ if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
     GCFLAGS="-O2 -arch ${ARCH}"
 
     # Build qagame
-    echo "=== Building qagame ==="
+    build_hdr "Building qagame"
     GAME_SRCS="g_main.c ai_chat.c ai_cmd.c ai_dmnet.c ai_dmq3.c ai_main.c ai_team.c ai_vcmd.c
         bg_misc.c bg_pmove.c bg_slidemove.c bg_lib.c
         g_active.c g_arenas.c g_bot.c g_client.c g_cmds.c g_combat.c
@@ -90,7 +121,7 @@ if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
     cp "$Q3IDE_BUILD/qagame${ARCH}.dylib" "$ROOT/baseq3/qagame.dylib"
 
     # Build ui (ui dylib)
-    echo "=== Building ui ==="
+    build_hdr "Building ui"
     UI_SRC="$IOQ3_DIR/code/q3_ui"
     UI_BUILD="$IOQ3_DIR/build_ui_q3ide"
     mkdir -p "$UI_BUILD"
@@ -128,18 +159,18 @@ fi
 
 # 2. Build the capture dylib (skip with --engine-only)
 if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
-    echo "=== Building capture dylib ==="
+    build_hdr "Building capture dylib"
     cd "$ROOT/capture"
     cargo build --release
 else
-    echo "=== Skipping capture dylib (--engine-only) ==="
+    build_hdr "Skipping capture dylib (--engine-only)"
 fi
 
 # 3. Build the engine
-echo "=== Building Quake3e engine ==="
-cd "$ROOT/quake3e"
+build_hdr "Building Quake3e engine ($RELEASE_BUILD)"
+cd "$Q3E_DIR"
 if [ "$DO_CLEAN" -eq 1 ]; then
-    echo "=== Cleaning engine build ==="
+    build_hdr "Cleaning engine build"
     make clean ARCH="$Q3E_ARCH"
 fi
 make ARCH="$Q3E_ARCH" BUILD_SERVER=0
@@ -153,22 +184,22 @@ case "$OS_NAME" in
     *)      echo "Unsupported OS: $OS_NAME"; exit 1 ;;
 esac
 
-BUILD_DIR="$ROOT/quake3e/build/release-${BUILD_OS}-${Q3E_ARCH}"
+BUILD_DIR="$Q3E_DIR/build/release-${BUILD_OS}-${Q3E_ARCH}"
 if [ ! -d "$BUILD_DIR" ]; then
     # Fallback for aarch64
-    BUILD_DIR="$ROOT/quake3e/build/release-${BUILD_OS}-aarch64"
+    BUILD_DIR="$Q3E_DIR/build/release-${BUILD_OS}-aarch64"
 fi
 if [ ! -d "$BUILD_DIR" ]; then
     echo "ERROR: Build output directory not found. Checked:"
-    echo "  - $ROOT/quake3e/build/release-${BUILD_OS}-${Q3E_ARCH}"
-    echo "  - $ROOT/quake3e/build/release-${BUILD_OS}-aarch64"
+    echo "  - $Q3E_DIR/build/release-${BUILD_OS}-${Q3E_ARCH}"
+    echo "  - $Q3E_DIR/build/release-${BUILD_OS}-aarch64"
     echo "Check make output above."
     exit 1
 fi
 
 # 4. Copy dylib/so next to the engine binary (skip if --engine-only)
 if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
-    echo "=== Copying capture library ==="
+    build_hdr "Copying capture library"
     if [ "$BUILD_OS" = "darwin" ]; then
         DYLIB_NAME="libq3ide_capture.dylib"
     else
@@ -185,7 +216,7 @@ fi
 
 # 5. Symlink baseq3 if not already there
 if [ ! -e "$BUILD_DIR/baseq3" ]; then
-    echo "=== Linking baseq3 ==="
+    build_hdr "Linking baseq3"
     ln -s "$ROOT/baseq3" "$BUILD_DIR/baseq3"
 fi
 

@@ -1,14 +1,16 @@
 /*
  * q3ide_engine.c — Public engine hook implementations.
- * Per-frame logic: q3ide_frame.c.  Portal state: q3ide_portal.c.
+ * Per-frame logic: q3ide_frame.c.
  * Contains Q3IDE_Init, Q3IDE_Shutdown, Q3IDE_AddPolysToScene, input hooks.
  */
 
 #include "q3ide_engine_hooks.h"
+#include "q3ide_hotkey.h"
 #include "q3ide_log.h"
+#include "q3ide_params.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
-#include "q3ide_interaction.h"
+#include "q3ide_view_modes.h"
 #include "q3ide_aas.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -16,14 +18,14 @@
 
 extern playerState_t *SV_GameClientNum(int num);
 
-extern q3ide_hooks_state_t q3ide_state;
-extern int q3ide_selected_win;
-extern int q3ide_last_attack;
-extern void Q3IDE_Cmd_f(void); /* command dispatcher in q3ide_console.c */
+/* Shoot-to-place state — referenced by input.c, scene.c, console.c, frame.c */
+q3ide_hooks_state_t q3ide_state;
+int q3ide_selected_win = -1;
+int q3ide_select_time = 0;
+int q3ide_last_attack = 0;
+int q3ide_aimed_win = -1; /* window under crosshair this frame, -1 = none */
 
-/* Grapple helpers — q3ide_engine_hooks_grapple.c */
-extern void q3ide_grapple_type_frame(void);
-extern void q3ide_grapple_window_frame(void);
+extern void Q3IDE_Cmd_f(void); /* command dispatcher in q3ide_console.c */
 
 /* Shoot-to-place — q3ide_engine_hooks_input.c */
 extern void q3ide_shoot_frame(void);
@@ -44,10 +46,9 @@ void Q3IDE_Init(void)
 	else
 		Q3IDE_LOGW("running without capture");
 
-	Q3IDE_Interaction_Init();
+	Q3IDE_ViewModes_Init();
 
 	Cmd_AddCommand("q3ide", Q3IDE_Cmd_f);
-	Cvar_Get("q3ide_spawn_count", "1", CVAR_ARCHIVE); /* 0=all, N=attach N then shoot walls */
 	q3ide_state.initialized = qtrue;
 }
 
@@ -87,28 +88,47 @@ void Q3IDE_AddPolysToScene(void)
 
 qboolean Q3IDE_ConsumesInput(void)
 {
-	if (!q3ide_state.initialized)
-		return qfalse;
-	return Q3IDE_Interaction_ConsumesInput();
+	return qfalse;
 }
-
-void Q3IDE_SaveRawButtons(int buttons)
-{
-	q3ide_state.raw_buttons = buttons;
-}
-
-qboolean q3ide_laser_active = qfalse;
 
 qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 {
 	if (!q3ide_state.initialized)
 		return qfalse;
-	if (key == 'k' || key == 'K') {
-		q3ide_laser_active = down;
-		Q3IDE_LOGI("laser %s", down ? "ON" : "OFF");
-		return qtrue; /* swallow — prevent Q3 from treating 'k' as a console command */
+	/* ";" — pause/resume streams (freeze last frame, 100% FPS restore) */
+	if (key == ';') {
+		static q3ide_hotkey_t s_pause_hk = Q3IDE_HOTKEY_INIT;
+		if (down) {
+			if (q3ide_hk_down(&s_pause_hk, s_pause_hk.locked) == Q3IDE_HK_ACTIVATE)
+				Q3IDE_WM_PauseStreams();
+			else
+				Q3IDE_WM_ResumeStreams();
+		} else {
+			if (q3ide_hk_up(&s_pause_hk, qtrue) == Q3IDE_HK_DEACTIVATE)
+				Q3IDE_WM_ResumeStreams();
+		}
+		return qtrue;
 	}
-	return Q3IDE_Interaction_OnKeyEvent(key, down);
+	/* "H" — hide windows + pause streams (tap = toggle, hold = temporary) */
+	if (key == 'h') {
+		static q3ide_hotkey_t s_hide_hk = Q3IDE_HOTKEY_INIT;
+		if (down) {
+			if (q3ide_hk_down(&s_hide_hk, s_hide_hk.locked) == Q3IDE_HK_ACTIVATE) {
+				Q3IDE_WM_HideWins();
+				Q3IDE_WM_PauseStreams();
+			} else {
+				Q3IDE_WM_ShowWins();
+				Q3IDE_WM_ResumeStreams();
+			}
+		} else {
+			if (q3ide_hk_up(&s_hide_hk, qtrue) == Q3IDE_HK_DEACTIVATE) {
+				Q3IDE_WM_ShowWins();
+				Q3IDE_WM_ResumeStreams();
+			}
+		}
+		return qtrue;
+	}
+	return qfalse;
 }
 
 static void q3ide_render_bye(void)
@@ -137,6 +157,7 @@ void Q3IDE_Shutdown(void)
 	if (!q3ide_state.initialized)
 		return;
 	q3ide_render_bye();
+	Q3IDE_ViewModes_Shutdown();
 	Q3IDE_WM_Shutdown();
 	Cmd_RemoveCommand("q3ide");
 	q3ide_state.initialized = qfalse;

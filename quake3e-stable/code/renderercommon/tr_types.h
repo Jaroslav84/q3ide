@@ -23,7 +23,10 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #ifndef __TR_TYPES_H
 #define __TR_TYPES_H
 
-#define MAX_VIDEO_HANDLES	64
+// q3ide [BEGIN] Video Handles - code/renderercommon/tr_types.h
+// Increased from 16 to 100 to support multiple simultaneous window streams for Q3IDE.
+#define MAX_VIDEO_HANDLES	100
+// q3ide [END] Video Handles
 
 #define	MAX_DLIGHTS			32			// can't be increased, because bit flags are used on surfaces
 

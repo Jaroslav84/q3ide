@@ -14,6 +14,12 @@ baseq3/*.pk3
 # Built artifacts (generated at build time, not source)
 baseq3/*.dylib
 
+# Demo builds
+qconstruct_demo_alpha_m1/
+
+# Deprecated engine snapshots
+quake3e-deprecated/
+
 # Large downloaded archives (not useful in git — too big, re-downloadable)
 baseq3/*.7z
 baseq3/*.zip

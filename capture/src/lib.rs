@@ -536,15 +536,29 @@ pub unsafe extern "C" fn q3ide_poll_window_changes(
         (changes, moved_wids)
     }; // `known` borrow ends here — known_lock is now free to mutate.
 
+    // Collect new positions for moved windows before consuming `current`.
+    // Positions are already known (from the same list_windows() call) — no extra
+    // SCShareableContent::get() needed in update_composite_crop.
+    let moved_positions: Vec<(u32, f64, f64, f64, f64)> = moved_wids
+        .iter()
+        .filter_map(|wid| {
+            current
+                .iter()
+                .find(|w| w.window_id == *wid)
+                .map(|w| (*wid, w.x as f64, w.y as f64, w.width as f64, w.height as f64))
+        })
+        .collect();
+
     // Update snapshot to current.
     let new_known: HashMap<u32, backend::WindowInfo> =
         current.into_iter().map(|w| (w.window_id, w)).collect();
     *known_lock = Some(new_known);
     drop(known_lock);
 
-    // Update composite crop rects for moved windows (after releasing known_windows lock).
-    for wid in moved_wids {
-        ctx.backend.update_window_crop(wid);
+    // Update composite crop rects for moved windows using cached display geometry.
+    // O(1) SCShareableContent::get() calls total (none — uses display_geom cache).
+    for (wid, wx, wy, ww, wh) in moved_positions {
+        ctx.backend.update_composite_crop(wid, wx, wy, ww, wh);
     }
 
     if changes.is_empty() {
@@ -1046,20 +1060,20 @@ pub unsafe extern "C" fn q3ide_raise_window(handle: *mut Q3ideCapture, window_id
     }
 }
 
-/// Pause frame delivery for all streams (hold ";").
-/// SCStreams stay warm; get_frame() returns None → no texture uploads.
+/// Pause frame delivery — get_frame() returns None, no texture uploads, FPS restored.
+/// SCStreams stay warm; last frame frozen on GPU.
 ///
 /// # Safety
-/// `handle` is unused; present for ABI consistency.
+/// `_handle` unused; present for ABI consistency.
 #[no_mangle]
 pub unsafe extern "C" fn q3ide_pause_all_streams(_handle: *mut Q3ideCapture) {
     crate::screencapturekit::set_streams_paused(true);
 }
 
-/// Resume frame delivery for all streams (release ";").
+/// Resume frame delivery.
 ///
 /// # Safety
-/// `handle` is unused; present for ABI consistency.
+/// `_handle` unused; present for ABI consistency.
 #[no_mangle]
 pub unsafe extern "C" fn q3ide_resume_all_streams(_handle: *mut Q3ideCapture) {
     crate::screencapturekit::set_streams_paused(false);

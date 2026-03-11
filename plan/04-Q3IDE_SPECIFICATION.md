@@ -5,20 +5,21 @@
 
 ## ⚠️ LLM Implementation Instructions
 
-**This document is the full feature spec for Q3IDE. It contains ~150 features across 24 batches. DO NOT implement everything at once.**
+**This document is the full feature spec for Q3IDE. It contains ~150 features across 23 batches. DO NOT implement everything at once.**
 
 ### How to use this document:
 
-1. **Read the entire document** to understand the full vision, terminology, and architecture.
-2. **Check the Feature Tracker** to see what's done, what's in progress, and what's next.
-3. **You will be told which batch to work on.** Only implement features in that batch.
-4. **Before writing any feature code,** set up the agent infrastructure and file structure (see below).
-5. **Use VisionOS terminology** in all code, comments, and variable names. Say "Window" not "panel". Say "Ornament" not "toolbar". See the Terminology table at the bottom.
-6. **All engine-specific code** goes in `engine/quake3e/`. Never import engine headers in `spatial/` or `capture/`.
-7. **All capture-specific code** goes in `capture/`. It exposes a C-ABI. Never import Rust code in `spatial/` or `engine/`.
-8. **`spatial/` is engine-agnostic.** It talks to the engine through `engine/adapter.h`. It talks to capture through `q3ide_capture.h`. It never calls `qgl*`, `trap_*`, `cg_*`, or any engine/capture internals directly.
-9. **After completing a batch,** verify against its 🧪 TEST CHECKPOINT before moving on.
-10. **Commit after each feature** with a descriptive message. Commit after completing the full batch.
+1. **Read `Q3IDE_ARCHITECTURE.md` first.** It is the canonical architecture contract. This spec is features. The architecture doc is structure. Both are required reading.
+2. **Read this entire document** to understand the full vision, terminology, and feature set.
+3. **Check the Feature Tracker** to see what's done, what's in progress, and what's next.
+4. **You will be told which batch to work on.** Only implement features in that batch.
+5. **Before writing any feature code,** set up the agent infrastructure and file structure (see below).
+6. **Use VisionOS terminology** in all code, comments, and variable names. Say "Window" not "panel". Say "Ornament" not "toolbar". See the Terminology table at the bottom.
+7. **All engine-specific code** goes in `engine/quake3e/`. Never import engine headers in `spatial/` or `capture/`. See **Engine Integration Reference** below for exact Q3 internals (hook points, texture API, trace API).
+8. **All capture-specific code** goes in `capture/`. It exposes a C-ABI via `q3ide_capture.h`. Never import Rust headers in `spatial/` or `engine/`.
+9. **`spatial/` is the brain — engine-agnostic.** It calls the engine ONLY through `engine/adapter.h` (`g_adapter->`). It calls capture ONLY through `q3ide_capture.h`. It NEVER calls `trap_*`, `re.*`, `CG_*`, `CM_*`, or `qgl*` directly. This is enforced by `lint.sh`.
+10. **After completing a batch,** verify against its 🧪 TEST CHECKPOINT before moving on.
+11. **Commit after each feature** with a descriptive message. Commit after completing the full batch.
 
 ### Agent setup (do this FIRST if these agents below doesn't exist):
 
@@ -27,15 +28,15 @@ This project uses **custom agents** to enforce architecture boundaries. Before w
 
 Create these agent files:
 
-**`.agents/agents/q3agents/engine-adapter.md`** — Only touches `engine/quake3e/`, `engine/adapter.h`, and `quake3e/code/q3ide/`. Keeps the adapter minimal and swappable. Never modifies core Quake3e files outside `quake3e/code/q3ide/`.
+**`.agents/agents/q3agents/engine-adapter.md`** — Only touches `engine/quake3e/` and `engine/adapter.h`. Keeps the adapter minimal and swappable. Never modifies core Quake3e files. Never touches `spatial/`.
 
 **`.agents/agents/q3agents/capture-rust.md`** — Only touches `capture/` and `q3ide_capture.h`. Pure Rust. Exposes only C-ABI functions. Never imports engine or spatial headers.
 
-**`.agents/agents/q3agents/spatial-c.md`** — Only touches `spatial/` (all subdirectories). Engine-agnostic. Talks to engine only through `engine/adapter.h`. Talks to capture only through `q3ide_capture.h`. Uses VisionOS terminology.
+**`.agents/agents/q3agents/spatial-c.md`** — Only touches `spatial/` (all subdirectories). Engine-agnostic. Calls engine only via `g_adapter->` from `engine/adapter.h`. Calls capture only via `q3ide_capture.h`. Uses VisionOS terminology. Never calls `trap_*`, `re.*`, `CG_*`, `CM_*`, `qgl*`.
 
 **`.agents/agents/q3agents/daemon-rust.md`** — Only touches `daemon/`. Separate Rust process. Communicates with Q3IDE through `.q3ide/uml_cache.json` + IPC. Never linked into the engine.
 
-**`.agents/agents/q3agents/reviewer.md`** — Reviews code against architecture rules: boundary violations, file length (200 sweetspot, 400 max), core Quake changes, VisionOS terminology, feature completeness against this spec, test checkpoint readiness.
+**`.agents/agents/q3agents/reviewer.md`** — Reviews code against architecture rules: boundary violations (`spatial/` calling engine directly), file length (200 sweetspot, 400 max), magic numbers outside `q3ide_params.h`, VisionOS terminology, missing `-Wswitch` cases, feature completeness against this spec, test checkpoint readiness.
 
 Each agent file should contain: the agent's name/description in YAML frontmatter, its exact file scope, its rules, and what it must NOT touch. See `./plan/03-Q3IDE_ORCHESTRATION.md` for the full agent file templates.
 
@@ -72,40 +73,40 @@ When implementing a batch, **delegate work to the right agent based on which fil
 
 At major milestones, run a **full performance measuring session** — FPS benchmarks, frame time histograms, GPU/CPU usage, texture upload bandwidth, **VRAM usage** (texture memory per Window, total allocation). Record results in `.q3ide/perf_history.json` to track FPS degradation and memory growth over time. Target resolution: 1080p baseline, scalable up. Performance checkpoints occur after:
 
-- **Batch 1** (Window Entity & Rendering Pipeline) — baseline with all 10 optimization stages
-- **Batch 7** (Spaces & Navigation) — multi-Space overhead measurement
-- **Batch 11** (UML Navigator) — 3D overlay rendering impact
-- **Batch 14** (Multiplayer) — network + rendering combined load
-- **Batch 19** (Custom Map) — final pre-VR baseline
+- **Batch 2** (Window Entity & Rendering Pipeline) — baseline with all 10 optimization stages
+- **Batch 9** (Spaces & Navigation) — multi-Space overhead measurement
+- **Batch 13** (UML Navigator) — 3D overlay rendering impact
+- **Batch 16** (Multiplayer) — network + rendering combined load
+- **Batch 21** (Custom Map) — final pre-VR baseline
 
-### File structure reorganization (do this FIRST):
+### File structure reorganization (do this during Batch 7):
 
-The current file structure is flat. Reorganize it to match the **Target File Structure** section. Steps:
+The current file structure is flat (`quake3e/code/q3ide/*.c`). Batch 7 reorganizes it to match the **Target File Structure** in `Q3IDE_ARCHITECTURE.md`. Steps:
 
 ```bash
 # Create the full directory skeleton
-mkdir -p spatial/{window,space,ui,mode,nav,agent,project,input,audio,capture_tools,uml,multiplayer,bot,quakeos,ai_geometry}
+mkdir -p engine/quake3e
+mkdir -p spatial/{core,window,space,ui,fx,mode,nav,agent,project,input,audio,uml,multiplayer,bot,quakeos,ai_geometry}
 mkdir -p daemon/src/parsers
-mkdir -p baseq3/{shaders,sounds/notifications,models/office}
+mkdir -p baseq3/{shaders/q3ide,sounds/notifications,models/office}
 mkdir -p config
 mkdir -p web/
 
-# Move existing files to their new homes
-mv spatial/panel.h spatial/window/entity.h      # rename: panel → window entity
-mv spatial/placement.h spatial/window/           # placement is part of window system for now
-mv spatial/placement.c spatial/window/
-mv spatial/focus.h spatial/window/
+# See Q3IDE_ARCHITECTURE.md → "Current → New File Mapping" for the full
+# rename/move table for all 47 existing files.
 
 # Create stub files for all future modules (empty with header comment)
-# ... (generate all .h/.c pairs listed in Target File Structure)
+# Every file in the Target File Structure should exist after Batch 7 —
+# either with real code (completed features) or a stub with a header
+# comment describing what it will contain (future features).
 ```
 
-**Every file in the Target File Structure should exist after reorganization** — either with real code (for completed features) or as a stub with a header comment describing what it will contain (for future features). This makes the architecture visible and prevents merge conflicts when multiple batches are worked on.
+**Rule:** `spatial/` files call engine ONLY via `g_adapter->method()`. Any file that imports engine headers belongs in `engine/quake3e/` instead.
 
 ### Batch workflow:
 
 ```
-1. Read ./plan/04-Q3IDE_SPECIFICATION.md → identify all features in the assigned batch
+1. Read `plan/04-Q3IDE_SPECIFICATION.md` and `Q3IDE_ARCHITECTURE.md` → identify all features in the assigned batch
 2. Plan implementation order (dependencies first)
 3. Identify which custom agent handles which files
 4. Implement features (parallel subagents where features are independent)
@@ -119,26 +120,161 @@ mv spatial/focus.h spatial/window/
 
 ---
 
+## Engine Integration Reference
+
+> **LLM: Read this section before touching any engine-layer code.** These are the precise Quake3e internals that `engine/quake3e/` wraps. `spatial/` never sees any of this — it goes through `g_adapter->` only.
+
+### Where Q3IDE Lives
+
+Q3IDE is **engine-side code** in the `quake3e` executable — **not** a QVM mod, not a cgame plugin. It links directly against `refexport_t re` and `CM_BoxTrace()`. This means:
+
+- It works with **any mod** (baseq3, CPMA, OSP, etc.) — cgame is irrelevant to Q3IDE
+- It has **direct access** to the renderer and collision system with no VM syscall overhead
+- It **never modifies cgame** — the VM runs as normal, Q3IDE injects above it
+
+### Four Hook Points (`engine/quake3e/q3ide_hooks.c`)
+
+| Hook Site | Q3IDE Call | What Happens |
+|-----------|-----------|--------------|
+| `CL_Init()` | `Q3IDE_Init()` | Register cvars + commands, `dlopen` the capture dylib. **No textures yet — renderer not up.** |
+| `CL_InitRenderer()` | `Q3IDE_InitTextures()` | Renderer is ready. Call `R_CreateImage("*q3ide_N", ...)` for each scratch slot. |
+| `CL_Frame()` | `Q3IDE_UpdateCaptures()` | Drain ring buffer, upload frames. Called **before** `SCR_UpdateScreen()`. |
+| `CL_ShutdownAll()` | `Q3IDE_Shutdown()` | Free textures, unload dylib. |
+
+**Critical ordering in `CL_Frame`:**
+```
+CL_Frame → Q3IDE_UpdateCaptures()   ← textures uploaded here
+         → SCR_UpdateScreen()
+             → re.BeginFrame()
+             → CL_DrawActiveGame()
+                 → VM_Call(cgvm, CG_DRAW_ACTIVE_FRAME)
+                     → trap_R_RenderScene → RE_RenderScene()
+                         ← Q3IDE injects quads here via re.AddPolyToScene()
+             → re.EndFrame()
+```
+
+Textures must be current before `BeginFrame`. Quads are injected inside the cgame render scene call — this is correct and intentional.
+
+### Renderer Access (`refexport_t re`)
+
+On macOS, the renderer is **statically linked** (`USE_RENDERER_DLOPEN` is not set). The engine gets `refexport_t re` from `GetRefAPI()` at renderer init. The Quake3e adapter uses `re.*` exclusively — never `trap_R_*` (those are cgame VM syscalls).
+
+Key functions used by the adapter:
+
+```c
+re.RegisterShader(name)                          // → qhandle_t for shader lookup
+re.AddPolyToScene(shader, numVerts, verts)       // inject a quad into the scene
+re.RenderScene(refdef)                           // used by render_dispatch
+re.BeginFrame() / re.EndFrame()
+```
+
+### Scratch Slot Texture System
+
+Each Window gets a numbered scratch slot (`N = 0..MAX_WINDOWS-1`):
+
+```c
+// Init (in Q3IDE_InitTextures — AFTER CL_InitRenderer)
+image_t *img = R_CreateImage(
+    "*q3ide_N",                                  // name — "*" prefix = special/scratch
+    NULL,                                        // name2
+    blank_rgba,                                  // initial blank BGRA pixels
+    width, height,
+    IMGFLAG_CLAMPTOEDGE | IMGFLAG_NOSCALE | IMGFLAG_NOLIGHTSCALE
+    // NOT IMGFLAG_MIPMAP — no mip chain for video content
+    // NOT IMGFLAG_PICMIP — never downscale based on r_picmip
+);
+
+// Per frame (in Q3IDE_UpdateCaptures — BEFORE SCR_UpdateScreen)
+R_UploadSubImage(frame_data, 0, 0, width, height, img);
+// → Upload32(..., subImage=qtrue)
+// → qglTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h,
+//                    GL_BGRA, GL_UNSIGNED_INT_8_8_8_8_REV, data)
+```
+
+**Format:** `GL_BGRA + GL_UNSIGNED_INT_8_8_8_8_REV` — GPU fast path on macOS. ScreenCaptureKit delivers BGRA natively. **Zero CPU swizzle.**
+
+**Naming chain:** slot N → image `*q3ide_N` → shader `q3ide/windowN` → `qhandle_t` stored in `Window_t.shader`
+
+**Shader file** (`baseq3/shaders/q3ide/windows.shader`):
+```
+q3ide/window0 {
+    nomipmaps
+    nopicmip
+    {
+        map *q3ide_0
+        rgbGen identity
+        blendfunc GL_ONE GL_ZERO
+    }
+}
+```
+Add `cull disable` for double-sided quads (overview mode).
+
+**Analogy:** Same mechanism as `RE_UploadCinematic` for ROQ video playback — different data source (SCK ring buffer vs ROQ decoder).
+
+### Wall Scanner — Collision (`CM_BoxTrace`)
+
+```c
+CM_BoxTrace(
+    &trace,          // out: trace_t result
+    start,           // vec3_t eye position
+    end,             // vec3_t look-ahead point
+    vec3_origin,     // mins (point trace)
+    vec3_origin,     // maxs (point trace)
+    0,               // model (0 = world BSP)
+    MASK_SOLID       // brushmask = CONTENTS_SOLID
+);
+// trace.fraction < 1.0  → hit something
+// trace.endpos          → wall anchor point
+// trace.plane.normal    → outward normal (face the player)
+// trace.surfaceFlags    → BSP surface type flags
+```
+
+**Surface flag filter** (constants in `engine/quake3e/q3ide_params.h`):
+
+| Constant | Value | Action |
+|----------|-------|--------|
+| `SURF_SKY` | `0x4` | Skip — can't place on sky |
+| `SURF_NODRAW` | `0x80` | Skip — invisible surface |
+| `SURF_HINT` | `0x100` | Skip — BSP hint brush |
+| `SURF_SKIP` | `0x200` | Skip — BSP skip brush |
+| `CONTENTS_SOLID` | `1` | Required — must be solid |
+| `MASK_SOLID` | `CONTENTS_SOLID` | The brushmask passed to CM_BoxTrace |
+
+### Quad Injection (`re.AddPolyToScene`)
+
+```c
+polyVert_t verts[4];
+// For each corner: set xyz (world-space), st (0.0–1.0 UV), modulate (RGBA 255,255,255,255)
+re.AddPolyToScene(window->shader, 4, verts);
+// Called inside RE_RenderScene — after cgame VM_Call, before EndFrame
+```
+
+### `q3ide_params.h` — Single Source of Truth
+
+All constants that mirror engine values live here. `spatial/` never includes engine headers — it gets these values via the adapter interface. `lint.sh` enforces this.
+
+---
+
 ## Feature Tracker
 
 Progressive implementation batches. Each batch ends with a testing checkpoint. **Order = implementation priority.** Ground-up: performance and stability first, features on top.
 
-### BATCH 0 — Foundation ✅ Done
+### BATCH 1 — Foundation ✅ Done
 
 The capture pipeline and basic texture rendering. Getting pixels on walls.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 0.1 | ScreenCaptureKit single window capture | ✅ Done | Capture one window via SCK, deliver frames to ring buffer |
-| 0.2 | Rust dylib C-ABI bridge | ✅ Done | `libq3ide_capture.dylib` loads, exports `q3ide_*` functions |
-| 0.3 | GL texture upload (single window) | ✅ Done | Frames upload to OpenGL texture via `glTexSubImage2D` |
-| 0.4 | Wall placement (single window) | ✅ Done | Trace from spawn, place textured quad on nearest wall |
-| 0.5 | Console commands (`/q3ide_list`, `/q3ide_attach`, `/q3ide_detach`) | ✅ Done | Basic window management from Q3 console |
-| 0.6 | Multi-window capture (unique windowID per SCStream) | ✅ Done | Fix frame mixing bug — **cause:** matching windows by app name gives the same window to every SCStream. **Fix:** each SCStream must have its own `SCContentFilter(desktopIndependentWindow:)` created with the unique `CGWindowID` (not app name or bundle ID). Multiple windows of the same app (e.g., 3 iTerm2 windows) each have a distinct `CGWindowID`. Key by that, not by `owningApplication`. |
-| 0.7 | Three-monitor support | ✅ Done | Q3e spans 3 monitors, wall textures render across all |
-| 0.8 | **Hybrid CaptureRouter** | ✅ Done | Two-mode capture backend — see below. +20% FPS gain. No stream limit. |
+| 1.1 | ScreenCaptureKit single window capture | ✅ Done | Capture one window via SCK, deliver frames to ring buffer |
+| 1.2 | Rust dylib C-ABI bridge | ✅ Done | `libq3ide_capture.dylib` loads, exports `q3ide_*` functions |
+| 1.3 | GL texture upload (single window) | ✅ Done | Frames upload to OpenGL texture via `glTexSubImage2D` |
+| 1.4 | Wall placement (single window) | ✅ Done | Trace from spawn, place textured quad on nearest wall |
+| 1.5 | Console commands (`/q3ide_list`, `/q3ide_attach`, `/q3ide_detach`) | ✅ Done | Basic window management from Q3 console |
+| 1.6 | Multi-window capture (unique windowID per SCStream) | ✅ Done | Fix frame mixing bug — **cause:** matching windows by app name gives the same window to every SCStream. **Fix:** each SCStream must have its own `SCContentFilter(desktopIndependentWindow:)` created with the unique `CGWindowID` (not app name or bundle ID). Multiple windows of the same app (e.g., 3 iTerm2 windows) each have a distinct `CGWindowID`. Key by that, not by `owningApplication`. |
+| 1.7 | Three-monitor support | ✅ Done | Q3e spans 3 monitors, wall textures render across all |
+| 1.8 | **Hybrid CaptureRouter** | ✅ Done | Two-mode capture backend — see below. +20% FPS gain. No stream limit. |
 
-**🧪 TEST CHECKPOINT 0:** Multiple terminal windows from the same app display independently on walls. No frame mixing. Stable 60fps. No memory leaks. Clean dylib unload.
+**🧪 TEST CHECKPOINT 1:** Multiple terminal windows from the same app display independently on walls. No frame mixing. Stable 60fps. No memory leaks. Clean dylib unload.
 
 #### Hybrid CaptureRouter (✅ Implemented — `capture/src/router.rs`)
 
@@ -158,374 +294,406 @@ Detector thresholds (tunable in `router.rs`): 20 consecutive empty crops → war
 
 **FPS caps: DO NOT ADD.** `Q3IDE_CAPTURE_FPS = -1` — Apple's content-driven model delivers frames only when content changes. Idle windows cost zero. Uncapped is smoother than any cap. The spec item 1.8 "SCK minimumFrameInterval" is **open question** — measure actual impact before implementing.
 
-**Stream Freeze (✅ IMPLEMENTED):** `Q3IDE_WM_PauseStreams()` / `Q3IDE_WM_ResumeStreams()` — hold ";" to freeze all frames at zero CPU/GPU cost. `get_frame()` returns `None`, SCStreams stay warm, last frame stays on GPU. 100% FPS restoration instantly. Use this in placement queue drain (Stage 1.4) instead of per-window 2fps throttle. See `plan/05` for full details.
+**Stream Freeze (✅ IMPLEMENTED):** `Q3IDE_WM_PauseStreams()` / `Q3IDE_WM_ResumeStreams()` — hold ";" to freeze all frames at zero CPU/GPU cost. `get_frame()` returns `None`, SCStreams stay warm, last frame stays on GPU. 100% FPS restoration instantly. Used in placement queue drain (feature 2.4) instead of any per-window throttle. See `plan/05` for full details.
 
 ---
 
-### BATCH 1 — Window Entity, Placement & Rendering Pipeline (CURRENT)
+### BATCH 2 — Window Entity, Placement & Rendering Pipeline (CURRENT)
 
 Window data model, placement system rewrite, and rendering pipeline optimizations. Implemented in 10 stages — see `PLACEMENT.md` for full details per stage. Each stage = one Claude Code session with git commit + testing between.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 1.1 | Kill BGRA→RGBA swizzle | ✅ Done | Add format param to RE_UploadCinematic, pass GL_BGRA native. Delete CPU swizzle loop. |
-| 1.2 | Visibility-gated texture uploads | ⬜ | Dot product (behind player?) + BSP trace (behind wall?) before UploadCinematic. Skip invisible windows. |
-| 1.3 | Wall scanner + cache | ⬜ | Pre-scan all walls on area entry within 60m radius. Cache wall slots. Foundation for new placement. |
-| 1.4 | Area transition placement | ⬜ | **Destroy old 13 rules.** New placement: spread-even across walls, closest first, FPS-gated drain (30fps), call `Q3IDE_WM_PauseStreams()` at transition start + `ResumeStreams()` when queue empty (replaces 2fps throttle — simpler, full FPS restoration). |
-| 1.5 | Within-area leapfrog | ⬜ | Furthest window jumps to closest free slot when player moves >7m. Check every 30 frames. Dogs stay put in small rooms. |
-| 1.6 | Trained positions | ⬜ | User repositions window → save position per area. On return, window goes to trained spot. Dogs remember their place. |
-| 1.7 | Adaptive resolution (8 tiers) | ⬜ | SCK source-side downscale. Tier 0 (full) to tier 7 (thumbnail). Aim-override: crosshair on window = full res from any distance. |
-| 1.8 | Static detection + SCK frame interval + mipmaps | ⬜ | Idle windows → 1fps capture. SCK minimumFrameInterval per tier. glGenerateMipmap after upload. |
-| 1.9 | Texture Array (GL_TEXTURE_2D_ARRAY) | ⬜ | One texture array per tier. Batched draw calls. 31 binds → ~8 binds. Renderer refactor — do LAST. |
-| 1.10 | Per-window performance metrics | ⬜ | Track capture_fps, upload_fps, dirty_ratio, bandwidth, latency, vram, skip_count, tier, static_flag. Console + Widget. |
+| 2.1 | Kill BGRA→RGBA swizzle | ✅ Done | Use `R_UploadSubImage` with `GL_BGRA + GL_UNSIGNED_INT_8_8_8_8_REV`. Delete CPU swizzle loop. See Engine Integration Reference above for exact API. |
+| 2.2 | Visibility-gated texture uploads | ⬜ | Dot product (behind player?) + BSP trace (behind wall?) before UploadCinematic. Skip invisible windows. |
+| 2.3 | Wall scanner + cache | ⬜ | Pre-scan all walls on area entry within 60m radius. Cache wall slots. Foundation for new placement. |
+| 2.4 | Area transition placement | ⬜ | **Destroy old 13 rules.** New placement: spread-even across walls, closest first, FPS-gated drain (30fps), call `Q3IDE_WM_PauseStreams()` at transition start + `ResumeStreams()` when queue empty. |
+| 2.5 | Within-area leapfrog | ⬜ | Furthest window jumps to closest free slot when player moves >7m. Check every 30 frames. Dogs stay put in small rooms. |
+| 2.6 | Trained positions | ⬜ | User repositions window → save position per area. On return, window goes to trained spot. Dogs remember their place. |
+| 2.7 | Adaptive resolution (8 tiers) | ⬜ | SCK source-side downscale. Tier 0 (full) to tier 7 (thumbnail). Aim-override: crosshair on window = full res from any distance. |
+| 2.8 | Static detection + SCK frame interval + mipmaps | ⬜ | Idle windows → 1fps capture. SCK minimumFrameInterval per tier. glGenerateMipmap after upload. |
+| 2.9 | Texture Array (GL_TEXTURE_2D_ARRAY) | ⬜ | One texture array per tier. Batched draw calls. 31 binds → ~8 binds. Renderer refactor — do LAST. |
+| 2.10 | Per-window performance metrics | ⬜ | Track capture_fps, upload_fps, dirty_ratio, bandwidth, latency, vram, skip_count, tier, static_flag. Console + Widget. |
 
-**🧪 TEST CHECKPOINT 1:** Walk between areas → windows migrate smoothly (10 dogs through a doorway). FPS stays above 30 during migration. Furthest windows leapfrog as you walk. Trained positions persist. Resolution scales with distance. Aim at distant window → full res. Idle terminals at 1fps. `/q3ide_perf` shows live per-window metrics. Performance Widget shows total bandwidth.
+**🧪 TEST CHECKPOINT 2:** Walk between areas → windows migrate smoothly (10 dogs through a doorway). FPS stays above 30 during migration. Furthest windows leapfrog as you walk. Trained positions persist. Resolution scales with distance. Aim at distant window → full res. Idle terminals at 1fps. `/q3ide_perf` shows live per-window metrics. Performance Widget shows total bandwidth.
 **📊 PERFORMANCE CHECKPOINT:** Measure FPS with 31+ windows before/after each stage. Record to `.q3ide/perf_history.json`. Target: 40+ FPS with 31 windows (from current 23 FPS).
 
 ---
 
-### BATCH 2 — Interaction Model
+### BATCH 3 — Interaction Model
 
 Pointer Mode, Keyboard Passthrough, the core work/play boundary.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 2.1 | Dwell detection (150ms) | ⬜ | Crosshair-on-Window timer, triggers Hover Effect |
-| 2.2 | Hover Effect | ⬜ | Glow + z-lift on Window surface when dwell triggers |
-| 2.3 | Pointer Mode | ⬜ | Mouse maps to Window coordinate space, click sends to captured app |
-| 2.4 | Distance threshold | ⬜ | Pointer Mode only within readable distance |
-| 2.5 | Edge Zone exit (20px) | ⬜ | Pointer pushes past Window border → return to FPS Mode |
-| 2.6 | Keyboard Passthrough | ⬜ | Enter activates, all keys route to captured app |
-| 2.7 | Escape — Digital Crown | ⬜ | Always exits any mode back to FPS |
-| 2.8 | Left-click dual purpose | ⬜ | Fire weapon in FPS Mode, click in app in Pointer Mode |
-| 2.9 | Weapon cosmetic fire in Pointer Mode | ⬜ | Weapon fires normally (animation, sound, projectile) but ammo never goes down — `give ammo` injected after every shot. Instant reload: firing through a Window triggers immediate `give ammo` so the weapon never pauses to reload. BUTTON_ATTACK is NOT suppressed; damage to bots/players is acceptable collateral. |
+| 3.1 | Dwell detection (150ms) | ⬜ | Crosshair-on-Window timer, triggers Hover Effect |
+| 3.2 | Hover Effect | ⬜ | Glow + z-lift on Window surface when dwell triggers |
+| 3.3 | Pointer Mode | ⬜ | Mouse maps to Window coordinate space, click sends to captured app |
+| 3.4 | Distance threshold | ⬜ | Pointer Mode only within readable distance |
+| 3.5 | Edge Zone exit (20px) | ⬜ | Pointer pushes past Window border → return to FPS Mode |
+| 3.6 | Keyboard Passthrough | ⬜ | Enter activates, all keys route to captured app |
+| 3.7 | Escape — Digital Crown | ⬜ | Always exits any mode back to FPS |
+| 3.8 | Left-click dual purpose | ⬜ | Fire weapon in FPS Mode, click in app in Pointer Mode |
+| 3.9 | Weapon cosmetic fire in Pointer Mode | ⬜ | Weapon fires normally (animation, sound, projectile) but ammo never goes down — `give ammo` injected after every shot. Instant reload: firing through a Window triggers immediate `give ammo` so the weapon never pauses to reload. BUTTON_ATTACK is NOT suppressed; damage to bots/players is acceptable collateral. |
 
-**🧪 TEST CHECKPOINT 2:** Aim at a terminal, dwell → hover glow appears. Click → clicks in terminal. Enter → type commands in terminal. Escape → back to fragging. Edge zone exit works. Weapon fires cosmetically through the Window. No accidental clicks during combat.
+**🧪 TEST CHECKPOINT 3:** Aim at a terminal, dwell → hover glow appears. Click → clicks in terminal. Enter → type commands in terminal. Escape → back to fragging. Edge zone exit works. Weapon fires cosmetically through the Window. No accidental clicks during combat.
 
 ---
 
-### BATCH 3 — Live Window Management
+### BATCH 4 — Live Window Management
 
 The world stays in sync with macOS automatically. No manual re-attach.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 3.1 | New window detection | ✅ | `q3ide_poll_window_changes` diffs SCK snapshot every 2s; new terminal/browser windows auto-attach to nearest wall |
-| 3.2 | Closed window detection | ✅ | Removed windows auto-detach; quad disappears within 2s |
-| 3.3 | Auto-attach mode flag | ✅ | `auto_attach` enabled by `q3ide attach all`, cleared by `q3ide detach` |
-| 3.4 | Window title change tracking | ⬜ | Re-label quad when captured window title changes (tab rename, shell cwd) |
-| 3.5 | Minimized / hidden state | ⬜ | Detect when a window is minimized or hidden; fade quad to 30% opacity; restore on un-minimize |
-| 3.6 | Dirty frame detection | ⬜ | Skip texture upload when captured window content is identical to last frame (compare CMSampleBuffer timestamps) |
-| 3.7 | Status HUD | ⬜ | Small overlay quad showing live window count, capture health, idle count |
+| 4.1 | New window detection | ✅ | `q3ide_poll_window_changes` diffs SCK snapshot every 2s; new terminal/browser windows auto-attach to nearest wall |
+| 4.2 | Closed window detection | ✅ | Removed windows auto-detach; quad disappears within 2s |
+| 4.3 | Auto-attach mode flag | ✅ | `auto_attach` enabled by `q3ide attach all`, cleared by `q3ide detach` |
+| 4.4 | Window title change tracking | ⬜ | Re-label quad when captured window title changes (tab rename, shell cwd) |
+| 4.5 | Minimized / hidden state | ⬜ | Detect when a window is minimized or hidden; fade quad to 30% opacity; restore on un-minimize |
+| 4.6 | Dirty frame detection | ⬜ | Skip texture upload when captured window content is identical to last frame (compare CMSampleBuffer timestamps) |
+| 4.7 | Status HUD | ⬜ | Small overlay quad showing live window count, capture health, idle count |
 
-**🧪 TEST CHECKPOINT 3:** Open a terminal → appears on wall within 2s. Close it → disappears within 2s. Minimize it → fades. Idle terminal → 0 texture uploads. Status HUD is accurate.
+**🧪 TEST CHECKPOINT 4:** Open a terminal → appears on wall within 2s. Close it → disappears within 2s. Minimize it → fades. Idle terminal → 0 texture uploads. Status HUD is accurate.
 **📊 PERFORMANCE CHECKPOINT:** Baseline with dirty-frame detection active. Record idle CPU%, texture upload rate, VRAM to `.q3ide/perf_history.json`.
 
 ---
 
-### BATCH 4 — Window Placement & Layout
+### BATCH 5 — Window Placement & Layout
 
 Precise placement, persistence, and navigation.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 4.1 | Long press → drag | ⬜ | Hold click ~300ms on Window enters drag mode; move by aiming |
-| 4.2 | Wall snap | ⬜ | While dragging: aim at wall → window snaps flush to surface |
-| 4.3 | Float snap | ⬜ | Aim away from wall → window floats at fixed depth from player |
-| 4.4 | Scroll → resize | ⬜ | Mouse wheel while focused resizes Window, preserves aspect ratio |
-| 4.5 | Lock / Pin | ⬜ | Toggle lock on focused window — prevents accidental move/resize |
-| 4.6 | Edge-to-edge snap | ⬜ | Windows snap edge-to-edge when dragged near a sibling |
-| 4.7 | Layout persistence | ⬜ | Save window positions/sizes to `config/layout.json`; restore on restart |
-| 4.8 | Tab cycling | ⬜ | Tab / Shift+Tab moves Focus across all active Windows |
+| 5.1 | Long press → drag | ⬜ | Hold click ~300ms on Window enters drag mode; move by aiming |
+| 5.2 | Wall snap | ⬜ | While dragging: aim at wall → window snaps flush to surface |
+| 5.3 | Float snap | ⬜ | Aim away from wall → window floats at fixed depth from player |
+| 5.4 | Scroll → resize | ⬜ | Mouse wheel while focused resizes Window, preserves aspect ratio |
+| 5.5 | Lock / Pin | ⬜ | Toggle lock on focused window — prevents accidental move/resize |
+| 5.6 | Edge-to-edge snap | ⬜ | Windows snap edge-to-edge when dragged near a sibling |
+| 5.7 | Layout persistence | ⬜ | Save window positions/sizes to `config/layout.json`; restore on restart |
+| 5.8 | Tab cycling | ⬜ | Tab / Shift+Tab moves Focus across all active Windows |
 
-**🧪 TEST CHECKPOINT 4:** Drag a window to a new wall — it snaps and sticks. Resize it. Lock it — drag does nothing. Layout saved and restored after game restart. Tab cycles focus.
+**🧪 TEST CHECKPOINT 5:** Drag a window to a new wall — it snaps and sticks. Resize it. Lock it — drag does nothing. Layout saved and restored after game restart. Tab cycles focus.
 
 ---
 
-### BATCH 5 — Grapple Hook & Spatial Tools
+### BATCH 6 — Grapple Hook & Spatial Tools
 
 Core movement and navigation tools.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 5.1 | Grapple Hook (`X`) — movement | ⬜ | Hook to surfaces, pull player |
-| 5.2 | Grapple Hook → Window navigation | ⬜ | Grapple to Window = pull to perfect reading distance |
-| 5.3 | Minimap Ornament (`M`) | ⬜ | Persistent minimap showing Spaces, players, activity |
-| 5.4 | File Browser (`F`) | ⬜ | Floating Window with recent Projects + full list |
-| 5.5 | Quick Open (`O`) | ⬜ | fzf-style fuzzy file search, as-you-type results (upgrade to vector DB later) |
-| 5.6 | Run Project (`R`) | ⬜ | Auto-detect run command, output in RUN Space |
-| 5.7 | Bookmarks | ⬜ | Save map positions, bind to hotkeys |
+| 6.1 | Grapple Hook (`X`) — movement | ⬜ | Hook to surfaces, pull player |
+| 6.2 | Grapple Hook → Window navigation | ⬜ | Grapple to Window = pull to perfect reading distance |
+| 6.3 | Minimap Ornament (`M`) | ⬜ | Persistent minimap showing Spaces, players, activity |
+| 6.4 | File Browser (`F`) | ⬜ | Floating Window with recent Projects + full list |
+| 6.5 | Quick Open (`O`) | ⬜ | fzf-style fuzzy file search, as-you-type results (upgrade to vector DB later) |
+| 6.6 | Run Project (`R`) | ⬜ | Auto-detect run command, output in RUN Space |
+| 6.7 | Bookmarks | ⬜ | Save map positions, bind to hotkeys |
 
-**🧪 TEST CHECKPOINT 5:** Grapple to a Window across the room — arrive at reading distance. Minimap shows your position. Quick Open finds files instantly. File Browser loads Projects. Bookmarks work.
+**🧪 TEST CHECKPOINT 6:** Grapple to a Window across the room — arrive at reading distance. Minimap shows your position. Quick Open finds files instantly. File Browser loads Projects. Bookmarks work.
 
 ---
 
-### BATCH 6 — Theater Mode, Office Mode & Focus States
+### BATCH 7 — 🏗️ Architecture Overhaul
+
+The structural migration. All existing code moves to the three-layer architecture defined in `Q3IDE_ARCHITECTURE.md`. No new features — this batch makes the codebase ready for everything that follows.
+
+**Reference:** `Q3IDE_ARCHITECTURE.md` is the complete spec for this batch. Every decision is documented there.
+
+| # | Feature | Status | Description |
+|---|---------|--------|-------------|
+| 7.1 | Three-layer split — `engine/`, `spatial/`, `capture/` | ⬜ | Create directory skeleton. `spatial/` is engine-agnostic. `engine/quake3e/` is the only engine-touching layer. |
+| 7.2 | `engine/adapter.h` — abstract engine interface | ⬜ | Full `engine_adapter_t` struct: render, collision, player state, cvars, filesystem, time, sound, entity spawning, network |
+| 7.3 | `engine/quake3e/q3ide_adapter.c` — Quake3e implementation | ⬜ | Implement all adapter functions for Quake3e. Wire `Q3IDE_SetAdapter()` at init. |
+| 7.4 | Scene graph base object (`SpatialObject_t`) | ⬜ | `spatial/core/scene.h` — stable ID allocator, type enum, lifecycle vtable, error field |
+| 7.5 | Window type system — enums + `Window_t` refactor | ⬜ | Replace boolean soup in `q3ide_win_t`. `WindowMode_t`, `WindowCapture_t`, `WindowPlacement_t`, `WindowLayout_t`, `WindowVisibility_t`. `Window_t` extends `SpatialObject_t`. |
+| 7.6 | Feature registration system | ⬜ | `spatial/core/features.h` — `q3ide_feature_t` table, `Init/Frame/Render/Key/Shutdown` loops. Kill 6-file wiring tax. |
+| 7.7 | Multi-monitor render contract | ⬜ | `spatial/core/render_dispatch.c` — single dispatch path. `engine/quake3e/q3ide_render.c` — viewport loop only. Kills 2× render bug. |
+| 7.8 | Object lifecycle contract | ⬜ | Every object type implements `Create/Destroy/Update/Render`. No exceptions. |
+| 7.9 | Scene object ID system | ⬜ | Stable unique IDs, never reused. Required for multiplayer and agent object references. |
+| 7.10 | Stub files — Portal, Widget, Ornament, UMLNode, RuntimeGeometry, Agent, Audio, Space | ⬜ | Every future type gets `.h/.c` with interface defined, implementation TBD. |
+| 7.11 | `SpaceWindowView_t` | ⬜ | Same Window, different position per Space. Lives in `spatial/space/space.h`. |
+| 7.12 | Wall cache — `CachedWall_t` + `WallSlot_t` owned by Space | ⬜ | Move from flat global to Space-owned. Built on area entry, invalidated on exit. |
+| 7.13 | UI design system primitives + `spatial/ui/theme.h` | ⬜ | `UI_Panel/Label/Button/List`. Replace `q3ide_design.h`. All styling from tokens. |
+| 7.14 | Rendering standards | ⬜ | `glGenerateMipmap` enforced after every upload. Shaders in `baseq3/shaders/q3ide/`. All geometry through `g_adapter->add_quad()`. |
+| 7.15 | Debug visualization layer — `/q3ide_debug` | ⬜ | Wireframe bbox + normal + type label + flags + red error outline on all scene objects. |
+| 7.16 | Error state on every object | ⬜ | `error[128]` field on `SpatialObject_t`. AI-spawned objects can't fail silently. |
+| 7.17 | `-Wswitch` + `lint.sh` hard failures | ⬜ | Unhandled enum case = build error. 400-line limit = build error. Magic numbers in `spatial/` = build error. |
+| 7.18 | `q3ide_params.h` discipline enforced | ⬜ | All constants in `engine/quake3e/q3ide_params.h`. `lint.sh` catches violations. |
+| 7.19 | File migration — all 47 files moved to new structure | ⬜ | See "Current → New File Mapping" in `Q3IDE_ARCHITECTURE.md`. All files renamed and relocated. |
+
+**🧪 TEST CHECKPOINT 7:** Build passes cleanly with `-Wswitch`. All 47 files in new locations. `lint.sh` passes. `spatial/` has zero direct engine calls (grep verifies). All existing features work identically after migration. `/q3ide_debug` shows scene object overlays.
+
+---
+
+### BATCH 8 — Theater Mode, Office Mode & Focus States
 
 Comfort modes for focused work.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 6.1 | Theater Mode (`T`) | ⬜ | Blackout world, curved panoramic Window wrap |
-| 6.2 | Office Mode (`L`) | ⬜ | Spawn desk/monitors/chair around player |
-| 6.3 | Control Center Widget | ⬜ | Persistent bottom-right: Space, agents, project, time |
-| 6.4 | Control Center expanded (`C`) | ⬜ | Full settings panel: agents, windows, toggles, layouts |
-| 6.5 | Billboard presentation style | ⬜ | Oversized, full-brightness, distance-readable |
+| 8.1 | Theater Mode (`T`) | ⬜ | Blackout world, curved panoramic Window wrap |
+| 8.2 | Office Mode (`L`) | ⬜ | Spawn desk/monitors/chair around player |
+| 8.3 | Control Center Widget | ⬜ | Persistent bottom-right: Space, agents, project, time |
+| 8.4 | Control Center expanded (`C`) | ⬜ | Full settings panel: agents, windows, toggles, layouts |
+| 8.5 | Billboard presentation style | ⬜ | Oversized, full-brightness, distance-readable |
 
-**🧪 TEST CHECKPOINT 6:** Theater Mode blacks out world, wraps Windows around you. Office Mode spawns desk. Control Center shows status. Billboard visible from across the map.
+**🧪 TEST CHECKPOINT 8:** Theater Mode blacks out world, wraps Windows around you. Office Mode spawns desk. Control Center shows status. Billboard visible from across the map.
 
 ---
 
-### BATCH 7 — Spaces & Navigation
+### BATCH 9 — Spaces & Navigation
 
 The 8 Spaces, teleportation, Portals.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 7.1 | Space definitions (8 zones in map) | ⬜ | ASK through GARAGE mapped to map areas |
-| 7.2 | Teleport (`Shift+1`–`Shift+8`) | ⬜ | Instant teleport to Space |
-| 7.3 | Portal rendering (visual peek) | ⬜ | Render destination Space inside Portal frame, distance-adaptive quality. **Search Quake 3 community repos for existing Portal rendering implementations — don't build from scratch.** |
-| 7.4 | Portal teleport (walk-through) | ⬜ | Step into Portal → teleport to destination |
-| 7.5 | Space-aware Window assignment | ⬜ | Windows belong to a Space, only render in their Space |
-| 7.6 | Smart rendering — Space-based | ⬜ | Pause capture for Windows in other Spaces |
-| 7.7 | Home View (`H`) | ⬜ | Full overview of all Spaces, Projects, agents as Portal thumbnails |
+| 9.1 | Space definitions (8 zones in map) | ⬜ | ASK through GARAGE mapped to map areas |
+| 9.2 | Teleport (`Shift+1`–`Shift+8`) | ⬜ | Instant teleport to Space |
+| 9.3 | Portal rendering (visual peek) | ⬜ | Render destination Space inside Portal frame, distance-adaptive quality. **Search Quake 3 community repos for existing Portal rendering implementations — don't build from scratch.** |
+| 9.4 | Portal teleport (walk-through) | ⬜ | Step into Portal → teleport to destination |
+| 9.5 | Space-aware Window assignment | ⬜ | Windows belong to a Space, only render in their Space |
+| 9.6 | Smart rendering — Space-based | ⬜ | Pause capture for Windows in other Spaces |
+| 9.7 | Home View (`H`) | ⬜ | Full overview of all Spaces, Projects, agents as Portal thumbnails |
 
-**🧪 TEST CHECKPOINT 7:** Press Shift+1-8 to teleport between Spaces. Each Space has its own Windows. Portals show live preview. Walk through to teleport. Windows in other Spaces paused. Home View shows everything.
+**🧪 TEST CHECKPOINT 9:** Press Shift+1-8 to teleport between Spaces. Each Space has its own Windows. Portals show live preview. Walk through to teleport. Windows in other Spaces paused. Home View shows everything.
 **📊 PERFORMANCE CHECKPOINT:** Multi-Space overhead. Compare FPS with 1 Space vs 8 Spaces. Portal rendering cost. Record to perf history.
 
 ---
 
-### BATCH 8 — Programmable Hotkeys & Screenshots
+### BATCH 10 — Programmable Hotkeys & Screenshots
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 8.1 | Virtual Keyboard (`K`) | ⬜ | Visual keyboard showing all bindings, color-coded |
-| 8.2 | Hotkey rebinding | ⬜ | Click any key on virtual keyboard to reassign |
-| 8.3 | Bookmark hotkeys | ⬜ | Bind map positions to key combos |
-| 8.4 | Screenshot (`[`) | ⬜ | Capture Window or full view |
-| 8.5 | Video recording (`]`) | ⬜ | Toggle session recording |
-| 8.6 | Magic Mouse gestures | ⬜ | Swipe, pinch, force touch enhancements |
+| 10.1 | Virtual Keyboard (`K`) | ⬜ | Visual keyboard showing all bindings, color-coded |
+| 10.2 | Hotkey rebinding | ⬜ | Click any key on virtual keyboard to reassign |
+| 10.3 | Bookmark hotkeys | ⬜ | Bind map positions to key combos |
+| 10.4 | Screenshot (`[`) | ⬜ | Capture Window or full view |
+| 10.5 | Video recording (`]`) | ⬜ | Toggle session recording |
+| 10.6 | Magic Mouse gestures | ⬜ | Swipe, pinch, force touch enhancements |
 
-**🧪 TEST CHECKPOINT 8:** Press K, see all bindings, rebind a key. Screenshot saves. Video records. Magic Mouse gestures work in Pointer Mode.
+**🧪 TEST CHECKPOINT 10:** Press K, see all bindings, rebind a key. Screenshot saves. Video records. Magic Mouse gestures work in Pointer Mode.
 
 ---
 
-### BATCH 9 — Ornaments, UI Chrome & Visual Polish
+### BATCH 11 — Ornaments, UI Chrome & Visual Polish
 
 Ornaments, Vibrancy, context menus.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 9.1 | Window Bar Ornament (bottom) | ⬜ | Title, close, pin, visibility controls |
-| 9.2 | Top Ornament (file path breadcrumb) | ⬜ | File path / branch info above Windows |
-| 9.3 | Side Ornament (status indicator) | ⬜ | Status dot, scrollbar |
-| 9.4 | Sidebar Ornament (file tree) | ⬜ | Collapsible file tree on left edge |
-| 9.5 | Face-the-player Ornaments | ⬜ | Ornaments billboard toward viewer |
-| 9.6 | Distance-scaled Ornaments | ⬜ | Scale text/icons based on player distance |
-| 9.7 | Vibrancy toggle (`Shift+T`) | ⬜ | Dynamic text contrast boost on Window backgrounds |
-| 9.8 | Context menus (right-click) | ⬜ | File ops, git ops, agent ops, window ops |
-| 9.9 | Chromeless Window option | ⬜ | No chrome — raw content on surface |
+| 11.1 | Window Bar Ornament (bottom) | ⬜ | Title, close, pin, visibility controls |
+| 11.2 | Top Ornament (file path breadcrumb) | ⬜ | File path / branch info above Windows |
+| 11.3 | Side Ornament (status indicator) | ⬜ | Status dot, scrollbar |
+| 11.4 | Sidebar Ornament (file tree) | ⬜ | Collapsible file tree on left edge |
+| 11.5 | Face-the-player Ornaments | ⬜ | Ornaments billboard toward viewer |
+| 11.6 | Distance-scaled Ornaments | ⬜ | Scale text/icons based on player distance |
+| 11.7 | Vibrancy toggle (`Shift+T`) | ⬜ | Dynamic text contrast boost on Window backgrounds |
+| 11.8 | Context menus (right-click) | ⬜ | File ops, git ops, agent ops, window ops |
+| 11.9 | Chromeless Window option | ⬜ | No chrome — raw content on surface |
 
-**🧪 TEST CHECKPOINT 9:** Ornaments show controls. Right-click opens context menu. Ornaments face the player. Vibrancy makes text legible over busy backgrounds.
+**🧪 TEST CHECKPOINT 11:** Ornaments show controls. Right-click opens context menu. Ornaments face the player. Vibrancy makes text legible over busy backgrounds.
 
 ---
 
-### BATCH 10 — Project File Classification & Live Scanning
+### BATCH 12 — Project File Classification & Live Scanning
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 10.1 | Heuristic file classifier | ⬜ | Glob patterns, path conventions, extensions → Space assignment |
-| 10.2 | Live filesystem watcher | ⬜ | Files move between Spaces as project structure changes |
-| 10.3 | Window-to-Space auto-suggest | ⬜ | Hybrid: auto-suggest Space for new Windows, player confirms/overrides |
-| 10.4 | Project scanner (`~/Projects/`) | ⬜ | Enumerate all projects, classify on load |
+| 12.1 | Heuristic file classifier | ⬜ | Glob patterns, path conventions, extensions → Space assignment |
+| 12.2 | Live filesystem watcher | ⬜ | Files move between Spaces as project structure changes |
+| 12.3 | Window-to-Space auto-suggest | ⬜ | Hybrid: auto-suggest Space for new Windows, player confirms/overrides |
+| 12.4 | Project scanner (`~/Projects/`) | ⬜ | Enumerate all projects, classify on load |
 
-**🧪 TEST CHECKPOINT 10:** New terminal → Q3IDE suggests BUILD Space. File renamed `test_*` → moves to TEST Space. New project in ~/Projects/ appears in File Browser.
+**🧪 TEST CHECKPOINT 12:** New terminal → Q3IDE suggests BUILD Space. File renamed `test_*` → moves to TEST Space. New project in ~/Projects/ appears in File Browser.
 
 ---
 
-### BATCH 11 — UML Navigator
+### BATCH 13 — UML Navigator
 
 The architecture-first navigation system. 3D diagrams, node clouds, animated pipes, Transformer unfolding.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 11.1 | UML pre-processor daemon | ⬜ | Background Rust process: file watcher + language-specific parser plugins |
-| 11.2 | Parser: TypeScript/JavaScript | ⬜ | Extract classes, methods, imports, relationships from .ts/.js/.tsx/.jsx |
-| 11.3 | Parser: Rust | ⬜ | Extract structs, impls, use statements, traits from .rs |
-| 11.4 | Parser: Python | ⬜ | Extract classes, functions, imports from .py |
-| 11.5 | UML cache output (`.q3ide/uml_cache.json`) | ⬜ | Daemon writes parsed graph data, Q3IDE reads it |
-| 11.6 | Full UML view (`U` key) | ⬜ | 3D node cloud centered on current file, interactive |
-| 11.7 | Node cloud recentering | ⬜ | Click node → cloud reshuffles with new center |
-| 11.8 | 3D node box — Transformer unfold animation | ⬜ | Compact → methods → full params on progressive dwell |
-| 11.9 | Pipe rendering (animated flow, thickness, styles) | ⬜ | Visual pipe styles per relationship type, particle flow |
-| 11.10 | Mini UML in HUD bar | ⬜ | Always-visible compact node graph between health and ammo |
-| 11.11 | Portal suck-in teleport from UML | ⬜ | Click node teleport button → vortex pulls player to file's Window |
-| 11.12 | `N` key — spawn agent on UML node | ⬜ | Aim at node, press N → iTerm + Claude with file path |
-| 11.13 | Diagram type switching (`Shift+U`) | ⬜ | Class Diagram ↔ Component Diagram ↔ Dependency Graph |
-| 11.14 | Node status overlays (test red/green) | ⬜ | Nodes turn red/green matching test results for that file |
-| 11.15 | Agent activity on nodes (dot + glowing pipe) | ⬜ | Status dot on node + glowing pipe to class agent is working on |
-| 11.16 | Pipe interaction (hover highlights) | ⬜ | Aim at pipe → both nodes highlight + relationship details tooltip |
-| 11.17 | Git diff overlay (changed nodes glow) | ⬜ | Nodes changed since last commit glow/pulse |
-| 11.18 | Git blame coloring (author colors) | ⬜ | Nodes color-coded by last author |
-| 11.19 | Git time slider | ⬜ | Scrub through history, watch UML architecture evolve over time |
-| 11.20 | Multiplayer UML visibility | ⬜ | Other players see your UML diagram floating in front of you |
-| 11.21 | UML Window spawning | ⬜ | Click node → opens file as new Floating Window at current position |
+| 13.1 | UML pre-processor daemon | ⬜ | Background Rust process: file watcher + language-specific parser plugins |
+| 13.2 | Parser: TypeScript/JavaScript | ⬜ | Extract classes, methods, imports, relationships from .ts/.js/.tsx/.jsx |
+| 13.3 | Parser: Rust | ⬜ | Extract structs, impls, use statements, traits from .rs |
+| 13.4 | Parser: Python | ⬜ | Extract classes, functions, imports from .py |
+| 13.5 | UML cache output (`.q3ide/uml_cache.json`) | ⬜ | Daemon writes parsed graph data, Q3IDE reads it |
+| 13.6 | Full UML view (`U` key) | ⬜ | 3D node cloud centered on current file, interactive |
+| 13.7 | Node cloud recentering | ⬜ | Click node → cloud reshuffles with new center |
+| 13.8 | 3D node box — Transformer unfold animation | ⬜ | Compact → methods → full params on progressive dwell |
+| 13.9 | Pipe rendering (animated flow, thickness, styles) | ⬜ | Visual pipe styles per relationship type, particle flow |
+| 13.10 | Mini UML in HUD bar | ⬜ | Always-visible compact node graph between health and ammo |
+| 13.11 | Portal suck-in teleport from UML | ⬜ | Click node teleport button → vortex pulls player to file's Window |
+| 13.12 | `N` key — spawn agent on UML node | ⬜ | Aim at node, press N → iTerm + Claude with file path |
+| 13.13 | Diagram type switching (`Shift+U`) | ⬜ | Class Diagram ↔ Component Diagram ↔ Dependency Graph |
+| 13.14 | Node status overlays (test red/green) | ⬜ | Nodes turn red/green matching test results for that file |
+| 13.15 | Agent activity on nodes (dot + glowing pipe) | ⬜ | Status dot on node + glowing pipe to class agent is working on |
+| 13.16 | Pipe interaction (hover highlights) | ⬜ | Aim at pipe → both nodes highlight + relationship details tooltip |
+| 13.17 | Git diff overlay (changed nodes glow) | ⬜ | Nodes changed since last commit glow/pulse |
+| 13.18 | Git blame coloring (author colors) | ⬜ | Nodes color-coded by last author |
+| 13.19 | Git time slider | ⬜ | Scrub through history, watch UML architecture evolve over time |
+| 13.20 | Multiplayer UML visibility | ⬜ | Other players see your UML diagram floating in front of you |
+| 13.21 | UML Window spawning | ⬜ | Click node → opens file as new Floating Window at current position |
 
-**🧪 TEST CHECKPOINT 11:** Press U → 3D UML appears, follows player. Aim → unfolds. Click → recenters. Click teleport → Portal vortex. Click node → new Floating Window spawns with file. N → Claude spawns. Mini UML in HUD updates on focus change. Pipes animate, interactive on hover. Red/green test status on nodes. Agent dots visible. Other players see your UML. Git slider scrubs history.
+**🧪 TEST CHECKPOINT 13:** Press U → 3D UML appears, follows player. Aim → unfolds. Click → recenters. Click teleport → Portal vortex. Click node → new Floating Window spawns with file. N → Claude spawns. Mini UML in HUD updates on focus change. Pipes animate, interactive on hover. Red/green test status on nodes. Agent dots visible. Other players see your UML. Git slider scrubs history.
 **📊 PERFORMANCE CHECKPOINT:** 3D overlay rendering impact. FPS with UML open vs closed. Node count vs frame time. Record to perf history.
 
 ---
 
-### BATCH 12 — AI Agent Integration
+### BATCH 14 — AI Agent Integration
 
 LLM agent orchestration, diff viewer, approve/reject, dashboard.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 12.1 | Agent data model in WindowEntity | ⬜ | agent_id, model, status, context_tokens fields |
-| 12.2 | Agent spawning (auto-open terminals) | ⬜ | Q3IDE spawns iTerm, launches Claude Code/Aider, captures output |
-| 12.3 | Native API agent (direct LLM calls) | ⬜ | Chat Window for simple tasks via Anthropic/OpenAI/Zhipu APIs |
-| 12.4 | Agent status display on Windows | ⬜ | Status Ornament: thinking/writing/idle/error |
-| 12.5 | Diff Viewer Window | ⬜ | Syntax-highlighted diff display, scrollable |
-| 12.6 | Approve/Reject Ornament | ⬜ | [✓ Approve] [✗ Reject] [💬 Comment] [↻ Retry] buttons |
-| 12.7 | Task Queue Billboard | ⬜ | Central Billboard: all agents, tasks, status, context usage, cost |
-| 12.8 | Kill Feed notifications | ⬜ | Agent events scroll like frag notifications |
-| 12.9 | Q3 Announcer integration | ⬜ | "BUILD COMPLETE" / "TESTS FAILING" in announcer voice |
-| 12.10 | Room lighting from status | ⬜ | TEST Space red/green, BUILD Space amber during compilation |
-| 12.11 | API key management | ⬜ | `.q3ide/.env` + Control Center, encrypted at rest, per-model config |
-| 12.12 | War Room layout | ⬜ | Multi-agent command aesthetic for ASK/PLAN Spaces |
+| 14.1 | Agent data model in WindowEntity | ⬜ | agent_id, model, status, context_tokens fields |
+| 14.2 | Agent spawning (auto-open terminals) | ⬜ | Q3IDE spawns iTerm, launches Claude Code/Aider, captures output |
+| 14.3 | Native API agent (direct LLM calls) | ⬜ | Chat Window for simple tasks via Anthropic/OpenAI/Zhipu APIs |
+| 14.4 | Agent status display on Windows | ⬜ | Status Ornament: thinking/writing/idle/error |
+| 14.5 | Diff Viewer Window | ⬜ | Syntax-highlighted diff display, scrollable |
+| 14.6 | Approve/Reject Ornament | ⬜ | [✓ Approve] [✗ Reject] [💬 Comment] [↻ Retry] buttons |
+| 14.7 | Task Queue Billboard | ⬜ | Central Billboard: all agents, tasks, status, context usage, cost |
+| 14.8 | Kill Feed notifications | ⬜ | Agent events scroll like frag notifications |
+| 14.9 | Q3 Announcer integration | ⬜ | "BUILD COMPLETE" / "TESTS FAILING" in announcer voice |
+| 14.10 | Room lighting from status | ⬜ | TEST Space red/green, BUILD Space amber during compilation |
+| 14.11 | API key management | ⬜ | `.q3ide/.env` + Control Center, encrypted at rest, per-model config |
+| 14.12 | War Room layout | ⬜ | Multi-agent command aesthetic for ASK/PLAN Spaces |
 
-**🧪 TEST CHECKPOINT 12:** Spawn Claude Code from in-game. Diff appears when done. Approve it. Billboard shows status. Announcer fires. Room lights change.
-
----
-
-### BATCH 13 — Audio & Notifications
-
-| # | Feature | Status | Description |
-|---|---------|--------|-------------|
-| 13.1 | Spatial notification audio | ⬜ | Work events positioned in 3D from source Space |
-| 13.2 | Per-Window audio | ⬜ | Each Window emits its app's audio from its position |
-| 13.3 | Audio ducking | ⬜ | Focused Window full volume, others ducked 70% |
-| 13.4 | Distinct work sound palette | ⬜ | Work sounds never confused with game sounds |
-| 13.5 | Window pulse animation | ⬜ | Completed task = Window glow pulse (2 cycles) |
-
-**🧪 TEST CHECKPOINT 13:** YouTube on wall = audio from wall. Focus terminal = YouTube ducks. Build complete = spatial notification + announcer.
+**🧪 TEST CHECKPOINT 14:** Spawn Claude Code from in-game. Diff appears when done. Approve it. Billboard shows status. Announcer fires. Room lights change.
 
 ---
 
-### BATCH 14 — Multiplayer
+### BATCH 15 — Audio & Notifications
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 14.1 | Per-Window visibility (Private/Public/Team) | ⬜ | Visibility flag in WindowEntity |
-| 14.2 | Low-res thumbnail sync | ⬜ | Public Windows send compressed thumbnails over network |
-| 14.3 | Proximity-based resolution | ⬜ | Walk closer to shared Window = higher resolution |
-| 14.4 | Player Portal (visit coworker) | ⬜ | Portal to another player's Space |
-| 14.5 | Pair Programming (permission grant) | ⬜ | Request/allow/deny control of another player's Window |
-| 14.6 | Player presence on minimap | ⬜ | See teammate dots on minimap |
+| 15.1 | Spatial notification audio | ⬜ | Work events positioned in 3D from source Space |
+| 15.2 | Per-Window audio | ⬜ | Each Window emits its app's audio from its position |
+| 15.3 | Audio ducking | ⬜ | Focused Window full volume, others ducked 70% |
+| 15.4 | Distinct work sound palette | ⬜ | Work sounds never confused with game sounds |
+| 15.5 | Window pulse animation | ⬜ | Completed task = Window glow pulse (2 cycles) |
 
-**🧪 TEST CHECKPOINT 14:** Two players on same server. Shared Window visible. Walk closer = higher res. Pair programming works.
+**🧪 TEST CHECKPOINT 15:** YouTube on wall = audio from wall. Focus terminal = YouTube ducks. Build complete = spatial notification + announcer.
+
+---
+
+### BATCH 16 — Multiplayer
+
+| # | Feature | Status | Description |
+|---|---------|--------|-------------|
+| 16.1 | Per-Window visibility (Private/Public/Team) | ⬜ | Visibility flag in WindowEntity |
+| 16.2 | Low-res thumbnail sync | ⬜ | Public Windows send compressed thumbnails over network |
+| 16.3 | Proximity-based resolution | ⬜ | Walk closer to shared Window = higher resolution |
+| 16.4 | Player Portal (visit coworker) | ⬜ | Portal to another player's Space |
+| 16.5 | Pair Programming (permission grant) | ⬜ | Request/allow/deny control of another player's Window |
+| 16.6 | Player presence on minimap | ⬜ | See teammate dots on minimap |
+
+**🧪 TEST CHECKPOINT 16:** Two players on same server. Shared Window visible. Walk closer = higher res. Pair programming works.
 **📊 PERFORMANCE CHECKPOINT:** Network + rendering combined load. FPS with 2+ players and shared Windows. Thumbnail bandwidth. Record to perf history.
 
 ---
 
-### BATCH 15 — quakeOS Native Rendering
+### BATCH 17 — quakeOS Native Rendering
 
 The native rendering library inside Q3IDE. Renders text, code, markdown, and images directly in the engine — no macOS app capture needed. A nano-level editor for quick changes without leaving Quake.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 15.1 | FreeType/stb_truetype font renderer | ⬜ | Sharp scalable text rendering in-engine, monospace + proportional |
-| 15.2 | Syntax highlighting engine | ⬜ | tree-sitter tokenizer for language-aware coloring (separate from UML daemon's class-level parsing) |
-| 15.3 | Line numbers + git blame gutter | ⬜ | Left gutter with line numbers, optional blame coloring per line |
-| 15.4 | Focus mode toggle (`.` key) | ⬜ | Aim at any captured code Window (FPS or Pointer Mode), press `.` → flips to quakeOS native render. Press `.` again → back to captured macOS. Press `.` on nothing → new empty file as Floating Window. |
-| 15.5 | Scroll + search + jump-to-line | ⬜ | Mouse wheel scroll, Ctrl+F search, Ctrl+G jump-to-line in focus mode |
-| 15.6 | Nano-level editor | ⬜ | Type, delete, undo, save. Basic text editing for quick fixes without leaving Quake |
-| 15.7 | Markdown renderer | ⬜ | Render .md files with headings, bold, code blocks, links |
-| 15.8 | Image viewer | ⬜ | Display .png/.jpg/.svg as textures on Windows natively |
+| 17.1 | FreeType/stb_truetype font renderer | ⬜ | Sharp scalable text rendering in-engine, monospace + proportional |
+| 17.2 | Syntax highlighting engine | ⬜ | tree-sitter tokenizer for language-aware coloring (separate from UML daemon's class-level parsing) |
+| 17.3 | Line numbers + git blame gutter | ⬜ | Left gutter with line numbers, optional blame coloring per line |
+| 17.4 | Focus mode toggle (`.` key) | ⬜ | Aim at any captured code Window (FPS or Pointer Mode), press `.` → flips to quakeOS native render. Press `.` again → back to captured macOS. Press `.` on nothing → new empty file as Floating Window. |
+| 17.5 | Scroll + search + jump-to-line | ⬜ | Mouse wheel scroll, Ctrl+F search, Ctrl+G jump-to-line in focus mode |
+| 17.6 | Nano-level editor | ⬜ | Type, delete, undo, save. Basic text editing for quick fixes without leaving Quake |
+| 17.7 | Markdown renderer | ⬜ | Render .md files with headings, bold, code blocks, links |
+| 17.8 | Image viewer | ⬜ | Display .png/.jpg/.svg as textures on Windows natively |
 
-**🧪 TEST CHECKPOINT 15:** Aim at VS Code Window showing a .ts file, press `.` → flips to quakeOS-rendered syntax highlighted code with line numbers. Scroll through it. Press Ctrl+F → search works. Type a change → file saves. Press `.` → back to VS Code capture. Open a markdown file → renders with formatting. Open a PNG → displays as texture.
+**🧪 TEST CHECKPOINT 17:** Aim at VS Code Window showing a .ts file, press `.` → flips to quakeOS-rendered syntax highlighted code with line numbers. Scroll through it. Press Ctrl+F → search works. Type a change → file saves. Press `.` → back to VS Code capture. Open a markdown file → renders with formatting. Open a PNG → displays as texture.
 
 ---
 
-### BATCH 16 — Game Modes (Future)
+### BATCH 18 — Game Modes (Future)
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 16.1 | Synchronized rounds (CODE→FRAG→TEST→RUN) | ⬜ | Structured multiplayer game mode |
-| 16.2 | Scoreboard (frags + code metrics) | ⬜ | Combined scoring |
-| 16.3 | File Portal (import → destination) | ⬜ | Mini-portal on import statements |
+| 18.1 | Synchronized rounds (CODE→FRAG→TEST→RUN) | ⬜ | Structured multiplayer game mode |
+| 18.2 | Scoreboard (frags + code metrics) | ⬜ | Combined scoring |
+| 18.3 | File Portal (import → destination) | ⬜ | Mini-portal on import statements |
 
 ---
 
-### BATCH 17 — Map Skins & Polish (Future)
+### BATCH 19 — Map Skins & Polish (Future)
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 17.1 | Map skins / environments | ⬜ | Same layout, different aesthetics (office, cyberpunk, space station) |
-| 17.2 | Office Mode styles | ⬜ | Different office aesthetics |
-| 17.3 | Volume baseplate | ⬜ | Space boundary indicators |
+| 19.1 | Map skins / environments | ⬜ | Same layout, different aesthetics (office, cyberpunk, space station) |
+| 19.2 | Office Mode styles | ⬜ | Different office aesthetics |
+| 19.3 | Volume baseplate | ⬜ | Space boundary indicators |
 
 ---
 
-### BATCH 18 — Advanced Audio & Recording (Future)
+### BATCH 20 — Advanced Audio & Recording (Future)
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 18.1 | Spatialized voice chat | ⬜ | Distance-based voice between players |
-| 18.2 | Multiplayer Window audio | ⬜ | Hear coworker's music from their Space |
-| 18.3 | Session recording & playback | ⬜ | Record full sessions for async review |
+| 20.1 | Spatialized voice chat | ⬜ | Distance-based voice between players |
+| 20.2 | Multiplayer Window audio | ⬜ | Hear coworker's music from their Space |
+| 20.3 | Session recording & playback | ⬜ | Record full sessions for async review |
 
 ---
 
-### BATCH 19 — Custom Map (Future)
+### BATCH 21 — Custom Map (Future)
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 19.1 | Custom Q3 map for 8 Spaces | ⬜ | Purpose-built map with rooms designed for workflow |
+| 21.1 | Custom Q3 map for 8 Spaces | ⬜ | Purpose-built map with rooms designed for workflow |
 
 ---
 
-### BATCH 20 — OpenClaw Bot Integration
+### BATCH 22 — OpenClaw Bot Integration
 
 AI agent as a game character. Frags, chats, works.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 20.1 | OpenClaw bot player entity | ⬜ | Bot runs as a Quake 3 bot player with full movement, combat AI |
-| 20.2 | OpenClaw API bridge | ⬜ | HTTP/WebSocket bridge: Q3IDE ↔ OpenClaw API (send/receive messages with token) |
-| 20.3 | Dedicated chat Window | ⬜ | Floating Window with full conversation history, scrollable, typeable |
-| 20.4 | Bot game AI (frag + navigate) | ⬜ | Bot plays the game — picks up weapons, frags other players/bots, navigates map |
-| 20.5 | Bot responds while playing | ⬜ | Bot can frag AND respond to chat simultaneously — no pause for thinking |
+| 22.1 | OpenClaw bot player entity | ⬜ | Bot runs as a Quake 3 bot player with full movement, combat AI |
+| 22.2 | OpenClaw API bridge | ⬜ | HTTP/WebSocket bridge: Q3IDE ↔ OpenClaw API (send/receive messages with token) |
+| 22.3 | Dedicated chat Window | ⬜ | Floating Window with full conversation history, scrollable, typeable |
+| 22.4 | Bot game AI (frag + navigate) | ⬜ | Bot plays the game — picks up weapons, frags other players/bots, navigates map |
+| 22.5 | Bot responds while playing | ⬜ | Bot can frag AND respond to chat simultaneously — no pause for thinking |
 
-**🧪 TEST CHECKPOINT 20:** OpenClaw bot spawns as a player, runs around, frags bots. Open chat Window, type a message, bot responds. Bot keeps fragging while chatting.
+**🧪 TEST CHECKPOINT 22:** OpenClaw bot spawns as a player, runs around, frags bots. Open chat Window, type a message, bot responds. Bot keeps fragging while chatting.
 
 ---
 
-### BATCH 21 — AI Runtime Geometry (Moonshot)
+### BATCH 23 — AI Runtime Geometry (Moonshot)
 
 AI-generated game world in real-time. Take that, Google Genie.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 21.1 | AI runtime object creation — props | ⬜ | AI generates furniture, props, models placed in existing rooms |
-| 21.2 | AI runtime geometry creation — structural | ⬜ | AI generates walls, rooms, corridors (dynamic mesh geometry on top of BSP) |
+| 23.1 | AI runtime object creation — props | ⬜ | AI generates furniture, props, models placed in existing rooms |
+| 23.2 | AI runtime geometry creation — structural | ⬜ | AI generates walls, rooms, corridors (dynamic mesh geometry on top of BSP) |
 
-**🧪 TEST CHECKPOINT 21:** Ask AI to generate a desk → desk appears in room. Ask AI to generate a new corridor → walkable corridor appears.
+**🧪 TEST CHECKPOINT 23:** Ask AI to generate a desk → desk appears in room. Ask AI to generate a new corridor → walkable corridor appears.
 
 ---
 
-### BATCH 22 — Browser-Ready Port
+### BATCH 24 — Browser-Ready Port
 
 Full Q3IDE compiled to WebAssembly via Emscripten. Play in the browser.
 
 | # | Feature | Status | Description |
 |---|---------|--------|-------------|
-| 22.1 | Emscripten/WASM compile of Quake3e + Q3IDE | ⬜ | Full engine running in browser with WebGL |
-| 22.2 | Browser capture adapter | ⬜ | Replace ScreenCaptureKit with browser-compatible capture (screen share API or iframe capture) |
-| 22.3 | Browser input handling | ⬜ | Pointer lock, keyboard capture, mouse events mapped to Q3IDE interaction model |
+| 23.1 | Emscripten/WASM compile of Quake3e + Q3IDE | ⬜ | Full engine running in browser with WebGL |
+| 23.2 | Browser capture adapter | ⬜ | Replace ScreenCaptureKit with browser-compatible capture (screen share API or iframe capture) |
+| 23.3 | Browser input handling | ⬜ | Pointer lock, keyboard capture, mouse events mapped to Q3IDE interaction model |
 
-**🧪 TEST CHECKPOINT 22:** Open Q3IDE in Chrome. Full FPS gameplay. Windows visible on walls. Interaction model works with browser input.
+**🧪 TEST CHECKPOINT 24:** Open Q3IDE in Chrome. Full FPS gameplay. Windows visible on walls. Interaction model works with browser input.
 
 ---
 
@@ -539,33 +707,36 @@ Full Q3IDE compiled to WebAssembly via Emscripten. Play in the browser.
 
 ### Progress Summary
 
+### Progress Summary
+
 | Batch | Name | Features | Status |
 |-------|------|----------|--------|
-| 0 | Foundation | 7 | ✅ Done |
-| 1 | **Window Entity, Placement & Rendering** | **10** (stages 1.1-1.10) | 🔧 In Progress |
-| 2 | Interaction Model | 9 | ⬜ |
-| 3 | Live Window Management | 7 | ⬜ |
-| 4 | Window Layout (drag, resize, snap, persist) | 8 | ⬜ |
-| 5 | Grapple Hook & Spatial Tools | 7 | ⬜ |
-| 6 | Theater, Office & Focus | 5 | ⬜ |
-| 7 | Spaces & Navigation | 7 | ⬜ |
-| 8 | Programmable Hotkeys & Screenshots | 6 | ⬜ |
-| 9 | Ornaments, Vibrancy & Visual Polish | 9 | ⬜ |
-| 10 | Project Classification & Live Scanning | 4 | ⬜ |
-| 11 | **UML Navigator** | **21** | ⬜ |
-| 12 | AI Agent Integration | 12 | ⬜ |
-| 13 | Audio & Notifications | 5 | ⬜ |
-| 14 | Multiplayer | 6 | ⬜ |
-| 15 | **quakeOS Native Rendering** | **8** | ⬜ |
-| 16 | Game Modes | 3 | ⬜ Future |
-| 17 | Map Skins & Polish | 3 | ⬜ Future |
-| 18 | Advanced Audio & Recording | 3 | ⬜ Future |
-| 19 | Custom Map | 1 | ⬜ Future |
-| 20 | **OpenClaw Bot** | **5** | ⬜ Future |
-| 21 | **AI Runtime Geometry** | **2** | ⬜ Moonshot |
-| 22 | **Browser WASM Port** | **3** | ⬜ Future |
+| 1 | Foundation | 8 | ✅ Done |
+| 2 | **Window Entity, Placement & Rendering** | **10** (stages 2.1-2.10) | 🔧 In Progress |
+| 3 | Interaction Model | 9 | ⬜ |
+| 4 | Live Window Management | 7 | ⬜ |
+| 5 | Window Layout (drag, resize, snap, persist) | 8 | ⬜ |
+| 6 | Grapple Hook & Spatial Tools | 7 | ⬜ |
+| **7** | **🏗️ Architecture Overhaul** | **19** | ⬜ |
+| 8 | Theater, Office & Focus | 5 | ⬜ |
+| 9 | Spaces & Navigation | 7 | ⬜ |
+| 10 | Programmable Hotkeys & Screenshots | 6 | ⬜ |
+| 11 | Ornaments, Vibrancy & Visual Polish | 9 | ⬜ |
+| 12 | Project Classification & Live Scanning | 4 | ⬜ |
+| 13 | **UML Navigator** | **21** | ⬜ |
+| 14 | AI Agent Integration | 12 | ⬜ |
+| 15 | Audio & Notifications | 5 | ⬜ |
+| 16 | Multiplayer | 6 | ⬜ |
+| 17 | **quakeOS Native Rendering** | **8** | ⬜ |
+| 18 | Game Modes | 3 | ⬜ Future |
+| 19 | Map Skins & Polish | 3 | ⬜ Future |
+| 20 | Advanced Audio & Recording | 3 | ⬜ Future |
+| 21 | Custom Map | 1 | ⬜ Future |
+| 22 | **OpenClaw Bot** | **5** | ⬜ Future |
+| 23 | **AI Runtime Geometry** | **2** | ⬜ Moonshot |
+| 24 | **Browser WASM Port** | **3** | ⬜ Future |
 | VR | Engine Swap | 1 | ⬜ Last |
-| **Total** | | **~150** | |
+| **Total** | | **~160** | |
 
 ---
 
@@ -582,7 +753,7 @@ q3ide/
 │
 ├── .agents/                            # Cross-IDE agent infrastructure
 │   ├── agents/q3agents/               # Custom agent definitions (architecture-scoped)
-│   │   ├── engine-adapter.md          # Only touches engine/, quake3e/code/q3ide/
+│   │   ├── engine-adapter.md          # Only touches engine/ and engine/adapter.h
 │   │   ├── capture-rust.md            # Only touches capture/
 │   │   ├── spatial-c.md               # Only touches spatial/
 │   │   ├── daemon-rust.md             # Only touches daemon/
@@ -607,17 +778,33 @@ q3ide/
 │   └── test_capture.rs
 │
 ├── engine/                            # Engine adapter layer (swappable)
-│   ├── adapter.h                      # Abstract engine interface
+│   ├── adapter.h                      # Abstract engine interface (full surface — see Q3IDE_ARCHITECTURE.md)
 │   └── quake3e/                       # Quake3e adapter implementation
 │       ├── q3ide_adapter.c            # Implements engine_adapter_t for Quake3e
-│       ├── q3ide_texture.c            # Texture creation, upload, management
-│       ├── q3ide_texture.h
-│       ├── q3ide_placement.c          # Wall trace, quad placement, surface alignment
-│       └── q3ide_placement.h
+│       ├── q3ide_adapter.h
+│       ├── q3ide_hooks.c              # Engine hook entry points (cgame callbacks)
+│       ├── q3ide_hooks.h
+│       ├── q3ide_render.c             # Viewport loop — calls spatial/core/render_dispatch
+│       ├── q3ide_dylib.c              # Rust dylib load/unload
+│       └── q3ide_params.h             # All Q3IDE constants — single source of truth
 │
 ├── spatial/                           # Engine-agnostic spatial logic
+│   ├── core/                          # Scene management, frame loop, features
+│   │   ├── scene.h                    # Scene graph, SpatialObject_t base, ID allocator
+│   │   ├── scene.c
+│   │   ├── features.h                 # Feature registration table — kill 6-file wiring tax
+│   │   ├── features.c
+│   │   ├── render_dispatch.h          # Single multi-monitor render loop
+│   │   ├── render_dispatch.c
+│   │   ├── frame.h                    # Per-frame update orchestration
+│   │   ├── frame.c
+│   │   ├── commands.h                 # All /q3ide_* console commands
+│   │   ├── commands.c
+│   │   ├── log.h                      # Structured debug logging
+│   │   └── log.c
+│   │
 │   ├── window/                        # Window system
-│   │   ├── entity.h                   # WindowEntity struct + enums
+│   │   ├── entity.h                   # Window_t — extends SpatialObject_t. WindowMode_t, WindowCapture_t, WindowPlacement_t, WindowLayout_t, WindowVisibility_t enums
 │   │   ├── manager.h                  # Window lifecycle (create, destroy, track)
 │   │   ├── manager.c
 │   │   ├── focus.h                    # Focus system (crosshair → dwell → hover)
@@ -634,7 +821,7 @@ q3ide/
 │   │   ├── wall_scanner.c
 │   │   ├── wall_cache.h              # CachedWall_t, WallSlot_t, TrainedPosition_t
 │   │   ├── wall_cache.c
-│   │   ├── placement_queue.h         # FPS-adaptive placement queue + texture throttle
+│   │   ├── placement_queue.h         # FPS-adaptive placement queue + stream freeze integration
 │   │   ├── placement_queue.c
 │   │   ├── visibility.h              # Pre-upload visibility gating (dot product + BSP trace)
 │   │   ├── visibility.c
@@ -643,24 +830,59 @@ q3ide/
 │   │   ├── perf_metrics.h            # Per-window performance tracking
 │   │   └── perf_metrics.c
 │   │
+│   │
+│   ├── fx/                            # Visual effects
+│   │   ├── laser.h                    # Laser pointer effect
+│   │   ├── laser.c
+│   │   ├── rope.h                     # Rope/grapple physics rendering
+│   │   ├── rope.c
+│   │   ├── effects.h                  # Hover glow, pulse animations, particles
+│   │   └── effects.c
+│   │
 │   ├── space/                         # Space system (8 workflow zones)
-│   │   ├── space.h                    # Space definitions, teleport
+│   │   ├── space.h                    # Space definitions, SpaceWindowView_t, teleport
 │   │   ├── space.c
-│   │   ├── portal.h                   # Portal rendering + walk-through teleport
-│   │   └── portal.c
+│   │   ├── aas.h                      # AAS area system (player location tracking)
+│   │   ├── aas.c
+│   │   ├── aas_face.c
+│   │   ├── aas_query.c
+│   │   ├── aas_format.h
+│   │   ├── wall_scanner.h             # Pre-scan walls on area entry
+│   │   ├── wall_scanner.c
+│   │   ├── wall_cache.h               # CachedWall_t + WallSlot_t owned by Space
+│   │   ├── wall_cache.c
+│   │   ├── placement_queue.h          # FPS-adaptive placement queue
+│   │   ├── placement_queue.c
+│   │   ├── player_state.h             # Player distance, area tracking
+│   │   ├── player_state.c
+│   │   ├── teleport.h                 # Space teleport logic
+│   │   ├── teleport.c
+│   │   ├── portal.h                   # Portal rendering + walk-through teleport [STUB]
+│   │   └── portal.c                   # ⚠️ Performance critical — search existing Q3 Portal implementations
 │   │
 │   ├── ui/                            # Spatial UI rendering
-│   │   ├── vibrancy.h                 # Vibrancy text contrast logic
+│   │   ├── theme.h                    # VisionOS design tokens (replaces q3ide_design.h at root)
+│   │   ├── primitives.h               # UI_Panel, UI_Label, UI_Button, UI_List
+│   │   ├── primitives.c
+│   │   ├── hud.h                      # Status HUD overlay
+│   │   ├── hud.c
+│   │   ├── winlist.h                  # Window list display
+│   │   ├── winlist.c
+│   │   ├── kb_overlay.h               # Virtual keyboard display
+│   │   ├── kb_overlay.c
+│   │   ├── kb_cache.h                 # Keyboard binding cache
+│   │   ├── kb_cache.c
+│   │   ├── vibrancy.h                 # Vibrancy text contrast logic [STUB]
 │   │   ├── vibrancy.c
-│   │   ├── ornament.h                 # Ornament system (attach, position, face-player)
+│   │   ├── ornament.h                 # Ornament system (attach, position, face-player) [STUB]
 │   │   ├── ornament.c
-│   │   ├── billboard.h               # Billboard presentation style
+│   │   ├── billboard.h               # Billboard presentation style [STUB]
 │   │   ├── billboard.c
-│   │   ├── widget.h                   # Widget system (persistent HUD mini-displays)
+│   │   ├── widget.h                   # Widget system (persistent HUD mini-displays) [STUB]
 │   │   ├── widget.c
-│   │   ├── minimap.h                  # Minimap Ornament
+│   │   ├── minimap.h                  # Minimap Ornament [STUB]
 │   │   ├── minimap.c
-│   │   ├── menu.h                     # Context menus / popovers
+│   │   ├── menu.h                     # Context menus / popovers [STUB]
 │   │   └── menu.c
 │   │
 │   ├── mode/                          # Focus modes
@@ -707,11 +929,15 @@ q3ide/
 │   │   ├── notifications.h            # Work notification sounds + announcer
 │   │   └── notifications.c
 │   │
-│   ├── capture_tools/                 # Screenshot & recording
+│   ├── capture_tools/                 # Screenshot & recording (calls capture/ via q3ide_capture.h)
 │   │   ├── screenshot.h               # [ key — capture Window or view
 │   │   ├── screenshot.c
 │   │   ├── recording.h                # ] key — video recording toggle
 │   │   └── recording.c
+│   │
+│   ├── multiplayer/                   # Multiplayer sync [STUB]
+│   │   ├── sync.h
+│   │   └── sync.c
 │   │
 │   ├── uml/                           # UML Navigator (U key)
 │   │   ├── navigator.h                # Full UML view — 3D node cloud
@@ -788,14 +1014,11 @@ q3ide/
 │
 ├── q3ide_main.c                       # Init, per-frame update, shutdown
 ├── q3ide_capture.h                    # Generated C header (cbindgen)
-├── q3ide_design.h                     # VisionOS design tokens
+│                                      # Note: q3ide_design.h moved to spatial/ui/theme.h
 │
 ├── quake3e/                           # Forked Quake3e engine
 │   ├── code/
-│   │   ├── q3ide/                     # Q3IDE hooks inside engine
-│   │   │   ├── q3ide_hooks.c
-│   │   │   ├── q3ide_hooks.h
-│   │   │   └── q3ide_params.h
+│   │   ├── cgame/                     # Q3IDE hooks are minimal — only adapter init + frame callback
 │   │   ├── client/
 │   │   ├── renderer/
 │   │   ├── renderer2/
@@ -845,13 +1068,17 @@ q3ide/
 
 ### Key Structural Decisions
 
-**`spatial/` is the brain.** All engine-agnostic logic lives here, organized by domain. When the engine swaps to VR, nothing in `spatial/` changes.
+**`spatial/` is the brain.** All engine-agnostic logic lives here, organized by domain. When the engine swaps to VR, nothing in `spatial/` changes. `spatial/` NEVER calls `trap_*`, `re.*`, `CG_*`, `CM_*`, or `qgl*`. Only `g_adapter->method()`.
 
-**`spatial/window/`** is the core — entity model, focus, pointer, drag, layout, AND the full placement system (wall scanner, cache, placement queue, visibility gating, adaptive resolution, perf metrics). Everything touches Windows.
+**`spatial/core/`** is the foundation — scene graph, feature registration, render dispatch, frame loop, commands, logging. All other `spatial/` modules register with `features.c`, never wire themselves.
 
-**`spatial/space/`** owns the 8 Spaces and Portal system. Portals are first-class citizens with their own module.
+**`spatial/window/`** is the core — `Window_t` data model (extends `SpatialObject_t`), focus, pointer, drag, layout, AND the full placement system (wall scanner, cache, placement queue, visibility gating, adaptive resolution, perf metrics). Everything touches Windows.
 
-**`spatial/ui/`** renders Ornaments, Widgets, Billboards, minimap, menus. Pure presentation.
+**`spatial/space/`** owns the 8 Spaces, `SpaceWindowView_t` (same Window different position per Space), wall cache (owned by Space), and Portal system.
+
+**`spatial/ui/`** renders Ornaments, Widgets, Billboards, minimap, menus. Pure presentation. All styling from `theme.h` tokens.
+
+**`spatial/fx/`** owns laser, rope, hover glow, pulse animations — visual effects that live in world space.
 
 **`spatial/mode/`** handles Theater Mode and Office Mode — full-screen state changes.
 
@@ -859,21 +1086,23 @@ q3ide/
 
 **`spatial/input/`** is the programmable hotkey system, virtual keyboard, Magic Mouse.
 
+**`engine/adapter.h`** defines the full abstract interface. `engine/quake3e/` is the only implementation. Future: `engine/quake4/`, `engine/unreal/`, `engine/ar/`.
+
+**`engine/quake3e/q3ide_params.h`** is the single source of all constants. `lint.sh` fails on magic numbers in `spatial/`.
+
 **`capture/`** stays pure Rust. Only talks to `spatial/` through C-ABI. Never touches engine.
 
-**`daemon/`** is a separate Rust process — the UML pre-processor. Watches filesystem, parses code with language-specific plugins, outputs `.q3ide/uml_cache.json`. Communicates with Q3IDE through the cache file + optional IPC notifications. Never linked into the engine.
-
-**`engine/`** adapter stays thin. Only implements the abstract interface for Quake3e. Swappable.
+**`daemon/`** is a separate Rust process — the UML pre-processor. Watches filesystem, parses code with language-specific plugins, outputs `.q3ide/uml_cache.json`. Never linked into the engine.
 
 **`spatial/bot/`** is the OpenClaw integration — bot player entity, API bridge, dedicated chat Window. Talks to OpenClaw via HTTP/WebSocket. The bot is a real Quake bot player that also responds to chat.
 
-**`spatial/quakeos/`** is the native rendering library — FreeType text, tree-sitter syntax highlighting, markdown, images, nano editor, focus mode toggle. Renders content directly in-engine without macOS capture. **Important architectural note:** quakeOS needs to draw into the engine's rendering pipeline (create textures, draw quads, handle font atlases). This cannot be 100% engine-agnostic. Solution: a **third adapter layer** between quakeOS and the engine — `engine/adapter.h` gets extended with a 2D rendering API (create texture, draw textured quad, draw text glyph). quakeOS calls these abstract functions, never engine internals directly. When the engine swaps (Quake → VR → Unreal), only the adapter implementation changes. Minimize pain, can't eliminate it entirely.
+**`spatial/quakeos/`** is the native rendering library. quakeOS calls only abstract `g_adapter->` functions for rendering (create texture, draw quad, draw glyph). Never engine internals directly.
 
-**`spatial/ai_geometry/`** is the moonshot — AI-generated geometry at runtime (props + structural dynamic mesh on top of BSP). This is future work and may require deep engine integration.
+**`spatial/ai_geometry/`** is the moonshot — AI-generated geometry at runtime (props + structural dynamic mesh on top of BSP). May require custom collision and rendering alongside BSP.
 
-**`web/`** is the Emscripten/WASM browser port. Replaces platform-specific capture (ScreenCaptureKit) with browser APIs. Replaces native input with pointer lock + keyboard capture. Everything else in `spatial/` stays identical.
+**`web/`** is the Emscripten/WASM browser port. Replaces ScreenCaptureKit with browser APIs. Everything in `spatial/` stays identical.
 
-**`config/`** holds default templates copied to project-level `.q3ide/` on first run. Not buried in engine dirs.
+**`config/`** holds default templates copied to project-level `.q3ide/` on first run.
 
 ---
 
@@ -1030,51 +1259,56 @@ The grapple is always available. `X` always fires it. It replaces the standard Q
 
 ## Window Data Model
 
-Every Window carries rich metadata for LLM agent integration, multiplayer sharing, and spatial management.
+Every Window carries rich metadata for LLM agent integration, multiplayer sharing, and spatial management. The authoritative C definition lives in `spatial/window/entity.h`. The pseudocode below shows the logical model — see `Q3IDE_ARCHITECTURE.md` for the actual struct layout.
 
-**Note:** This struct is pseudocode. Implement in C with equivalent types (`char*` for String, `float[3]` for Vec3, nullable fields as pointer-or-NULL, etc.). The Rust capture layer has its own types that map to these via C-ABI.
+**Note:** In the new architecture, Window is one type in the scene graph. Portal, Ornament, and Widget are separate types that extend `SpatialObject_t`. The flat `PresentationStyle` enum from earlier designs has been replaced by per-type structs with their own enums.
 
 ```
-WindowEntity {
-    // Identity
-    id:                 UUID
-    title:              String
-    type:               PresentationStyle   // Anchored | Floating | Group | Billboard | Portal | Ornament | Widget
+Window_t  (extends SpatialObject_t)
+    // Mode & capture
+    mode:               WindowMode      // NORMAL | THEATER | BILLBOARD | FOCUS
+    capture:            WindowCapture   // COMPOSITE | DEDICATED | ENGINE
+    placement:          WindowPlacement // AUTO | TRAINED | LOCKED | DRAGGING
+    layout:             WindowLayout    // WALL | FLOATING | OVERVIEW | FOCUS3
+    visibility:         WindowVisibility // PRIVATE | TEAM | PUBLIC
 
-    // Source
-    capture_window_id:  CGWindowID          // unique per window, not per app
-    capture_app_name:   String              // "iTerm2", "VSCode", "Chrome"
-    capture_app_bundle: String              // "com.googlecode.iterm2"
+    // Flags
+    streaming:          bool
+    idle_apple:         bool            // SCK idle detection fired
+    idle_ours:          bool            // our static detector fired
+    paused:             bool
+
+    // Identity
+    title:              String
+    capture_window_id:  CGWindowID      // unique per window, not per app
+    capture_app_name:   String          // "iTerm2", "VSCode", "Chrome"
+    capture_app_bundle: String          // "com.googlecode.iterm2"
 
     // Project
     project_id:         UUID
-    project_path:       Path                // ~/Projects/my-app/
+    project_path:       Path            // ~/Projects/my-app/
 
-    // Spatial
-    space:              Space               // ASK | RESEARCH | PLAN | BUILD | TEST | RUN | MAINTAIN | GARAGE
-    position:           Vec3
-    rotation:           Quat
-    scale:              Vec2
-    surface_anchor:     Option<SurfaceID>   // BSP surface if Anchored
-    locked:             bool                // pinned in place
+    // Spatial (from SpatialObject_t base)
+    space_id:           int
+    pos:                Vec3
+    normal:             Vec3
+    w, h:               float
 
     // State
-    status:             WindowStatus        // Active | Idle | Error | Building | Passing | Failing
+    status:             WindowStatus    // Active | Idle | Error | Building | Passing | Failing
     focused:            bool
     pointer_mode:       bool
     keyboard_captured:  bool
-    visible:            bool
-    dirty:              bool                // new frame available
+    dirty:              bool            // new frame available
 
     // LLM Agent
     agent_id:           Option<UUID>
-    agent_model:        Option<String>      // "claude-sonnet-4-20250514", "gpt-4", "glm-4"
+    agent_model:        Option<String>  // "claude-sonnet-4-20250514", "gpt-4", "glm-4"
     agent_status:       Option<AgentStatus> // Idle | Thinking | Writing | Waiting | Error
     agent_context_tokens: Option<u32>
 
     // Multiplayer
     owner_player_id:    PlayerID
-    visibility:         Visibility          // Private | Public | Team
     thumbnail:          Option<CompressedFrame>
 
     // Persistence
@@ -1085,7 +1319,9 @@ WindowEntity {
     // File association
     file_path:          Option<Path>
     file_classification: Option<String>
-}
+
+    // Error state (from SpatialObject_t base)
+    error:              char[128]       // populated on any failure, empty if healthy
 ```
 
 ---
@@ -1096,7 +1332,7 @@ Full spec in `PLACEMENT.md`. Summary here.
 
 ### Two Placement Modes
 
-**Mode 1 — Area Transition:** Player enters new area → pre-scan ALL walls (cache) → queue ALL windows → drain 1/frame FPS-gated (>30fps) → spread evenly across walls → closest walls first. Trained windows get their saved spots first. Texture throttle: all windows drop to 2fps during placement, restore to 25fps when done.
+**Mode 1 — Area Transition:** Player enters new area → pre-scan ALL walls (cache) → queue ALL windows → drain 1/frame FPS-gated (>30fps) → spread evenly across walls → closest walls first. Trained windows get their saved spots first. Stream freeze: `Q3IDE_WM_PauseStreams()` at queue start, `ResumeStreams()` when last window settles. Last frame stays on GPU, zero CPU/GPU cost while moving.
 
 Visual: 10 dogs follow you through a doorway. Each finds a spot and sits down one at a time. TVs freeze while dogs are moving, unfreeze when settled.
 
@@ -1123,7 +1359,7 @@ Pre-scan on area entry within 60m radius. Cache walls with pre-computed slots. W
 ### Performance During Placement
 
 - FPS-gated: only place if last frame >30fps
-- Texture throttle: 2fps during queue drain (vs 25fps normal)
+- Stream freeze: `Q3IDE_WM_PauseStreams()` at queue start. Last frame stays on GPU at zero cost. `ResumeStreams()` instantly restores full FPS when queue empties. No 2fps throttle — stream freeze is simpler and gives 100% FPS restoration.
 - Window moves = just update x,y,z,angle. Never destroy/recreate entity.
 - Queue cap: 32. Excess waits for leapfrog.
 
@@ -1878,7 +2114,7 @@ If macOS Screen Recording permission is not granted, Q3IDE shows an error overla
 
 ### q3dm17 as MVP Map
 
-q3dm17 (The Longest Yard) is one big open Space for MVP. There is no physical separation between the 8 Spaces on this map. All Windows go wherever you place them. Proper room-based Spaces with physical separation come with the custom map (Batch 16).
+q3dm17 (The Longest Yard) is one big open Space for MVP. There is no physical separation between the 8 Spaces on this map. All Windows go wherever you place them. Proper room-based Spaces with physical separation come with the custom map (Batch 21).
 
 ---
 
@@ -2060,14 +2296,14 @@ The game FPS is sacred. Quake III Arena must run at full speed at all times. Bot
 - 31 windows = 23 FPS
 - Each window costs ~0.5-0.7 FPS
 
-**The murder weapon:** CMSampleBuffer → CVPixelBuffer → CPU BGRA→RGBA swizzle (per pixel!) → glTexSubImage2D (GL_RGBA). ALL 31 windows upload unconditionally at full 1920×1080. Even windows behind you, behind walls, in other rooms. 31 × 8MB × 25fps = **~6.4 GB/sec CPU→GPU bandwidth.** Insane.
+**The murder weapon:** CMSampleBuffer → CVPixelBuffer → CPU BGRA→RGBA swizzle (per pixel!) → `qglTexSubImage2D` (GL_RGBA). ALL 31 windows upload unconditionally at full 1920×1080. Even windows behind you, behind walls, in other rooms. 31 × 8MB × 25fps = **~6.4 GB/sec CPU→GPU bandwidth.** Insane.
 
 ### 7 Optimization Wins (implementation order)
 
 | # | Win | What | Impact |
 |---|-----|------|--------|
-| 1 | Kill BGRA→RGBA swizzle | Format flag on UploadCinematic → GL_BGRA native | Eliminates 64M per-pixel CPU ops/frame |
-| 2 | Visibility-gated uploads | Dot product + BSP trace before UploadCinematic | Skips 50-70% of uploads |
+| 1 | Kill BGRA→RGBA swizzle | `R_UploadSubImage` with `GL_BGRA` native — see Engine Integration Reference | Eliminates 64M per-pixel CPU ops/frame |
+| 2 | Visibility-gated uploads | Dot product + `CM_BoxTrace` before `R_UploadSubImage` | Skips 50-70% of uploads |
 | 3 | Adaptive 8-tier resolution | SCK source-side downscale, 1 stream per window | 4-64x smaller uploads for distant windows |
 | 4 | Static content detection | Dirty frame counter → 1fps for idle windows | Idle terminals cost nothing |
 | 5 | SCK frame interval per tier | minimumFrameInterval matches distance tier | SCK never generates unneeded frames |
@@ -2097,9 +2333,9 @@ The game FPS is sacred. Quake III Arena must run at full speed at all times. Bot
 
 ### Visibility-Gated Texture Uploads
 
-Before calling UploadCinematic for each window:
+Before calling `R_UploadSubImage` for each window:
 1. **Dot product:** player view direction · (window_pos - player_pos). If < 0 → behind player → **skip upload**
-2. **BSP trace:** ray from player eye to window center. If hits anything → occluded → **skip upload**
+2. **BSP trace:** `CM_BoxTrace` from player eye to window center (`MASK_SOLID`). If `trace.fraction < 1.0` → occluded → **skip upload**
 
 Skipped windows keep their last texture on GPU (stale but invisible). Refresh instantly when visible again.
 
@@ -2107,12 +2343,13 @@ Skipped windows keep their last texture on GPU (stale but invisible). Refresh in
 
 Per window: count dirty frames over rolling 1-second window. If < 2 dirty frames → classify as "static" → drop to 1fps capture. Idle terminal with blinking cursor = nearly free. Resets instantly when content changes.
 
-### Texture Throttle During Placement
+### Stream Freeze During Placement
 
 While placement queue is draining (area transition, dogs sitting down):
-- ALL windows throttle to 2fps texture updates (from normal 25fps)
-- 31 × 25fps = crushing. 31 × 2fps = breathing room for placement work.
-- Restore to 25fps when queue empty (all dogs settled).
+- `Q3IDE_WM_PauseStreams()` freezes all capture streams. Last frame stays on GPU. SCStreams stay warm.
+- Zero CPU/GPU cost while windows are repositioning.
+- `ResumeStreams()` when queue empties — 100% FPS restoration instantly.
+- **Implemented** in `capture/src/router.rs`. See Batch 1 for details.
 
 ### Render Order
 
@@ -2302,7 +2539,14 @@ Decisions deferred. Will resolve as implementation progresses.
 | Pre-Processor Daemon | Q3IDE | Background Rust process that parses code and builds UML data |
 | Git Time Slider | Q3IDE | Scrub through git history watching UML architecture evolve |
 | Node Status Overlay | Q3IDE | Red/green test status + agent activity dots on UML nodes |
-| OpenClaw Bot | Q3IDE | AI agent as a Quake bot player — frags, navigates, responds to chat |
+| SpatialObject_t | Q3IDE | Base type for all scene objects — id, type, pos, normal, size, vtable, error |
+| Window_t | Q3IDE | C struct extending SpatialObject_t — the core window type in `spatial/window/entity.h` |
+| Engine Adapter | Q3IDE | Abstract interface (`engine/adapter.h`) between `spatial/` and the engine — swappable |
+| Feature Registration | Q3IDE | `spatial/core/features.c` table — one row per feature, kills 6-file wiring tax |
+| RenderDispatch | Q3IDE | Single multi-monitor render loop in `spatial/core/render_dispatch.c` |
+| SpaceWindowView | Q3IDE | Same Window, different position/size per Space |
+| Three-Layer Architecture | Q3IDE | capture/ → spatial/ → engine/ — see Q3IDE_ARCHITECTURE.md |
+| lint.sh | Q3IDE | Build-time enforcer: boundary violations, file length, magic numbers = hard fail |
 | WASM Port | Q3IDE | Full Q3IDE compiled to WebAssembly for browser play |
 | quakeOS | Q3IDE | Native rendering library — renders code, markdown, images directly in-engine |
 | Focus Mode | Q3IDE | `.` key — toggle captured macOS Window to quakeOS native render and back |

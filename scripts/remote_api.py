@@ -44,15 +44,17 @@ def _trim_log(path, max_lines=LOG_MAX_LINES):
         pass
 
 def _q3_binary():
-    """Return (binary_path, build_dir) or (None, None)."""
+    """Return (binary_path, build_dir) or (None, None).
+    Tries native arch first, then x86_64 fallback (build.sh may run under Rosetta)."""
     import sys as _sys
     arch = platform.machine()
     q3e_arch = 'arm64' if arch == 'arm64' else 'x86_64'
     os_name = 'darwin' if _sys.platform == 'darwin' else 'linux'
-    build_dir = ROOT / 'quake3e' / 'build' / f'release-{os_name}-{q3e_arch}'
-    binary = build_dir / f'quake3e.{q3e_arch}'
-    if binary.exists():
-        return binary, build_dir
+    for try_arch in [q3e_arch, 'x86_64', 'arm64', 'aarch64']:
+        build_dir = ROOT / 'quake3e' / 'build' / f'release-{os_name}-{try_arch}'
+        binary = build_dir / f'quake3e.{try_arch}'
+        if binary.exists():
+            return binary, build_dir
     return None, None
 
 _Q3_MUSIC_TRACKS = [
@@ -121,6 +123,7 @@ LOG_ALIASES = {
     "capture": LOG_DIR / "q3ide_capture.log",
     "build":   LOG_DIR / "build.log",
     "q3ide":   LOG_DIR / "q3ide.log",
+    "crash":   LOG_DIR / "crash.log",   # written on every game crash (q3ide + engine tail)
     # Q3 in-game console log (set logfile 2 in autoexec.cfg)
     "console": Path.home() / "Library" / "Application Support" / "Quake3e" / "baseq3" / "qconsole.log",
 }
@@ -376,6 +379,31 @@ def _strip_ctrl(text):
     return _CTRL_RE.sub('', text)
 
 
+def _capture_crash_log(crash):
+    """Snapshot last 120 lines of q3ide + engine logs into logs/crash.log."""
+    try:
+        crash_path = LOG_DIR / 'crash.log'
+        ts = crash.get('ts', '?')
+        sig = crash.get('signal_name') or crash.get('signal') or '?'
+        rc = crash.get('returncode', '?')
+        uptime = crash.get('uptime_s', '?')
+        lines = [
+            f'=== CRASH DUMP  {ts}  signal={sig}  rc={rc}  uptime={uptime}s ===\n',
+        ]
+        for alias, log_file in [('q3ide', LOG_DIR / 'q3ide.log'), ('engine', LOG_DIR / 'engine.log')]:
+            lines.append(f'\n--- {alias}.log (last 120 lines) ---\n')
+            try:
+                text = Path(log_file).read_text(errors='replace').splitlines(keepends=True)
+                lines.extend(text[-120:])
+            except OSError as e:
+                lines.append(f'(unreadable: {e})\n')
+        crash_path.write_text(''.join(lines))
+        return str(crash_path)
+    except Exception as e:
+        print(f'[crash] failed to write crash.log: {e}', flush=True)
+        return None
+
+
 def _on_game_exit(agent_id, returncode=0):
     """Called when game process ends. Clears state and notifies all WS clients."""
     global _game_proc, _game_start, _last_crash
@@ -403,8 +431,11 @@ def _on_game_exit(agent_id, returncode=0):
             'signal': sig_num,
             'signal_name': sig_name,
         }
+        crash_log = _capture_crash_log(crash)
+        crash['crash_log'] = crash_log
         _last_crash = crash
         print(f'[game] CRASH  signal={sig_num}({sig_name})  rc={returncode}  uptime={uptime}s', flush=True)
+        print(f'[game] crash log: {crash_log}', flush=True)
         _ws_broadcast(crash)
     _ws_broadcast(event)
 
@@ -485,7 +516,7 @@ def _queue_worker():
                 timeout = 900  # full build includes Rust+Swift dylib: can take 10-15 min
             _build_timeout = timeout
 
-            cmd = ['bash', str(BUILD_SCRIPT)] + entry['args']
+            cmd = ['bash', str(BUILD_SCRIPT)] + entry['args'] + ['--queue-id', entry['id']]
             LOG_DIR.mkdir(parents=True, exist_ok=True)
             build_log = LOG_DIR / 'build.log'
             _trim_log(build_log)
@@ -869,7 +900,7 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_run(body)
         elif path == '/stop':
             self._handle_stop()
-        elif path == '/queue/clear':
+        elif path in ('/queue/clear', '/build/cancel'):
             result = _clear_queue()
             print(f'[api] queue/clear: {result}', flush=True)
             self._send(200, {'ok': True, **result})

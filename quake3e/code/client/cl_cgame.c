@@ -631,11 +631,14 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 		re.AddAdditiveLightToScene( VMA(1), VMF(2), VMF(3), VMF(4), VMF(5) );
 		return 0;
 	case CG_R_RENDERSCENE:
+// q3ide [BEGIN] Multi-Monitor Rendering - code/client/cl_cgame.c
+// Replace single re.RenderScene with Q3IDE_MultiMonitorRender to render left/center/right viewports.
 #ifdef USE_Q3IDE
 		Q3IDE_MultiMonitorRender( VMA(1) );
 #else
 		re.RenderScene( VMA(1) );
 #endif
+// q3ide [END] Multi-Monitor Rendering
 		return 0;
 	case CG_R_SETCOLOR:
 		re.SetColor( VMA(1) );
@@ -653,6 +656,8 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 	case CG_GETGLCONFIG:
 		VM_CHECKBOUNDS( cgvm, args[1], sizeof( glconfig_t ) );
 		CL_GetGlconfig( VMA(1) );
+// q3ide [BEGIN] HUD Width Override - code/client/cl_cgame.c
+// Override vidWidth in cgame glconfig to center monitor width so HUD elements are positioned correctly.
 #ifdef USE_Q3IDE
 		/* Tell cgame the center monitor width so its screenXBias/screenXScale
 		 * place HUD elements in 0..centerW space (shifted to screen by
@@ -663,6 +668,7 @@ static intptr_t CL_CgameSystemCalls( intptr_t *args ) {
 				( (glconfig_t *)VMA(1) )->vidWidth = q3ide_cw;
 		}
 #endif
+// q3ide [END] HUD Width Override
 		return 0;
 	case CG_GETGAMESTATE:
 		VM_CHECKBOUNDS( cgvm, args[1], sizeof( gameState_t ) );

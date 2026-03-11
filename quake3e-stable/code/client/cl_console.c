@@ -772,16 +772,17 @@ static void Con_DrawSolidConsole( float frac ) {
 	con.xadjust = 0;
 	SCR_AdjustFrom640( &con.xadjust, &yf, &wf, NULL );
 
+// q3ide [BEGIN] Console Position - code/client/cl_console.c
+// Use con.xadjust for console positioning since RB_SetGL2D already set viewport to center monitor.
 #ifdef USE_Q3IDE
-	/* On multi-monitor spanning window, shift console to center display. */
-	{
-		int cx = Cvar_VariableIntegerValue( "r_mmCenterX" );
-		if ( cx > 0 ) con.xadjust += (float)cx;
-	}
+	/* RB_SetGL2D already positions the GL viewport at r_mmCenterX.
+	 * The ortho starts at 0 which maps to physical pixel cx.
+	 * Do NOT add cx here — con.xadjust from SCR_AdjustFrom640 is already correct. */
 #define CON_X (con.xadjust)
 #else
 #define CON_X 0
 #endif
+// q3ide [END] Console Position
 
 	if ( yf < 1.0 ) {
 		yf = 0;

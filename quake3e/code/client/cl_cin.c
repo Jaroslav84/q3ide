@@ -1724,13 +1724,19 @@ void CIN_UploadCinematic( int handle ) {
 
 			CIN_ResampleCinematic(handle, buf2);
 
+// q3ide [BEGIN] Cinematic Format - code/client/cl_cin.c
+// Pass GL_RGBA format explicitly to RE_UploadCinematic for cinematic playback.
 			re.UploadCinematic( cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT, 256, 256, (byte *)buf2, handle, qtrue, 0x1908 /* GL_RGBA */);
+// q3ide [END] Cinematic Format
 			cinTable[handle].dirty = qfalse;
 			Hunk_FreeTempMemory(buf2);
 		} else {
 			// Upload video at normal resolution
+// q3ide [BEGIN] Cinematic Format - code/client/cl_cin.c
+// Pass GL_RGBA format explicitly to RE_UploadCinematic for cinematic playback.
 			re.UploadCinematic( cinTable[handle].CIN_WIDTH, cinTable[handle].CIN_HEIGHT, cinTable[handle].drawX, cinTable[handle].drawY,
 					cinTable[handle].buf, handle, cinTable[handle].dirty, 0x1908 /* GL_RGBA */);
+// q3ide [END] Cinematic Format
 			cinTable[handle].dirty = qfalse;
 		}
 

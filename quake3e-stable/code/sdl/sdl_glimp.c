@@ -56,6 +56,8 @@ static PFN_vkGetInstanceProcAddr qvkGetInstanceProcAddr;
 cvar_t *r_stereoEnabled;
 cvar_t *in_nograb;
 
+// q3ide [BEGIN] Multi-Monitor Setup - code/sdl/sdl_glimp.c
+// Cvar and macOS helper to hide menu bar and dock for borderless spanning window.
 #ifdef USE_Q3IDE
 static cvar_t *r_multiMonitor;
 #ifdef MACOS_X
@@ -78,6 +80,7 @@ static void Q3IDE_HideMenuBarAndDock( void )
 }
 #endif /* MACOS_X */
 #endif /* USE_Q3IDE */
+// q3ide [END] Multi-Monitor Setup
 
 /*
 ===============
@@ -302,6 +305,8 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 	gw_active = qfalse;
 	gw_minimized = qtrue;
 
+// q3ide [BEGIN] Spanning Window Creation - code/sdl/sdl_glimp.c
+// Create borderless window spanning all displays and populate r_mm* cvars for renderer.
 #ifdef USE_Q3IDE
 	/* Multi-monitor spanning: build a borderless window across all displays */
 	if ( r_multiMonitor && r_multiMonitor->integer ) {
@@ -352,6 +357,7 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 			n, config->vidWidth, config->vidHeight, x );
 	} else
 #endif
+// q3ide [END] Spanning Window Creation
 	if ( fullscreen )
 	{
 #ifdef MACOS_X
@@ -492,12 +498,15 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 			continue;
 		}
 
+// q3ide [BEGIN] Hide Menu Bar - code/sdl/sdl_glimp.c
+// On macOS, hide menu bar and dock when using multi-monitor spanning.
 #ifdef USE_Q3IDE
 #ifdef MACOS_X
 		if ( r_multiMonitor && r_multiMonitor->integer )
 			Q3IDE_HideMenuBarAndDock();
 #endif
 #endif
+// q3ide [END] Hide Menu Bar
 
 		if ( fullscreen )
 		{
@@ -691,9 +700,12 @@ void GLimp_Init( glconfig_t *config )
 	in_nograb = Cvar_Get( "in_nograb", "0", 0 );
 	Cvar_SetDescription( in_nograb, "Do not capture mouse in game, may be useful during online streaming." );
 
+// q3ide [BEGIN] Multi-Monitor Cvar - code/sdl/sdl_glimp.c
+// Register r_multiMonitor cvar to enable spanning window mode.
 #ifdef USE_Q3IDE
 	r_multiMonitor = Cvar_Get( "r_multiMonitor", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
 #endif
+// q3ide [END] Multi-Monitor Cvar
 
 	r_allowSoftwareGL = Cvar_Get( "r_allowSoftwareGL", "0", CVAR_LATCH );
 

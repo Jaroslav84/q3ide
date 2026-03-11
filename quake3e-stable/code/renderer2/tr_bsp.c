@@ -207,6 +207,7 @@ static	void R_LoadLightmaps( const lump_t *l, const lump_t *surfs ) {
 	int			i, j, numLightmaps, textureInternalFormat = 0;
 	int			numLightmapsPerPage = 16;
 	float maxIntensity = 0;
+	double sumIntensity = 0;
 
 	// if we are in r_vertexLight mode, we don't need the lightmaps at all
 	if ( ( r_vertexLight->integer && tr.vertexLightingAllowed ) || glConfig.hardwareType == GLHW_PERMEDIA2 ) {
@@ -445,6 +446,8 @@ static	void R_LoadLightmaps( const lump_t *l, const lump_t *surfs ) {
 						image[j*4+1] = out[1] * 255;
 						image[j*4+2] = out[2] * 255;
 						image[j*4+3] = 255;
+
+						sumIntensity += intensity;
 					}
 					else
 					{

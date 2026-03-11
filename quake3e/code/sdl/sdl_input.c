@@ -28,6 +28,12 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 #include "../client/client.h"
 #include "sdl_glw.h"
+// q3ide [BEGIN] Input Includes - code/sdl/sdl_input.c
+// Include Q3IDE window manager for pause/resume streams on focus loss/gain.
+#ifdef USE_Q3IDE
+#include "../q3ide/q3ide_win_mngr.h"
+#endif
+// q3ide [END] Input Includes
 
 static cvar_t *in_keyboardDebug;
 static cvar_t *in_forceCharset;
@@ -1301,14 +1307,24 @@ void HandleEvents( void )
 					case SDL_WINDOWEVENT_MAXIMIZED:		gw_minimized = qfalse; break;
 					// keyboard focus:
 					case SDL_WINDOWEVENT_FOCUS_LOST:	lastKeyDown = 0; Key_ClearStates(); IN_SyncModifiers(); gw_active = qfalse;
+// q3ide [BEGIN] Focus Lost - code/sdl/sdl_input.c
+// Restore ICC gamma and pause window streams on focus loss to save CPU/battery.
 #ifdef USE_Q3IDE
 												if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) ) GLW_RestoreGamma();
+												Q3IDE_WM_PauseStreams();
 #endif
+// q3ide [END] Focus Lost
 												break;
 					case SDL_WINDOWEVENT_FOCUS_GAINED:	lastKeyDown = 0; Key_ClearStates(); IN_SyncModifiers(); gw_active = qtrue; gw_minimized = qfalse;
 														if ( re.SetColorMappings ) {
 															re.SetColorMappings();
 														}
+// q3ide [BEGIN] Focus Gained - code/sdl/sdl_input.c
+// Resume window streams on focus gain.
+#ifdef USE_Q3IDE
+														Q3IDE_WM_ResumeStreams();
+#endif
+// q3ide [END] Focus Gained
 														break;
 					// mouse focus:
 					case SDL_WINDOWEVENT_ENTER: mouse_focus = qtrue; break;
@@ -1347,6 +1363,8 @@ void IN_Frame( void )
 #endif
 
 	if ( Key_GetCatcher() & KEYCATCH_CONSOLE ) {
+// q3ide [BEGIN] Mouse Active Spanning - code/sdl/sdl_input.c
+// Keep mouse active in multi-monitor spanning mode (which is fullscreen) so console can receive input.
 		// Deactivate mouse for windowed mode only.
 		// Multi-monitor spanning is still fullscreen — keep mouse active so
 		// the console can receive keyboard input normally.
@@ -1354,6 +1372,7 @@ void IN_Frame( void )
 			IN_DeactivateMouse();
 			return;
 		}
+// q3ide [END] Mouse Active Spanning
 	}
 
 	if ( !gw_active || !mouse_focus || in_nograb->integer ) {

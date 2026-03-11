@@ -58,13 +58,20 @@ typedef int (*q3ide_fn_start_disp)(Q3ideCapture *, unsigned int, int); /* fps: -
 /* Batch 2: Input injection (optional — gracefully absent if dylib lacks them) */
 typedef void (*q3ide_fn_inject_click)(Q3ideCapture *, unsigned int, float, float);
 typedef void (*q3ide_fn_inject_key)(Q3ideCapture *, unsigned int, int, int);
+/* Hover: activate + unminimize macOS window when player hovers (optional) */
+typedef void (*q3ide_fn_raise_win)(Q3ideCapture *, unsigned int);
+/* Unminimize all running apps + refocus Quake (called at init) */
+typedef void (*q3ide_fn_unminimize_all)(Q3ideCapture *);
+/* Stream pause/resume — hold ";" to freeze frame delivery, release to resume */
+typedef void (*q3ide_fn_pause_streams)(Q3ideCapture *);
+typedef void (*q3ide_fn_resume_streams)(Q3ideCapture *);
 
 /* ── Window change detection ──────────────────────────────────── */
 typedef struct {
 	unsigned int window_id;
 	char *app_name; /* owned by lib (added events only; NULL for removed) */
 	unsigned int width, height;
-	int is_added; /* 1=added, 0=removed, 2=resized */
+	int is_added; /* 1=added, 0=removed, 2=resized, 3=moved (composite crop updated by dylib) */
 } Q3ideWindowChange;
 
 typedef struct {
@@ -100,19 +107,14 @@ typedef struct {
 	float player_dist;                 /* distance from player, updated each frame */
 	unsigned long long last_upload_ms; /* Sys_Milliseconds() of last texture upload */
 	/* Batch 2: Interaction */
-	int hover_active; /* 1 = crosshair dwelling on this window */
-	float hover_t;    /* 0..1 hover animation progress */
-	char label[128];  /* display name: window title or "Display N" */
-	/* Hit effect: blood splat on window surface */
-	unsigned long long hit_time_ms; /* Sys_Milliseconds() at last bullet impact; 0=none */
-	vec3_t hit_pos;                 /* world position of hit point */
-	qboolean wall_mounted; /* qtrue = placed by auto-layout engine; qfalse = user-manual or floating */
-	qboolean los_visible;  /* cached LOS result — updated once per frame, reused across monitor passes */
+	char label[128];      /* display name: window title or "Display N" */
+	qboolean los_visible; /* cached LOS result — updated once per frame, reused across monitor passes */
+	qboolean in_overview; /* qtrue while this window is placed in the O overview grid */
 	/* Tunnel: OS screen-capture window. detach-all only removes these.
 	 * Non-tunnel windows (HUD, FPS, overlays) survive detach-all. */
 	qboolean is_tunnel;
 	/* Display slice: UV crop */
-	float uv_x0, uv_x1;  /* horizontal UV crop [0..1], default 0.0/1.0 */
+	float uv_x0, uv_x1;                  /* horizontal UV crop [0..1], default 0.0/1.0 */
 	qboolean owns_stream;                /* qtrue = calls cap_stop on detach */
 	qboolean stream_active;              /* qtrue = SCK stream currently delivering frames */
 	qboolean ever_failed;                /* qtrue = stream has ever been throttled or died; never resets */
@@ -134,20 +136,25 @@ typedef struct {
 	q3ide_fn_list_disp cap_list_disp;
 	q3ide_fn_free_dlist cap_free_dlist;
 	q3ide_fn_start_disp cap_start_disp;
-	q3ide_fn_inject_click cap_inject_click; /* optional: NULL if dylib lacks symbol */
-	q3ide_fn_inject_key cap_inject_key;     /* optional: NULL if dylib lacks symbol */
-	q3ide_fn_poll_changes cap_poll_changes; /* optional: window open/close events */
-	q3ide_fn_free_changes cap_free_changes; /* optional */
+	q3ide_fn_inject_click cap_inject_click;     /* optional: NULL if dylib lacks symbol */
+	q3ide_fn_inject_key cap_inject_key;         /* optional: NULL if dylib lacks symbol */
+	q3ide_fn_raise_win cap_raise_win;           /* optional: activate + unminimize on hover */
+	q3ide_fn_unminimize_all cap_unminimize_all; /* optional: unminimize all apps at init */
+	q3ide_fn_pause_streams cap_pause_streams;   /* optional: freeze get_frame() → no uploads */
+	q3ide_fn_resume_streams cap_resume_streams; /* optional: resume frame delivery */
+	q3ide_fn_poll_changes cap_poll_changes;     /* optional: window open/close events */
+	q3ide_fn_free_changes cap_free_changes;     /* optional */
+	qboolean streams_paused;                    /* qtrue while ";" is held */
+	qboolean wins_hidden;                       /* qtrue while "H" hides all windows */
 	Q3ideCapture *cap;
 	vec3_t player_eye;               /* eye position, set each frame by UpdatePlayerPos */
-	qboolean auto_attach;            /* true after "q3ide attach all" — auto-place new windows */
 	unsigned long long last_scan_ms; /* last time we polled for changes */
 	q3ide_win_t wins[Q3IDE_MAX_WIN];
 	int num_active;
 	int frame_uploads; /* texture uploads since last heartbeat */
 	byte *fbuf;
 	int fbuf_size;
-	qhandle_t border_shader; /* scratch slot 63: solid red — hover/select/splat */
+	qhandle_t border_shader; /* scratch slot 63: solid red — hover/select borders */
 	qhandle_t edge_shader;   /* scratch slot 62: solid black — TV chassis edge quads */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;
@@ -155,6 +162,7 @@ typedef struct {
 	volatile int poll_running;
 	Q3ideWindowChangeList poll_pending; /* protected by poll_mutex */
 	qboolean poll_has_pending;          /* protected by poll_mutex */
+	int macos_win_count; /* total SCK-visible windows; cached at init, ±1 on SCK events */
 } q3ide_wm_t;
 
 extern q3ide_wm_t q3ide_wm;

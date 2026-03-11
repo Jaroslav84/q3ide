@@ -103,8 +103,9 @@ pub trait CaptureBackend: Send {
     fn get_frame(&self, window_id: u32) -> Option<FrameData>;
 
     /// Update the composite crop rect for a window whose screen position changed.
+    /// Position (wx, wy, ww, wh) in Quartz y-up points — already fetched by poll.
     /// No-op for DEDICATED windows (they follow the window automatically).
-    fn update_window_crop(&mut self, window_id: u32);
+    fn update_composite_crop(&mut self, window_id: u32, wx: f64, wy: f64, ww: f64, wh: f64);
 
     /// Shut down the backend and release all resources.
     fn shutdown(&mut self);

@@ -2,6 +2,12 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Style
+
+Match the question. Simple question = simple answer. No theories, no code, no walls of text unless asked.
+
+If the user asks a question — answer it. Do not start planning, implementing, or showing code examples unless explicitly told to.
+
 ## Parallel Agents — Lint/Build Fail Triage
 
 **4–6 agents run simultaneously. Each owns specific files. Never fix another agent's files.**
@@ -230,7 +236,7 @@ Rules: always `--clean` after C changes · always `host.docker.internal` · use 
 ## Build & Run (macOS)
 
 ```sh
-sh ./scripts/build.sh --api --clean --run --level 0 --execute 'q3ide attach all'
+sh ./scripts/build.sh --api --clean --run --level 0
 ```
 
 | Flag | Description |
@@ -241,3 +247,30 @@ sh ./scripts/build.sh --api --clean --run --level 0 --execute 'q3ide attach all'
 | `--level <map>` | `0`→`q3dm0`, `7`→`q3dm7`, or full map name |
 | `--bots <n>` | Add N bots |
 | `--execute '<cmd>'` | Console command after map loads |
+| `--release <alias\|path>` | Engine source to build. Aliases: `nightbuild` (default=`quake3e/`), `stable` (`quake3e-stable/`), `orig` (`quake3e-orig/`). Or pass an absolute path. |
+
+## Task Completion — MANDATORY response format
+
+**THIS IS NOT OPTIONAL. USER RUNS 4+ TERMINALS. THEY CANNOT TELL WHICH AGENT DID WHAT WITHOUT THIS SUMMARY. SKIPPING IT CAUSES REAL CONFUSION AND FRUSTRATION.**
+
+**Every response that completes a task MUST end with these three lines. No exceptions.**
+
+```
+**You asked:** <what the user asked for, in plain English — not file names or symbols>
+**Done:** <what was actually implemented, in plain English>
+**Concerns:** <see below>
+```
+
+**Concerns rules:**
+- Write `-` if the implementation is 100% clean: no hacks, no fallbacks, no workarounds, no stubbed paths, no silent failures, nothing half-done.
+- Otherwise name exactly what was faked, skipped, or worked around — and why. Be direct. Do not bury it.
+
+**The zero-copy cautionary tale:** Claude implemented "zero-copy IOSurface upload", silently fell back to CPU copy when it failed, and never told the user. The feature appeared done. It wasn't. This section exists to prevent that exact failure.
+
+Bad ending (never do this):
+> Done. q3ide_params.h — added Q3IDE_SHORTPRESS_MS 300. q3ide_view_modes.c — refactored: win_snapshot_t, +q3ide_focus3/-q3ide_focus3...
+
+Good ending:
+> **You asked:** make O and I use short-press (keep) / long-press (show then restore).
+> **Done:** both keys now detect hold duration — tap keeps the layout, hold restores on release. Threshold 300ms. autoexec.cfg updated.
+> **Concerns:** -

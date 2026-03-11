@@ -726,10 +726,13 @@ Called by the system for both key up and key down events
 */
 void CL_KeyEvent( int key, qboolean down, unsigned time )
 {
+// q3ide [BEGIN] Key Event Hook - code/client/cl_keys.c
+// Let Q3IDE consume key events first when in keyboard passthrough mode.
 #ifdef USE_Q3IDE
 	if ( Q3IDE_OnKeyEvent( key, down ) )
 		return; /* consumed by q3ide keyboard passthrough */
 #endif
+// q3ide [END] Key Event Hook
 	if ( down )
 		CL_KeyDownEvent( key, time );
 	else

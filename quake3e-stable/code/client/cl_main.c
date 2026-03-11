@@ -3114,9 +3114,12 @@ void CL_Frame( int msec, int realMsec ) {
 
 	// update the screen
 	cls.framecount++;
+// q3ide [BEGIN] Frame Update - code/client/cl_main.c
+// Call Q3IDE_Frame every frame to update window streams, poll changes, and tick reflow queue.
 #ifdef USE_Q3IDE
 	Q3IDE_Frame();
 #endif
+// q3ide [END] Frame Update
 	SCR_UpdateScreen();
 
 	// update audio
@@ -3209,6 +3212,8 @@ static void CL_InitRenderer( void ) {
 	// this sets up the renderer and calls R_Init
 	re.BeginRegistration( &cls.glconfig );
 
+// q3ide [BEGIN] Center Monitor Override - code/client/cl_main.c
+// Override vidWidth/vidHeight to center monitor size so 2D UI scaling is computed for single screen.
 #ifdef USE_Q3IDE
 	/* Multi-monitor: 2D UI (console, menus, HUD) lives on the center screen only.
 	 * Override vidWidth/vidHeight to center monitor dims so cls.scale, cls.biasX,
@@ -3222,6 +3227,7 @@ static void CL_InitRenderer( void ) {
 		}
 	}
 #endif
+// q3ide [END] Center Monitor Override
 
 	// load character sets
 	cls.charSetShader = re.RegisterShader( "gfx/2d/bigchars" );
@@ -3288,9 +3294,12 @@ void CL_StartHunkUsers( void ) {
 	if ( !cls.rendererStarted ) {
 		cls.rendererStarted = qtrue;
 		CL_InitRenderer();
+// q3ide [BEGIN] Vid Restart - code/client/cl_main.c
+// Notify Q3IDE of vid_restart so it can reinitialize GL resources.
 #ifdef USE_Q3IDE
 		Q3IDE_OnVidRestart();
 #endif
+// q3ide [END] Vid Restart
 	}
 
 	if ( !cls.soundStarted ) {
@@ -4070,9 +4079,12 @@ void CL_Init( void ) {
 	Cvar_Get( "cl_guid", "", CVAR_USERINFO | CVAR_ROM | CVAR_PROTECTED );
 	CL_UpdateGUID( NULL, 0 );
 
+// q3ide [BEGIN] Initialization - code/client/cl_main.c
+// Initialize Q3IDE window manager and capture system after client setup.
 #ifdef USE_Q3IDE
 	Q3IDE_Init();
 #endif
+// q3ide [END] Initialization
 
 	Com_Printf( "----- Client Initialization Complete -----\n" );
 }
@@ -4106,9 +4118,12 @@ void CL_Shutdown( const char *finalmsg, qboolean quit ) {
 	// clear and mute all sounds until next registration
 	S_DisableSounds();
 
+// q3ide [BEGIN] Shutdown - code/client/cl_main.c
+// Shutdown Q3IDE window manager and release capture resources on app exit.
 #ifdef USE_Q3IDE
 	Q3IDE_Shutdown();
 #endif
+// q3ide [END] Shutdown
 
 	CL_ShutdownVMs();
 

@@ -57,10 +57,13 @@ extern cvar_t *in_nograb;
 void IN_Init( void );
 void IN_Shutdown( void );
 
+// q3ide [BEGIN] Gamma Restore - code/sdl/sdl_glw.h
+// Prototype for restoring ICC color calibration on focus lost in multi-monitor mode.
 #ifdef USE_Q3IDE
 /* Restore all displays to macOS ICC color calibration (called on focus lost) */
 void GLW_RestoreGamma( void );
 #endif
+// q3ide [END] Gamma Restore
 
 // signals.c
 void InitSig( void );

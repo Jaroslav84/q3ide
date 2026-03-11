@@ -3215,13 +3215,15 @@ void Com_AppendCDKey( const char *filename ) {
 	}
 }
 
-
+// q3ide [BEGIN] CD Key Guards - code/qcommon/common.c
+// Guard CD key functions with STANDALONE check to allow building without CD key requirements.
 #if !defined(DEDICATED) && !defined(STANDALONE) // bk001204
 /*
 =================
 Com_WriteCDKey
 =================
 */
+// q3ide [END] CD Key Guards
 static void Com_WriteCDKey( const char *filename, const char *ikey ) {
 	fileHandle_t	f;
 	char			fbuffer[MAX_OSPATH];
@@ -4069,10 +4071,13 @@ Writes key bindings and archived cvars to config file if modified
 ===============
 */
 void Com_WriteConfiguration( void ) {
+// q3ide [BEGIN] CD Key Guards - code/qcommon/common.c
+// Guard CD key configuration with STANDALONE check.
 #if !defined(DEDICATED) && !defined(STANDALONE)
 	const char *basegame;
 	const char *gamedir;
 #endif
+// q3ide [END] CD Key Guards
 	// if we are quitting without fully initializing, make sure
 	// we don't write out anything
 	if ( !com_fullyInitialized ) {
@@ -4086,9 +4091,12 @@ void Com_WriteConfiguration( void ) {
 
 	Com_WriteConfigToFile( Q3CONFIG_CFG );
 
+// q3ide [BEGIN] CD Key Guards - code/qcommon/common.c
+// Guard CD key-related configuration writes with STANDALONE check.
 #if !defined(DEDICATED) && !defined(STANDALONE)
 	gamedir = FS_GetCurrentGameDir();
 	basegame = FS_GetBaseGameDir();
+// q3ide [END] CD Key Guards
 	if ( UI_usesUniqueCDKey() && gamedir[0] && Q_stricmp( basegame, gamedir ) ) {
 		Com_WriteCDKey( gamedir, &cl_cdkey[16] );
 	} else {

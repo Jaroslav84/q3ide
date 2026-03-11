@@ -7,11 +7,10 @@
 #include "../client/client.h"
 #include <string.h>
 
-/* App filtering — defined in q3ide_commands_query.c */
+/* App filtering — defined in q3ide_attach_filter.c */
 extern const char *q3ide_terminal_apps[];
 extern const char *q3ide_browser_apps[];
 extern qboolean q3ide_match(const char *app, const char **list);
-
 extern qboolean q3ide_is_attached(unsigned int id);
 
 qboolean Q3IDE_WM_DetachById(unsigned int cid)
@@ -36,7 +35,5 @@ qboolean Q3IDE_WM_DetachById(unsigned int cid)
 	return found;
 }
 
-/* CmdAttach — q3ide_commands_attach.c */
-/* PollChanges, Desktop — q3ide_commands_query.c */
+/* PollChanges — q3ide_commands_query.c */
 void Q3IDE_WM_PollChanges(void);
-void Q3IDE_WM_CmdDesktop(void);

@@ -10,7 +10,7 @@ Your goal: document the exact feedback loop for this C/Rust/Quake3e project so a
 Explore the project. Do NOT assume anything. Read the actual files.
 
 **Discover what this project is:**
-- Read `scripts/build.sh` — understand all flags: `--clean`, `--engine-only`, `--run`, `--level`, `--api`, `--bots`, `--execute`
+- Read `scripts/build.sh` — understand all flags: `--clean`, `--engine-only`, `--run`, `--level`, `--api`, `--bots`, `--execute`, `--release orig|stable|nightbuild|/path`
 - Read `scripts/remote_api.py` — HTTP+WebSocket bridge on port 6666; understand all endpoints
 - Read `quake3e/Makefile` — understand build targets, ARCH, USE_Q3IDE flag
 - Read `capture/Cargo.toml` — understand crate name, dependencies, cdylib target

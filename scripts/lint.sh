@@ -102,6 +102,14 @@ run_basic_checks() {
         local r; r="$(rel "$f")"
         local lines; lines=$(trim "$(wc -l < "$f")")
 
+        # Definition/table files — exempt from length limits (splitting would break single-definition rule)
+        #   q3ide_params.h          — all project constants
+        #   q3ide_win_mngr_internal.h — wm struct + typedefs
+        #   q3ide_overlay_keys.h    — keyboard layout tables + glyph cache inlines
+        case "$(basename "$f")" in
+            q3ide_params.h|q3ide_win_mngr_internal.h|q3ide_overlay_keys.h) continue ;;
+        esac
+
         if [ "$lines" -gt 400 ]; then
             err "$r: $lines lines (max 400 — split this file)"
             ERROR_FILES="${ERROR_FILES}  too-long: $r (${lines}L)\n"

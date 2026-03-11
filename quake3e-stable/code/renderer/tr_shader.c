@@ -258,7 +258,7 @@ NameToGenFunc
 */
 static genFunc_t NameToGenFunc( const char *funcname )
 {
-	if ( !Q_stricmp( funcname, "sin" ) )
+	if ( !Q_stricmp( funcname, "sin" ) || !Q_stricmp( funcname, "sine" ) )
 	{
 		return GF_SIN;
 	}
@@ -281,6 +281,10 @@ static genFunc_t NameToGenFunc( const char *funcname )
 	else if ( !Q_stricmp( funcname, "noise" ) )
 	{
 		return GF_NOISE;
+	}
+	else if ( !Q_stricmp( funcname, "ifx2" ) )
+	{
+		return GF_SIN; /* non-standard alias used by some custom maps */
 	}
 
 	ri.Printf( PRINT_WARNING, "WARNING: invalid genfunc name '%s' in shader '%s'\n", funcname, shader.name );

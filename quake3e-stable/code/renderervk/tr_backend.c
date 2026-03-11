@@ -1107,6 +1107,8 @@ void RE_StretchRaw( int x, int y, int w, int h, int cols, int rows, byte *data, 
 }
 
 
+// q3ide [BEGIN] Cinematic Format - code/renderervk/tr_backend.c
+// Added format parameter to RE_UploadCinematic for Q3IDE window streams (Vulkan renderer).
 void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int client, qboolean dirty, unsigned int format ) {
 
 	image_t *image;
@@ -1131,6 +1133,7 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 		vk_upload_image_data( image, 0, 0, cols, rows, 1, data, cols * rows * 4, qfalse );
 #else
 		qglTexImage2D( GL_TEXTURE_2D, 0, image->internalFormat, cols, rows, 0, format, GL_UNSIGNED_BYTE, data );
+// q3ide [END] Cinematic Format
 		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR );
 		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR );
 		qglTexParameteri( GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, gl_clamp_mode );

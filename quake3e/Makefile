@@ -37,7 +37,7 @@ USE_SYSTEM_VORBIS = 0
 
 USE_VULKAN       = 1
 USE_OPENGL       = 1
-USE_OPENGL2      = 1
+USE_OPENGL2      = 0
 USE_OPENGL_API   = 1
 USE_VULKAN_API   = 1
 USE_RENDERER_DLOPEN = 1
@@ -1139,42 +1139,40 @@ Q3OBJ = \
 
 ifdef USE_Q3IDE
 Q3OBJ += \
-  $(B)/client/q3ide_portal.o \
   $(B)/client/q3ide_console.o \
   $(B)/client/q3ide_engine.o \
   $(B)/client/q3ide_frame.o \
   $(B)/client/q3ide_engine_hooks_input.o \
-  $(B)/client/q3ide_engine_hooks_grapple.o \
   $(B)/client/q3ide_dylib.o \
   $(B)/client/q3ide_win_mngr.o \
   $(B)/client/q3ide_scene.o \
   $(B)/client/q3ide_poll.o \
   $(B)/client/q3ide_commands.o \
   $(B)/client/q3ide_attach_filter.o \
-  $(B)/client/q3ide_commands_attach.o \
+  $(B)/client/q3ide_pending_queue.o \
   $(B)/client/q3ide_commands_query.o \
-  $(B)/client/q3ide_commands_desktop.o \
   $(B)/client/q3ide_render.o \
-  $(B)/client/q3ide_interaction.o \
-  $(B)/client/q3ide_interaction_frame.o \
   $(B)/client/q3ide_view_modes.o \
+  $(B)/client/q3ide_view_modes_overview.o \
+  $(B)/client/q3ide_view_modes_overview_layout.o \
+  $(B)/client/q3ide_view_modes_monitors.o \
+  $(B)/client/q3ide_view_modes_arc.o \
+  $(B)/client/q3ide_gamma.o \
+  $(B)/client/q3ide_hotkey.o \
   $(B)/client/q3ide_distance.o \
   $(B)/client/q3ide_geometry.o \
   $(B)/client/q3ide_geometry_clamp.o \
   $(B)/client/q3ide_log.o \
   $(B)/client/q3ide_overlay.o \
   $(B)/client/q3ide_overlay_keyboard.o \
+  $(B)/client/q3ide_overlay_kbcache.o \
   $(B)/client/q3ide_overlay_winlist.o \
+  $(B)/client/q3ide_overlay_lamps.o \
   $(B)/client/q3ide_aas.o \
   $(B)/client/q3ide_aas_query.o \
   $(B)/client/q3ide_aas_face.o \
   $(B)/client/q3ide_aas_walls.o \
-  $(B)/client/q3ide_entity.o \
-  $(B)/client/q3ide_laser.o \
-  $(B)/client/q3ide_rope.o \
-  $(B)/client/q3ide_effects.o \
-  $(B)/client/q3ide_teleport.o \
-  $(B)/client/q3ide_spawn.o
+  $(B)/client/q3ide_teleport.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1477,8 +1475,6 @@ $(B)/client/vorbis/%.o: $(VORBISDIR)/lib/%.c
 $(B)/client/%.o: $(SDLDIR)/%.c
 	$(DO_CC)
 
-$(B)/client/q3ide_portal.o: $(Q3IDEDIR)/q3ide_portal.c
-	$(DO_CC)
 
 $(B)/client/q3ide_console.o: $(Q3IDEDIR)/q3ide_console.c
 	$(DO_CC)
@@ -1490,9 +1486,6 @@ $(B)/client/q3ide_frame.o: $(Q3IDEDIR)/q3ide_frame.c
 	$(DO_CC)
 
 $(B)/client/q3ide_engine_hooks_input.o: $(Q3IDEDIR)/q3ide_engine_hooks_input.c
-	$(DO_CC)
-
-$(B)/client/q3ide_engine_hooks_grapple.o: $(Q3IDEDIR)/q3ide_engine_hooks_grapple.c
 	$(DO_CC)
 
 $(B)/client/q3ide_dylib.o: $(Q3IDEDIR)/q3ide_dylib.c
@@ -1513,22 +1506,33 @@ $(B)/client/q3ide_commands.o: $(Q3IDEDIR)/q3ide_commands.c
 $(B)/client/q3ide_attach_filter.o: $(Q3IDEDIR)/q3ide_attach_filter.c
 	$(DO_CC)
 
-$(B)/client/q3ide_commands_attach.o: $(Q3IDEDIR)/q3ide_commands_attach.c
+$(B)/client/q3ide_pending_queue.o: $(Q3IDEDIR)/q3ide_pending_queue.c
 	$(DO_CC)
 
 $(B)/client/q3ide_commands_query.o: $(Q3IDEDIR)/q3ide_commands_query.c
 	$(DO_CC)
 
-$(B)/client/q3ide_commands_desktop.o: $(Q3IDEDIR)/q3ide_commands_desktop.c
-	$(DO_CC)
 
-$(B)/client/q3ide_interaction.o: $(Q3IDEDIR)/q3ide_interaction.c
-	$(DO_CC)
-
-$(B)/client/q3ide_interaction_frame.o: $(Q3IDEDIR)/q3ide_interaction_frame.c
-	$(DO_CC)
 
 $(B)/client/q3ide_view_modes.o: $(Q3IDEDIR)/q3ide_view_modes.c
+	$(DO_CC)
+
+$(B)/client/q3ide_view_modes_overview.o: $(Q3IDEDIR)/q3ide_view_modes_overview.c
+	$(DO_CC)
+
+$(B)/client/q3ide_view_modes_overview_layout.o: $(Q3IDEDIR)/q3ide_view_modes_overview_layout.c
+	$(DO_CC)
+
+$(B)/client/q3ide_view_modes_monitors.o: $(Q3IDEDIR)/q3ide_view_modes_monitors.c
+	$(DO_CC)
+
+$(B)/client/q3ide_view_modes_arc.o: $(Q3IDEDIR)/q3ide_view_modes_arc.c
+	$(DO_CC)
+
+$(B)/client/q3ide_gamma.o: $(Q3IDEDIR)/q3ide_gamma.c
+	$(DO_CC)
+
+$(B)/client/q3ide_hotkey.o: $(Q3IDEDIR)/q3ide_hotkey.c
 	$(DO_CC)
 
 $(B)/client/q3ide_distance.o: $(Q3IDEDIR)/q3ide_distance.c
@@ -1552,7 +1556,13 @@ $(B)/client/q3ide_overlay.o: $(Q3IDEDIR)/q3ide_overlay.c
 $(B)/client/q3ide_overlay_keyboard.o: $(Q3IDEDIR)/q3ide_overlay_keyboard.c
 	$(DO_CC)
 
+$(B)/client/q3ide_overlay_kbcache.o: $(Q3IDEDIR)/q3ide_overlay_kbcache.c
+	$(DO_CC)
+
 $(B)/client/q3ide_overlay_winlist.o: $(Q3IDEDIR)/q3ide_overlay_winlist.c
+	$(DO_CC)
+
+$(B)/client/q3ide_overlay_lamps.o: $(Q3IDEDIR)/q3ide_overlay_lamps.c
 	$(DO_CC)
 
 $(B)/client/q3ide_aas.o: $(Q3IDEDIR)/q3ide_aas.c
@@ -1567,22 +1577,8 @@ $(B)/client/q3ide_aas_face.o: $(Q3IDEDIR)/q3ide_aas_face.c
 $(B)/client/q3ide_aas_walls.o: $(Q3IDEDIR)/q3ide_aas_walls.c
 	$(DO_CC)
 
-$(B)/client/q3ide_entity.o: $(Q3IDEDIR)/q3ide_entity.c
-	$(DO_CC)
-
-$(B)/client/q3ide_laser.o: $(Q3IDEDIR)/q3ide_laser.c
-	$(DO_CC)
-
-$(B)/client/q3ide_rope.o: $(Q3IDEDIR)/q3ide_rope.c
-	$(DO_CC)
-
-$(B)/client/q3ide_effects.o: $(Q3IDEDIR)/q3ide_effects.c
-	$(DO_CC)
 
 $(B)/client/q3ide_teleport.o: $(Q3IDEDIR)/q3ide_teleport.c
-	$(DO_CC)
-
-$(B)/client/q3ide_spawn.o: $(Q3IDEDIR)/q3ide_spawn.c
 	$(DO_CC)
 
 $(B)/rend1/%.o: $(R1DIR)/%.c

@@ -57,7 +57,7 @@ static void q3ide_upload_frame(q3ide_win_t *win, const Q3ideFrame *frame)
 
 void Q3IDE_WM_PollFrames(void)
 {
-	int                i;
+	int i;
 	unsigned long long now_ms;
 	if (!q3ide_win_mngr.cap || !q3ide_win_mngr.cap_get_frame)
 		return;
@@ -78,14 +78,12 @@ void Q3IDE_WM_PollFrames(void)
 			 * we haven't had a frame in >1s, that's a throttle event — light
 			 * up the overlay red flash for 2s.  Gate re-trigger to avoid
 			 * spamming the timestamp every frame while throttle persists. */
-			if (win->frames > 0 && win->stream_active &&
-			    (now_ms - win->last_frame_ms) > 1000ULL &&
+			if (win->frames > 0 && win->stream_active && (now_ms - win->last_frame_ms) > 1000ULL &&
 			    (now_ms - win->last_throttle_ms) > 2000ULL) {
 				win->last_throttle_ms = now_ms;
 				win->ever_failed = qtrue;
-				Q3IDE_LOGI("win[%d] id=%u THROTTLED by Apple: no frame for %llums",
-				           i, win->capture_id,
-				           (unsigned long long)(now_ms - win->last_frame_ms));
+				Q3IDE_LOGI("win[%d] id=%u THROTTLED by Apple: no frame for %llums", i, win->capture_id,
+				           (unsigned long long) (now_ms - win->last_frame_ms));
 			}
 			continue;
 		}

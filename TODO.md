@@ -1,4 +1,4 @@
-So u can place windows in air and on walls. Great. But our window placement on wall algorythm sucks. GArbage it. Create a custom class because this will be heavily used through out the whole project.
+So u can place windows in air and on walls. Great. But our window placement on wall algorithm sucks. GArbage it. Create a custom class because this will be heavily used through out the whole project.
 
 
 ● The 2fps cap only limits how often new pixels are fetched from SCK. The game still does this work every frame for every
@@ -23,9 +23,7 @@ So u can place windows in air and on walls. Great. But our window placement on w
   Want me to look at q3ide_frame.c and q3ide_scene.c to find exactly where the per-frame waste is and fix it?
 
 ======
-
-- file naming is awfull :D
-
+- pause stream while running or juggling with mouse while not aimed!!! so simple hack
 - write and use tests!!!!
 - llm should have move/shoot/look/positions/etc actions. pff I guess queke has them implemented for easy testing. but llm should use that to test. And not ask me to press letter "K" to see if feature works. We also have a thing called 'events' which can be used to replay shit! bam. llm should use that instead :D
 
@@ -48,28 +46,28 @@ Maps
 =====
 
 # Start off point
-sh ./scripts/build.sh --run --level 0 --execute 'q3ide attach all' --music 1
+sh ./scripts/build.sh --run --level 0 --music 1
 
 # wow. what i eneed
-sh ./scripts/build.sh --run --level lun3dm5 --execute 'q3ide attach all'
+sh ./scripts/build.sh --run --level lun3dm5
 
  # Tron-like
-sh ./scripts/build.sh --run --level acid3dm12 --execute 'q3ide attach all'
+sh ./scripts/build.sh --run --level acid3dm12
 
 # Officew
-sh ./scripts/build.sh --run --level ori_apt --execute 'q3ide attach all'
+sh ./scripts/build.sh --run --level ori_apt
 
 # Porcelain CTF
-sh ./scripts/build.sh --run --level q3ctfchnu01 --execute 'q3ide attach all'
+sh ./scripts/build.sh --run --level q3ctfchnu01
 
 # QuadCTF (BSP name might be quadctf or QuadCTF — try both)
-sh ./scripts/build.sh --run --level QuadCTF --execute 'q3ide attach all'
+sh ./scripts/build.sh --run --level QuadCTF
 
 # Quatrix
-sh ./scripts/build.sh --run --level quatrix --execute 'q3ide attach all'
+sh ./scripts/build.sh --run --level quatrix
 
 # Minecraft
-sh ./scripts/build.sh --run --level r7-blockworld1 --execute 'q3ide attach all' 
+sh ./scripts/build.sh --run --level r7-blockworld1 
 
 
 - known quake issue: too dark, input lag. People solved it. Did quake3e solve it? see youytube video

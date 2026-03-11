@@ -478,11 +478,14 @@ void *Sys_LoadLibrary( const char *name )
 		Com_Error( ERR_FATAL, "Sys_LoadLibrary: Unable to load library with '%s' extension", ext );
 	}
 
+// q3ide [BEGIN] Dlopen Debug - code/unix/unix_shared.c
+// Log dlerror() on failure to help debug dylib loading issues.
 	dlerror(); /* clear old error state */
 	handle = dlopen( name, RTLD_NOW );
 	if ( !handle ) {
 		Com_Printf( "Sys_LoadLibrary(%s) failed: %s\n", name, dlerror() );
 	}
+// q3ide [END] Dlopen Debug
 	return handle;
 }
 
