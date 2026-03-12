@@ -153,7 +153,10 @@ void Q3IDE_WM_PopulateQueue(qboolean displays_only)
 				g_pending[g_pending_n].is_display = qfalse;
 				g_pending[g_pending_n].aspect =
 				    (w->height > 0) ? (float) w->width / (float) w->height : Q3IDE_DISPLAY_ASPECT;
-				if (w->title && w->title[0])
+				if (w->app_name && w->app_name[0] && w->title && w->title[0])
+					Com_sprintf(g_pending[g_pending_n].label, sizeof(g_pending[g_pending_n].label), "%s: %s",
+					            w->app_name, w->title);
+				else if (w->title && w->title[0])
 					Q_strncpyz(g_pending[g_pending_n].label, w->title, sizeof(g_pending[g_pending_n].label));
 				else if (w->app_name && w->app_name[0])
 					Q_strncpyz(g_pending[g_pending_n].label, w->app_name, sizeof(g_pending[g_pending_n].label));

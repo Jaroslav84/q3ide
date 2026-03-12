@@ -907,7 +907,18 @@ static intptr_t CL_UISystemCalls( intptr_t *args ) {
 		return 0;
 
 	case UI_R_RENDERSCENE:
+// q3ide [BEGIN] UI RenderScene Center Offset - code/client/cl_ui.c
+// UI scenes (menus, loading screens) use vidWidth=center monitor width, so x=0 maps to the left monitor.
+// Shift x by r_mmCenterX so the scene lands on the center monitor.
+#ifdef USE_Q3IDE
+		if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+			refdef_t view = *(const refdef_t *)VMA(1);
+			view.x += Cvar_VariableIntegerValue( "r_mmCenterX" );
+			re.RenderScene( &view );
+		} else
+#endif
 		re.RenderScene( VMA(1) );
+// q3ide [END] UI RenderScene Center Offset
 		return 0;
 
 	case UI_R_SETCOLOR:

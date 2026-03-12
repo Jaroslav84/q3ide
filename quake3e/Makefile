@@ -1154,7 +1154,7 @@ Q3OBJ += \
   $(B)/client/q3ide_render.o \
   $(B)/client/q3ide_view_modes.o \
   $(B)/client/q3ide_view_modes_overview.o \
-  $(B)/client/q3ide_view_modes_overview_layout.o \
+  $(B)/client/q3ide_view_modes_grid.o \
   $(B)/client/q3ide_view_modes_monitors.o \
   $(B)/client/q3ide_view_modes_arc.o \
   $(B)/client/q3ide_gamma.o \
@@ -1172,7 +1172,10 @@ Q3OBJ += \
   $(B)/client/q3ide_aas_query.o \
   $(B)/client/q3ide_aas_face.o \
   $(B)/client/q3ide_aas_walls.o \
-  $(B)/client/q3ide_teleport.o
+  $(B)/client/q3ide_wall_cache.o \
+  $(B)/client/q3ide_placement.o \
+  $(B)/client/q3ide_teleport.o \
+  $(B)/client/q3ide_laser.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1520,7 +1523,7 @@ $(B)/client/q3ide_view_modes.o: $(Q3IDEDIR)/q3ide_view_modes.c
 $(B)/client/q3ide_view_modes_overview.o: $(Q3IDEDIR)/q3ide_view_modes_overview.c
 	$(DO_CC)
 
-$(B)/client/q3ide_view_modes_overview_layout.o: $(Q3IDEDIR)/q3ide_view_modes_overview_layout.c
+$(B)/client/q3ide_view_modes_grid.o: $(Q3IDEDIR)/q3ide_view_modes_grid.c
 	$(DO_CC)
 
 $(B)/client/q3ide_view_modes_monitors.o: $(Q3IDEDIR)/q3ide_view_modes_monitors.c
@@ -1577,8 +1580,17 @@ $(B)/client/q3ide_aas_face.o: $(Q3IDEDIR)/q3ide_aas_face.c
 $(B)/client/q3ide_aas_walls.o: $(Q3IDEDIR)/q3ide_aas_walls.c
 	$(DO_CC)
 
+$(B)/client/q3ide_wall_cache.o: $(Q3IDEDIR)/q3ide_wall_cache.c
+	$(DO_CC)
+
+$(B)/client/q3ide_placement.o: $(Q3IDEDIR)/q3ide_placement.c
+	$(DO_CC)
+
 
 $(B)/client/q3ide_teleport.o: $(Q3IDEDIR)/q3ide_teleport.c
+	$(DO_CC)
+
+$(B)/client/q3ide_laser.o: $(Q3IDEDIR)/q3ide_laser.c
 	$(DO_CC)
 
 $(B)/rend1/%.o: $(R1DIR)/%.c

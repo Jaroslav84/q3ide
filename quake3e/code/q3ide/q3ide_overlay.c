@@ -123,6 +123,46 @@ void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float
 	}
 }
 
+/*
+ * q3ide_ovl_pixel_pos — convert a screen pixel to a world-space position
+ * on the overlay plane (at Q3IDE_OVL_DIST units from the camera).
+ *
+ * Coordinate convention:
+ *   px=0,         py=0          → top-left  corner of the viewport
+ *   px=fd->width, py=fd->height → bottom-right corner
+ *
+ * Uses the actual fov_x / fov_y and viewport size from the refdef, so the
+ * result is pixel-perfect at any FOV or resolution.
+ *
+ * Usage: call this to get the anchor position for any overlay element by
+ * specifying where on screen (in pixels) you want its top-left origin.
+ */
+void q3ide_ovl_pixel_pos(const refdef_t *fd, float px, float py, float out[3])
+{
+	float D      = Q3IDE_OVL_DIST;
+	float half_w, half_h, off_r, off_u;
+	int   i;
+
+	if (!fd->width || !fd->height)
+		return;
+
+	/* half-extents of the viewport in world units at distance D */
+	half_w = D * tanf(fd->fov_x * (M_PI / 360.0f));
+	half_h = D * tanf(fd->fov_y * (M_PI / 360.0f));
+
+	/* signed offset from screen centre, in world units:
+	 *   off_r > 0  →  left  of centre  (rx = -viewaxis[1] = left direction)
+	 *   off_u > 0  →  above centre     (ux =  viewaxis[2]  = up direction)   */
+	off_r = (0.5f - px / (float)fd->width)  * 2.0f * half_w;
+	off_u = (0.5f - py / (float)fd->height) * 2.0f * half_h;
+
+	for (i = 0; i < 3; i++)
+		out[i] = fd->vieworg[i]
+		       + fd->viewaxis[0][i] * D     /* forward */
+		       - fd->viewaxis[1][i] * off_r /* right axis, negated → rx dir  */
+		       + fd->viewaxis[2][i] * off_u; /* up axis */
+}
+
 /* ── HUD message banner ─────────────────────────────────────────── */
 
 static char g_hud_msg[64];

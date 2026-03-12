@@ -156,6 +156,7 @@ typedef struct {
 	int fbuf_size;
 	qhandle_t border_shader; /* scratch slot 63: solid red — hover/select borders */
 	qhandle_t edge_shader;   /* scratch slot 62: solid black — TV chassis edge quads */
+	qhandle_t laser_shader;  /* q3ide/laser: additive red — K-key laser beams */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;
 	pthread_mutex_t poll_mutex;

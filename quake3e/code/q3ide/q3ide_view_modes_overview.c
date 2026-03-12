@@ -31,7 +31,8 @@ typedef struct {
 
 win_snapshot_t      g_ov;
 qboolean            g_ov_placed;
-static q3ide_hotkey_t s_ov_hk = Q3IDE_HOTKEY_INIT;
+static q3ide_hotkey_t s_ov_hk   = Q3IDE_HOTKEY_INIT;
+static qboolean       g_ov_held  = qfalse; /* true while key is physically held */
 
 /* From layout TU */
 extern void q3ide_ov_snapshot_save(win_snapshot_t *s);
@@ -106,6 +107,7 @@ static void cmd_overview_down(void)
 		Q3IDE_SetHudMsg("OVERVIEW: not in game", 1500);
 		return;
 	}
+	g_ov_held = qtrue;
 	if (q3ide_hk_down(&s_ov_hk, active) == Q3IDE_HK_ACTIVATE) {
 		overview_show();
 		q3ide_hk_rearm(&s_ov_hk); /* overview_show() does stream init — restart timer */
@@ -116,6 +118,7 @@ static void cmd_overview_down(void)
 
 static void cmd_overview_up(void)
 {
+	g_ov_held = qfalse;
 	if (q3ide_hk_up(&s_ov_hk, g_ov.active || g_ov_placed) == Q3IDE_HK_DEACTIVATE)
 		q3ide_overview_detach_all();
 }
@@ -138,6 +141,6 @@ void Q3IDE_ViewModesOverview_Shutdown(void)
 
 void Q3IDE_Overview_Tick(void)
 {
-	if (g_ov.active)
+	if (g_ov.active && g_ov_held)
 		q3ide_overview_layout();
 }

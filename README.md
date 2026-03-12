@@ -33,6 +33,19 @@ Yeah. That's my vision. Can you imagine? I'm a believer.
 
 It's the beginning of something more with an awesome FPS engine behind it. 
 
+--
+
+## Quick Start
+
+Add Quake 3 pack files into `/baseq3/` then:
+
+```bash
+sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --execute '' --clean
+```
+
+--
+
+
 ## Features working
 
 - **Quake with 3 monitors**:: 1980 x 1080 @ **90FPS** *we keep this value maxiimized*
@@ -59,6 +72,7 @@ It's the beginning of something more with an awesome FPS engine behind it.
   - "I" to view ALL monitors
   - "O" to view ALL windows -> good for FPS stress testing
   - "H" to hide ALL windows
+  - "K" to laser ALL windows (points a laser ray to windows)
   - ";" to freeze stream (last frame frozen, 100% FPS regain)
 - **Left Monitor Overlay**:
   - keybindings
@@ -186,7 +200,7 @@ See [`plan/04-Q3IDE_SPECIFICATION.md`](plan/04-Q3IDE_SPECIFICATION.md) for full 
 ---
 
 
-## Quick Start
+## Building
 
 Add Quake 3 pack files into `/baseq3/` then:
 

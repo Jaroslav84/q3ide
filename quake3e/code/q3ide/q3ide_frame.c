@@ -9,6 +9,9 @@
 #include "q3ide_view_modes.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
+#include "q3ide_aas.h"
+#include "q3ide_wall_cache.h"
+#include "q3ide_placement.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -163,8 +166,20 @@ void Q3IDE_Frame(void)
 		}
 
 		q3ide_shoot_frame();
+
+		/* Area-change detector — rebuild wall cache + queue windows on transition */
+		{
+			static int last_area;
+			int        cur_area = Q3IDE_AAS_PointArea(eye);
+			if (cur_area > 0 && cur_area != last_area) {
+				last_area = cur_area;
+				Q3IDE_WallCache_Build(eye, cur_area);
+				Q3IDE_Placement_QueueAll();
+			}
+		}
 	}
 
+	Q3IDE_Placement_Tick();
 	Q3IDE_ViewModes_Tick();
 	Q3IDE_WM_PollFrames();
 

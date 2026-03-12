@@ -6,6 +6,7 @@ if [ -f "$HOME/.cargo/env" ]; then
     . "$HOME/.cargo/env"
 fi
 
+
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 LOG_DIR="$ROOT/logs"
 mkdir -p "$LOG_DIR"
@@ -13,6 +14,7 @@ mkdir -p "$LOG_DIR"
 # ─── Parse flags ──────────────────────────────────────────────────────
 DO_RUN=0
 DO_CLEAN=0
+DO_FAST=0
 DO_API=0
 DO_ENGINE_ONLY=0
 MUSIC_ON=false
@@ -26,6 +28,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --run)          DO_RUN=1; shift ;;
         --clean)        DO_CLEAN=1; shift ;;
+        --fast)         DO_FAST=1; DO_ENGINE_ONLY=1; shift ;;
         --api)          DO_API=1; shift ;;
         --engine-only)  DO_ENGINE_ONLY=1; shift ;;
         --queue-id)     QUEUE_ID="$2"; shift 2 ;;
@@ -44,7 +47,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             RELEASE_BUILD="$2"; shift 2 ;;
-        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--run] [--api] [--engine-only] [--music] [--level <map>] [--execute '<cmd>'] [--bots <n>] [--release orig|stable|nightbuild|/path]"; exit 1 ;;
+        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--fast] [--run] [--api] [--engine-only] [--music] [--level <map>] [--execute '<cmd>'] [--bots <n>] [--release orig|stable|nightbuild|/path]"; exit 1 ;;
     esac
 done
 
@@ -59,11 +62,14 @@ build_hdr() {
 }
 
 # Resolve engine source directory from --release value (alias or path)
+Q3IDE_VERSION="$(grep -o 'Version-v[^-]*' "$ROOT/README.md" 2>/dev/null | head -1 | sed 's/Version-//')"
+[ -z "$Q3IDE_VERSION" ] && Q3IDE_VERSION="unknown"
+
 case "$RELEASE_BUILD" in
-    orig)       Q3E_DIR="$ROOT/quake3e-orig";   build_hdr "Release: orig (quake3e-orig)" ;;
-    stable)     Q3E_DIR="$ROOT/quake3e-stable"; build_hdr "Release: stable (quake3e-stable)" ;;
-    nightbuild) Q3E_DIR="$ROOT/quake3e";        build_hdr "Release: nightbuild (quake3e)" ;;
-    *)          Q3E_DIR="$RELEASE_BUILD";        build_hdr "Release: custom path ($Q3E_DIR)" ;;
+    orig)       Q3E_DIR="$ROOT/quake3e-orig";   RELEASE_LABEL="orig (quake3e-orig)" ;;
+    stable)     Q3E_DIR="$ROOT/quake3e-stable"; RELEASE_LABEL="stable (quake3e-stable)" ;;
+    nightbuild) Q3E_DIR="$ROOT/quake3e";        RELEASE_LABEL="nightbuild (quake3e)" ;;
+    *)          Q3E_DIR="$RELEASE_BUILD";        RELEASE_LABEL="custom ($Q3E_DIR)" ;;
 esac
 if [ ! -d "$Q3E_DIR" ]; then
     echo "ERROR: Engine source directory not found: $Q3E_DIR"
@@ -79,7 +85,148 @@ case "$ARCH" in
     *)       echo "Unsupported arch: $ARCH"; exit 1 ;;
 esac
 
-build_hdr "Detected arch: $Q3E_ARCH"
+# System info
+OS_TYPE="$(uname -s)"
+case "$OS_TYPE" in
+    Darwin)  SYS_TYPE="macOS" ;;
+    Linux)   SYS_TYPE="linux" ;;
+    MINGW*|MSYS*|CYGWIN*) SYS_TYPE="windows" ;;
+    *)       SYS_TYPE="$OS_TYPE" ;;
+esac
+if [ "$OS_TYPE" = "Darwin" ]; then
+    SP_DISP="$(system_profiler SPDisplaysDataType 2>/dev/null)"
+
+    CPU=$(sysctl -n machdep.cpu.brand_string 2>/dev/null \
+        | sed 's/Intel(R) Core(TM) //;s/Apple //;s/ CPU//;s/(R)//g;s/(TM)//g;s/  */ /g;s/^ //;s/ $//')
+    [ -z "$CPU" ] && CPU="unknown"
+    RAM=$(sysctl -n hw.memsize 2>/dev/null | awk '{printf "%.0fG", $1/1073741824}')
+    [ -z "$RAM" ] && RAM="?"
+
+    GPU=$(echo "$SP_DISP" | awk -F': ' '/Chipset Model:/{print $2; exit}')
+    [ -z "$GPU" ] && GPU="unknown"
+    GPU_VRAM=$(echo "$SP_DISP" | awk -F': ' '/VRAM/{print $2; exit}' | tr -d ' ')
+    [ -z "$GPU_VRAM" ] && GPU_VRAM="?"
+
+    METAL_N=$(echo "$SP_DISP" | grep -ic "Metal: Supported" || true)
+    [ "${METAL_N:-0}" -gt 0 ] && METAL_STR="YES" || METAL_STR="NO"
+    OPENCL_N=$(echo "$SP_DISP" | grep -ic "OpenCL" || true)
+    [ "${OPENCL_N:-0}" -gt 0 ] && OPENCL_STR="YES" || OPENCL_STR="NO"
+    HIDPI_N=$(echo "$SP_DISP" | grep -ic "HiDPI: Yes\|Retina: Yes" || true)
+    [ "${HIDPI_N:-0}" -gt 0 ] && HIDPI_STR="YES" || HIDPI_STR="NO"
+    OPENGL_STR="YES"  # always present on macOS (deprecated but present)
+    if [ -f "/usr/local/lib/libMoltenVK.dylib" ] || \
+       [ -f "$HOME/VulkanSDK/macOS/lib/libMoltenVK.dylib" ] || \
+       [ -d "/usr/local/share/vulkan" ]; then
+        VULKAN_STR="YES"
+    else
+        VULKAN_STR="NO"
+    fi
+
+    # Monitor info: one line per display "[n] WxH @ HzHz  Retina|Non-Retina"
+    MONITOR_LAYOUT=$(python3 - <<'PYEOF' 2>/dev/null
+import subprocess, re
+out = subprocess.check_output(['system_profiler', 'SPDisplaysDataType'], text=True)
+lines = out.splitlines()
+displays = []
+i = 0
+while i < len(lines):
+    m = re.match(r'\s+Resolution:\s+(\d+)\s*[xX\u00d7]\s*(\d+)(?:\s*@\s*([\d.]+)\s*Hz)?', lines[i])
+    if m:
+        w, h, hz = m.group(1), m.group(2), m.group(3)
+        retina = None
+        for j in range(i + 1, min(i + 30, len(lines))):
+            if re.match(r'\s+Resolution:', lines[j]):
+                break
+            mf = re.match(r'\s+(?:Framerate|Refresh Rate):\s+([\d.]+)\s*Hz', lines[j])
+            if mf and not hz:
+                hz = mf.group(1)
+            if re.search(r'(?:HiDPI|Retina):\s*Yes', lines[j], re.I):
+                retina = True
+            elif re.search(r'(?:HiDPI|Retina):\s*No', lines[j], re.I):
+                retina = False
+        displays.append((w, h, hz, retina))
+    i += 1
+if not displays:
+    print('unknown')
+else:
+    for idx, (w, h, hz, retina) in enumerate(displays):
+        s = f'[{idx}] {w}x{h}'
+        if hz:
+            s += f' @ {int(float(hz))}Hz'
+        s += '  ' + ('Retina' if retina is True else 'Non-Retina' if retina is False else '')
+        print(s.rstrip())
+PYEOF
+    )
+    [ -z "$MONITOR_LAYOUT" ] && MONITOR_LAYOUT="unknown"
+else
+    CPU=$(awk -F': ' '/model name/{print $2; exit}' /proc/cpuinfo 2>/dev/null | sed 's/  */ /g' || true)
+    [ -z "$CPU" ] && CPU="unknown"
+    RAM=$(awk '/MemTotal/{printf "%.0fG", $2/1048576}' /proc/meminfo 2>/dev/null || true)
+    [ -z "$RAM" ] && RAM="?"
+    GPU=$(lspci 2>/dev/null | grep -i "vga\|3d\|display" | head -1 | sed 's/.*: //' || true)
+    [ -z "$GPU" ] && GPU="unknown"
+    GPU_VRAM="?"
+    METAL_STR="NO"; OPENCL_STR="NO"; HIDPI_STR="NO"; OPENGL_STR="NO"
+    if command -v vulkaninfo >/dev/null 2>&1; then VULKAN_STR="YES"; else VULKAN_STR="NO"; fi
+    MONITOR_LAYOUT="unknown"
+fi
+
+# ── System banner: ASCII skull left (32) │ system info right (49) ───────────
+# Per-line: "  ║  " (5) + art(32) + "  │  " (5) + info(49) + "  ║" (3) = 94
+_TS="$(date '+%H:%M:%S')"
+_RDIV="─────────────────────────────────────────────────"
+
+# Parse monitor lines into array (one per display)
+IFS=$'\n' read -r -d '' -a _MON <<< "$MONITOR_LAYOUT" 2>/dev/null || true
+[ ${#_MON[@]} -eq 0 ] && _MON=("unknown")
+
+# ASCII skull art — 16 lines, each ≤32 chars
+_A=(
+    "         .,o'           \`o,."
+    "       o8'                \`8o"
+    "     o8:                    ;8o"
+    "    .88                      88."
+    "    :88.                    ,88:"
+    "    \`888                    888'"
+    "     888o   \`888 88 888'   o888"
+    "    \`888o,. \`88 88 88' .,o888'"
+    "      \`888888888 88 8888888888'"
+    "       \`8888888 88 88888888'"
+    "           \`::88 88 ;88;:'"
+    "             88 88 88"
+    "             88 88 88"
+    "              8 88 8"
+    ""
+    "         Quake III IDE"
+)
+
+# Info column — 16 rows, each ≤49 chars
+_R=(
+    "Q3IDE BUILD ENVIRONMENT  [$_TS]"
+    "$_RDIV"
+    "Version   $Q3IDE_VERSION"
+    "Release   $RELEASE_LABEL"
+    "Arch  $Q3E_ARCH   OS  $SYS_TYPE"
+    "$_RDIV"
+    "CPU   $CPU"
+    "RAM   $RAM   GPU   $GPU"
+    "VRAM  $GPU_VRAM"
+    "$_RDIV"
+    "Metal:$METAL_STR  OpenGL:$OPENGL_STR  OpenCL:$OPENCL_STR"
+    "Vulkan:$VULKAN_STR  HiDPI:$HIDPI_STR"
+    "$_RDIV"
+    "${_MON[0]:-}"
+    "${_MON[1]:-}"
+    "${_MON[2]:-}"
+)
+
+printf '\n'
+printf '  ╔══════════════════════════════════════════════════════════════════════════════════════════╗\n'
+for _i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    printf '  ║  %-32s  │  %-49s  ║\n' "${_A[$_i]}" "${_R[$_i]}"
+done
+printf '  ╚══════════════════════════════════════════════════════════════════════════════════════════╝\n'
+printf '\n'
 
 # 1. Build qagame + ui dylibs from ioq3 source (skipped with --engine-only)
 if [ "$DO_ENGINE_ONLY" -eq 0 ]; then
@@ -172,6 +319,112 @@ cd "$Q3E_DIR"
 if [ "$DO_CLEAN" -eq 1 ]; then
     build_hdr "Cleaning engine build"
     make clean ARCH="$Q3E_ARCH"
+elif [ "$DO_FAST" -eq 1 ]; then
+    # --fast: hash-based delta detection.
+    # Hashes code/q3ide/*.{c,h} + known engine files.
+    # Only deletes .o for files that actually changed since last --fast run.
+    # Any .h change → conservative: wipe all q3ide_*.o (header deps are shared).
+    BUILD_DIR_FAST="$Q3E_DIR/build/release-$(uname -s | tr '[:upper:]' '[:lower:]')-${Q3E_ARCH}"
+    if [ -d "$BUILD_DIR_FAST" ]; then
+        build_hdr "Fast build: hash-based delta detection"
+        python3 - "$Q3E_DIR" "$BUILD_DIR_FAST" <<'PYEOF'
+import sys, os, hashlib, json
+
+q3e_dir, build_dir = sys.argv[1], sys.argv[2]
+hash_file = os.path.join(q3e_dir, '.q3ide_fast_hashes')
+
+# Load previous hashes
+old = {}
+try:
+    with open(hash_file) as f:
+        old = json.load(f)
+except Exception:
+    pass
+
+new = {}
+deleted = set()
+
+def md5(path):
+    h = hashlib.md5()
+    with open(path, 'rb') as f:
+        h.update(f.read())
+    return h.hexdigest()
+
+def stem(fn):
+    return os.path.splitext(os.path.basename(fn))[0]
+
+def wipe_obj(s):
+    """Delete <stem>.o from all known build subdirs."""
+    for bd in ('client', 'rendergl1', 'rendergl2', 'rendervk'):
+        obj = os.path.join(build_dir, bd, s + '.o')
+        if os.path.exists(obj):
+            os.remove(obj)
+            deleted.add(s + '.o')
+
+# ── q3ide sources ──────────────────────────────────────────────────────
+q3ide_dir = os.path.join(q3e_dir, 'code', 'q3ide')
+h_changed = False
+c_changed = []
+if os.path.isdir(q3ide_dir):
+    for fn in sorted(os.listdir(q3ide_dir)):
+        if not (fn.endswith('.c') or fn.endswith('.h')):
+            continue
+        path = os.path.join(q3ide_dir, fn)
+        h = md5(path)
+        new[path] = h
+        if old.get(path) != h:
+            if fn.endswith('.h'):
+                h_changed = True
+            else:
+                c_changed.append(stem(fn))
+
+if h_changed:
+    # Conservative: any header change → wipe all q3ide_*.o
+    client_dir = os.path.join(build_dir, 'client')
+    if os.path.isdir(client_dir):
+        for fn in os.listdir(client_dir):
+            if fn.startswith('q3ide_') and fn.endswith('.o'):
+                os.remove(os.path.join(client_dir, fn))
+                deleted.add(fn)
+    print('  [q3ide .h changed] wiped all q3ide_*.o')
+else:
+    for s in c_changed:
+        wipe_obj(s)
+
+# ── Known-modified engine files ────────────────────────────────────────
+ENGINE_STEMS = {
+    'cl_main', 'cl_cgame', 'cl_console', 'cl_cin', 'cl_keys', 'cl_input',
+    'sdl_glimp', 'sdl_gamma', 'sdl_input',
+    'unix_main', 'unix_shared',
+    'common', 'sv_game',
+    'tr_backend', 'tr_scene', 'tr_init', 'tr_local',
+}
+src_root = os.path.join(q3e_dir, 'code')
+for dirpath, _, files in os.walk(src_root):
+    for fn in files:
+        if not fn.endswith('.c'):
+            continue
+        s = fn[:-2]
+        if s not in ENGINE_STEMS:
+            continue
+        path = os.path.join(dirpath, fn)
+        h = md5(path)
+        new[path] = h
+        if old.get(path) != h:
+            wipe_obj(s)
+
+# ── Save updated hashes ────────────────────────────────────────────────
+with open(hash_file, 'w') as f:
+    json.dump(new, f, indent=2)
+
+# ── Report ─────────────────────────────────────────────────────────────
+if deleted:
+    for d in sorted(deleted):
+        print(f'  wiped: {d}')
+else:
+    print('  no source changes detected — make will do nothing extra')
+PYEOF
+    fi
 fi
 make ARCH="$Q3E_ARCH" BUILD_SERVER=0
 

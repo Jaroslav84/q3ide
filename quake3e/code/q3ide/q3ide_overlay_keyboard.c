@@ -34,19 +34,18 @@ extern void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, cons
 
 /* q3ide_overlay_winlist.c */
 extern void Q3IDE_DrawAreaLabel(float ox, float oy, float oz, const float *rx, const float *ux, float kb_bot);
-extern void Q3IDE_DrawWinList(float ox, float oy, float oz, const float *rx, const float *ux, float kb_bot,
-                              unsigned long long now);
+extern void Q3IDE_DrawWinList(const void *refdef_ptr, float ox, float oy, float oz, const float *rx, const float *ux,
+                              float kb_bot, unsigned long long now);
 
 /* q3ide_overlay_kbcache.c */
 extern void q3ide_rebuild_keyboard_cache(void);
 
-/* ── Panel anchor (world-unit offsets from camera forward axis) ─────── */
-#define ANCHOR_RIGHT (-Q3IDE_OVL_DIST * 0.88f - 1.0f) /* far-left, shifted 50px left  */
-#define ANCHOR_UP    (Q3IDE_OVL_DIST * 0.46f)          /* shifted 50px down from before */
-
-/* ── Notification corner: top-right of left screen, left-aligned text ── */
-/* Offset rightward from anchor to the inner edge of the left monitor.    */
-#define NOTIF_RIGHT_OFFSET 5.5f
+/* px_to_wu: convert pixel offset to world units at OVL_DIST using actual FOV.
+ * horizontal: fov_x + viewport width.  vertical: fov_y + viewport height.     */
+#define OVL_PX_WU_H(fd) \
+    ((2.0f * Q3IDE_OVL_DIST * tanf((fd)->fov_x * (M_PI / 360.0f))) / (float)(fd)->width)
+#define OVL_PX_WU_V(fd) \
+    ((2.0f * Q3IDE_OVL_DIST * tanf((fd)->fov_y * (M_PI / 360.0f))) / (float)(fd)->height)
 
 /* ── Glyph cache storage — written by kbcache.c, read here ─────────── */
 ovl_rel_glyph_t g_glyphs[OVL_MAX_GLYPHS];
@@ -70,16 +69,23 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 	if (!g_ovl_chars || !re.AddPolyToScene)
 		return;
 
-	ox = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST + rx[0] * ANCHOR_RIGHT + fd->viewaxis[2][0] * ANCHOR_UP;
-	oy = fd->vieworg[1] + fd->viewaxis[0][1] * Q3IDE_OVL_DIST + rx[1] * ANCHOR_RIGHT + fd->viewaxis[2][1] * ANCHOR_UP;
-	oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST + rx[2] * ANCHOR_RIGHT + fd->viewaxis[2][2] * ANCHOR_UP;
+	/* FOV-aware pixel→world-unit conversion at OVL_DIST */
+	{
+		float pw_h      = OVL_PX_WU_H(fd);
+		float pw_v      = OVL_PX_WU_V(fd);
+		float anchor_r  = Q3IDE_OVL_ANCHOR_RIGHT_BASE - Q3IDE_OVL_ANCHOR_LEFT_PX  * pw_h;
+		float anchor_u  = Q3IDE_OVL_ANCHOR_UP_BASE    - Q3IDE_OVL_ANCHOR_DOWN_PX  * pw_v;
+		float notif_off = Q3IDE_OVL_NOTIF_RIGHT_PX * pw_h;
+		ox = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST + rx[0] * anchor_r + fd->viewaxis[2][0] * anchor_u;
+		oy = fd->vieworg[1] + fd->viewaxis[0][1] * Q3IDE_OVL_DIST + rx[1] * anchor_r + fd->viewaxis[2][1] * anchor_u;
+		oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST + rx[2] * anchor_r + fd->viewaxis[2][2] * anchor_u;
+		(void)notif_off; /* used below */
 
 	/* ── Notifications: top-right corner of left screen, stacking down ── */
 	{
-		/* Base: anchor shifted right to the inner edge of the left monitor */
-		float nx = ox + rx[0] * NOTIF_RIGHT_OFFSET;
-		float ny = oy + rx[1] * NOTIF_RIGHT_OFFSET;
-		float nz = oz + rx[2] * NOTIF_RIGHT_OFFSET;
+		float nx = ox + rx[0] * notif_off;
+		float ny = oy + rx[1] * notif_off;
+		float nz = oz + rx[2] * notif_off;
 		float nl = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE; /* line step down */
 		int nrow = 0;
 
@@ -132,5 +138,6 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 	}
 
 	Q3IDE_DrawAreaLabel(ox, oy, oz, rx, ux, g_kb_bot);
-	Q3IDE_DrawWinList(ox, oy, oz, rx, ux, g_kb_bot, now);
+	Q3IDE_DrawWinList(fd, ox, oy, oz, rx, ux, g_kb_bot, now);
+	} /* end FOV anchor block */
 }

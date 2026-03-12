@@ -20,6 +20,7 @@ extern playerState_t *SV_GameClientNum(int num);
 
 /* Shoot-to-place state — referenced by input.c, scene.c, console.c, frame.c */
 q3ide_hooks_state_t q3ide_state;
+qboolean            q3ide_laser_active = qfalse; /* toggled by K key — hold=show beams */
 int q3ide_selected_win = -1;
 int q3ide_select_time = 0;
 int q3ide_last_attack = 0;
@@ -126,6 +127,13 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 				Q3IDE_WM_ResumeStreams();
 			}
 		}
+		return qtrue;
+	}
+	/* "K" — hold to show laser beams from eye to all active windows */
+	if (key == 'k') {
+		q3ide_laser_active = down;
+		if (down)
+			Q3IDE_SetHudMsg("K  LASER", 1500);
 		return qtrue;
 	}
 	return qfalse;

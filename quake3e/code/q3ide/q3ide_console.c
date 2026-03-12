@@ -7,6 +7,7 @@
 #include "q3ide_log.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
+#include "q3ide_wall_cache.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 
@@ -18,7 +19,7 @@ void Q3IDE_Cmd_f(void)
 {
 	const char *sub;
 	if (Cmd_Argc() < 2) {
-		Com_Printf("usage: q3ide <list|detach|status>\n");
+		Com_Printf("usage: q3ide <list|detach|status|walls>\n");
 		return;
 	}
 	sub = Cmd_Argv(1);
@@ -31,6 +32,8 @@ void Q3IDE_Cmd_f(void)
 			Q3IDE_WM_CmdDetachAll();
 	} else if (!Q_stricmp(sub, "status"))
 		Q3IDE_WM_CmdStatus();
+	else if (!Q_stricmp(sub, "walls"))
+		Q3IDE_WallCache_Dump();
 	else
 		Com_Printf("q3ide: unknown sub-command '%s'\n", sub);
 }

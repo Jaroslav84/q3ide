@@ -78,6 +78,30 @@
 #define Q3IDE_WALL_DIST   512.0f /* wall-scan trace length */
 #define Q3IDE_WALL_OFFSET 3.0f   /* push off wall surface to avoid z-fighting */
 
+/* ── Placement system (Stage 3/4 — wall cache + area transition) ─ */
+
+/* Window sizing (world units / diagonals) */
+#define Q3IDE_IDEAL_WINDOW_SIZE 100   /* 100u diagonal — ideal window size */
+#define Q3IDE_MIN_WINDOW_SIZE    66   /* 66u diagonal — absolute floor */
+#define Q3IDE_MAX_WINDOW_SIZE   200   /* 200u diagonal — ceiling (matches spawn size) */
+#define Q3IDE_WINDOW_WALL_RATIO 0.85f /* window height = 85% of wall height */
+
+/* Wall qualification filters */
+#define Q3IDE_MIN_WALL_HEIGHT  79  /* 2m — walls shorter than this are skipped */
+#define Q3IDE_MAX_WALL_HEIGHT 394  /* 10m — walls taller than this get capped sizing */
+#define Q3IDE_MIN_WALL_WIDTH  114  /* min_window_width(66) + 2×margin(24) = 114u */
+#define Q3IDE_WALL_MARGIN      24  /* 24u (~60cm) reserved on each side of wall edge */
+#define Q3IDE_WINDOW_GAP       16  /* 16u (~40cm) between adjacent windows on same wall */
+
+/* Area scan + placement queue */
+#define Q3IDE_PLACEMENT_RADIUS    2400 /* 60m scan radius from player */
+#define Q3IDE_PLACEMENT_QUEUE_CAP   32 /* max queued placements per area transition */
+#define Q3IDE_PLACEMENT_FPS_GATE    30 /* only place one window per frame if above this FPS */
+
+/* Cache limits */
+#define Q3IDE_MAX_CACHED_WALLS 128 /* max walls stored in area cache */
+#define Q3IDE_MAX_WALL_SLOTS     8 /* max window slots pre-computed per wall */
+
 
 /* ── Spawn / attach ─────────────────────────────────────────────── */
 
@@ -106,6 +130,44 @@
 #define Q3IDE_TRIMON_IDX_LEFT   0 /* macOS display index for LEFT  panel */
 #define Q3IDE_TRIMON_IDX_CENTER 1 /* macOS display index for CENTER panel */
 #define Q3IDE_TRIMON_IDX_RIGHT  2 /* macOS display index for RIGHT  panel */
+
+/* ── App blacklist — individual window capture only ─────────────── */
+/* Glob patterns (case-insensitive). No wildcard = exact match.     *
+ * *word* = substring match. Checked against title AND app_name.    *
+ *                                                                   *
+ * NOTE: Dock, Top Menu (SystemUIServer), LPSpringboard, and        *
+ * Accessibility Services are blocked here as standalone windows,   *
+ * but they appear correctly inside Monitor captures (display-crop  *
+ * stream — O key or shoot-to-place a display). That is intended.   */
+#define Q3IDE_APP_BLACKLIST \
+	"Dock",                              \
+	"LPSpringboard",                     \
+	"loginwindow",                       \
+	"*Accessibility Services*",          \
+	"Spotlight",                         \
+	"Notification Center",               \
+	"NotificationCenter",                \
+	"*Screen & System Audio Recording*", \
+	"WindowServer",                      \
+	"Desktop",                           \
+	"*Little Snitch Agent*",             \
+	"*Keyboard Maestro Engine*",         \
+	"*Quake*",                           \
+	NULL
+
+/* ── App whitelists — capture backend selection ──────────────────── */
+/* CPU windows: composite display-crop stream (shared display capture).
+ * Good for: text editors, terminals, IDE — CPU-rendered, low GPU overhead. */
+#define Q3IDE_CPU_WINDOWS_LIST \
+	"iTerm2", "Terminal", \
+	NULL
+
+/* GPU windows: dedicated per-window SCStream (own GPU buffer).
+ * Good for: browsers, video players, Electron apps — GPU-rendered content. */
+#define Q3IDE_GPU_WINDOWS_LIST \
+	"Google Chrome", "Chromium", "Safari", "Firefox", "Arc", \
+	"Brave Browser", "Opera", "Microsoft Edge",               \
+	NULL
 
 /* ── Bright-map gamma correction ────────────────────────────────── */
 /* When the loaded map's leaf name matches any pattern in Q3IDE_BRIGHT_MAPS,
@@ -152,8 +214,21 @@
 #define Q3IDE_OVL_SMALL_SCALE  0.6f  /* small text variant scale factor */
 #define MAX_LEFT_UI_RENDER_FPS 2     /* keyboard section rebuilt at most 2x per second */
 #define OVL_REBUILD_MS         500   /* 1000 / MAX_LEFT_UI_RENDER_FPS */
-#define Q3IDE_OVL_KEY_CELL     0.28f /* per-key column stride (2 chars + margin) */
-#define Q3IDE_OVL_KEY_ROW_H    0.26f /* row pitch for keyboard grid — tighter than OVL_LINE_H */
+#define Q3IDE_OVL_KEY_CELL       0.28f /* per-key column stride (2 chars + margin) */
+#define Q3IDE_OVL_KEY_ROW_H      0.26f /* row pitch for keyboard grid — tighter than OVL_LINE_H */
+#define Q3IDE_OVL_LABEL_ABOVE    0.12f /* ux offset above star row where -90° label is anchored */
+/* ── Overlay anchor — all values in SCREEN PIXELS, converted via q3ide_ovl_pixel_pos() ── */
+#define Q3IDE_OVL_ANCHOR_RIGHT_BASE  (-Q3IDE_OVL_DIST * 0.88f) /* base right offset (world units) */
+#define Q3IDE_OVL_ANCHOR_UP_BASE     ( Q3IDE_OVL_DIST * 0.46f) /* base up offset (world units) */
+#define Q3IDE_OVL_ANCHOR_LEFT_PX     50    /* extra px to shift anchor left  from base */
+#define Q3IDE_OVL_ANCHOR_DOWN_PX     700   /* extra px to shift anchor down from base (was 400, +300) */
+#define Q3IDE_OVL_NOTIF_RIGHT_PX     450   /* px from anchor rightward to notification column */
+/* Window list position — expressed as px from bottom/left of viewport (pixel-perfect) */
+#define Q3IDE_OVL_WINLIST_BOTTOM_PX  180   /* px from bottom of screen to winlist bottom edge */
+
+/* ── Laser beams (K key) ────────────────────────────────────────── */
+
+#define Q3IDE_LASER_HALF_W 8.0f /* half-width of the beam ribbon in world units */
 
 /* ── Teleport history ───────────────────────────────────────────── */
 

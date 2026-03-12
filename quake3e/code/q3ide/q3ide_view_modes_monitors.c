@@ -17,7 +17,8 @@
 extern qboolean g_f3_active;
 extern qboolean g_ov_placed;
 
-static q3ide_hotkey_t s_f3_hk = Q3IDE_HOTKEY_INIT;
+static q3ide_hotkey_t s_f3_hk    = Q3IDE_HOTKEY_INIT;
+static qboolean       g_f3_held  = qfalse; /* true while key is physically held */
 
 /* Arc placement — q3ide_view_modes_arc.c */
 extern void q3ide_focus3_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_rad);
@@ -92,32 +93,6 @@ void q3ide_focus3_show(void)
 
 	g_f3_retry_count = 0;
 
-	/* Scale sizes once to fit available depth (place_arc only positions). */
-	{
-		vec3_t end, mins, maxs;
-		trace_t tr;
-		float d, scale;
-		end[0] = eye[0] + fwd[0] * Q3IDE_FOCUS3_DIST;
-		end[1] = eye[1] + fwd[1] * Q3IDE_FOCUS3_DIST;
-		end[2] = eye[2];
-		VectorSet(mins, -4.0f, -4.0f, -4.0f);
-		VectorSet(maxs, 4.0f, 4.0f, 4.0f);
-		CM_BoxTrace(&tr, eye, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
-		d = tr.fraction * Q3IDE_FOCUS3_DIST - Q3IDE_WALL_OFFSET;
-		if (d < Q3IDE_FOCUS3_MIN_DIST)
-			d = Q3IDE_FOCUS3_MIN_DIST;
-		scale = d / Q3IDE_FOCUS3_DIST;
-		if (scale > 1.0f)
-			scale = 1.0f;
-		if (scale < 0.999f) {
-			int si;
-			for (si = 0; si < n_disp; si++) {
-				q3ide_wm.wins[disp_idxs[si]].world_w *= scale;
-				q3ide_wm.wins[disp_idxs[si]].world_h *= scale;
-			}
-		}
-	}
-
 	q3ide_focus3_place_arc(eye, fwd, disp_idxs, n_disp, 0.0f);
 	g_f3_active = qtrue;
 	Q3IDE_SetHudMsg("FOCUS 3", 1500);
@@ -156,6 +131,7 @@ void q3ide_cmd_focus3_down(void)
 		return;
 	}
 
+	g_f3_held = qtrue;
 	if (q3ide_hk_down(&s_f3_hk, g_f3_active) == Q3IDE_HK_ACTIVATE) {
 		q3ide_focus3_show();
 		q3ide_hk_rearm(&s_f3_hk); /* focus3_show() does stream init — restart timer */
@@ -166,6 +142,7 @@ void q3ide_cmd_focus3_down(void)
 
 void q3ide_cmd_focus3_up(void)
 {
+	g_f3_held = qfalse;
 	if (q3ide_hk_up(&s_f3_hk, g_f3_active) == Q3IDE_HK_DEACTIVATE)
 		q3ide_focus3_hide();
 }
@@ -174,10 +151,13 @@ void q3ide_cmd_focus3_up(void)
 
 void q3ide_focus3_tick(void)
 {
-	int    i, n_disp, disp_idxs[3];
-	vec3_t eye, fwd, right;
+	int     i, si, n_disp, disp_idxs[3];
+	vec3_t  eye, fwd, right;
+	vec3_t  end, mins, maxs;
+	trace_t tr;
+	float   d, scale;
 
-	if (!g_f3_active)
+	if (!g_f3_active || !g_f3_held)
 		return;
 	if (!q3ide_player_axes(eye, fwd, right))
 		return;
@@ -190,6 +170,27 @@ void q3ide_focus3_tick(void)
 	}
 	if (n_disp == 0)
 		return;
+
+	/* Re-apply uniform scale every frame so all panels shrink/grow together
+	 * as the player moves toward or away from walls. */
+	end[0] = eye[0] + fwd[0] * Q3IDE_FOCUS3_DIST;
+	end[1] = eye[1] + fwd[1] * Q3IDE_FOCUS3_DIST;
+	end[2] = eye[2];
+	VectorSet(mins, -4.0f, -4.0f, -4.0f);
+	VectorSet(maxs, 4.0f, 4.0f, 4.0f);
+	CM_BoxTrace(&tr, eye, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+	d     = tr.fraction * Q3IDE_FOCUS3_DIST - Q3IDE_WALL_OFFSET;
+	if (d < Q3IDE_FOCUS3_MIN_DIST)
+		d = Q3IDE_FOCUS3_MIN_DIST;
+	scale = d / Q3IDE_FOCUS3_DIST;
+	if (scale > 1.0f)
+		scale = 1.0f;
+	for (si = 0; si < n_disp; si++) {
+		q3ide_win_t *w   = &q3ide_wm.wins[disp_idxs[si]];
+		float        asp = (w->world_h > 0.001f) ? w->world_w / w->world_h : Q3IDE_DISPLAY_ASPECT;
+		w->world_w       = Q3IDE_SPAWN_WIN_W * scale;
+		w->world_h       = w->world_w / asp;
+	}
 
 	q3ide_focus3_place_arc(eye, fwd, disp_idxs, n_disp, 0.0f);
 }
