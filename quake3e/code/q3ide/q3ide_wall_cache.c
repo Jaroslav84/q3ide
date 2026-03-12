@@ -11,7 +11,7 @@
 #include <string.h>
 
 /* Approximate ideal window width for slot spacing: 16:9 at Q3IDE_IDEAL_WINDOW_SIZE diagonal. */
-#define SLOT_WIN_W ((float) Q3IDE_IDEAL_WINDOW_SIZE * 0.8718f) /* ≈87u for 100u diagonal */
+#define SLOT_WIN_W ((float) Q3IDE_IDEAL_WINDOW_SIZE * Q3IDE_WALL_SLOT_ASPECT) /* ≈87u for 100u diagonal */
 
 q3ide_wall_cache_t g_wall_cache;
 
@@ -45,7 +45,7 @@ static void build_slots(q3ide_cached_wall_t *w, const q3ide_aas_wall_t *raw)
 	/* right-axis coordinate of centroid (right[2] == 0 always for horizontal basis) */
 	cr = raw->right[0] * raw->centroid[0] + raw->right[1] * raw->centroid[1];
 	start_r = cr - span * 0.5f + SLOT_WIN_W * 0.5f;
-	step    = SLOT_WIN_W + (float) Q3IDE_WINDOW_GAP;
+	step = SLOT_WIN_W + (float) Q3IDE_WINDOW_GAP;
 	center_z = (raw->floor_z + raw->ceil_z) * 0.5f;
 
 	for (j = 0; j < w->slot_count; j++) {
@@ -53,17 +53,15 @@ static void build_slots(q3ide_cached_wall_t *w, const q3ide_aas_wall_t *raw)
 		float dr = r - cr; /* offset from centroid along right axis */
 		q3ide_wall_slot_t *sl = &w->slots[j];
 
-		sl->position[0] = raw->centroid[0] + dr * raw->right[0]
-		                  + raw->normal[0] * (float) Q3IDE_WALL_OFFSET;
-		sl->position[1] = raw->centroid[1] + dr * raw->right[1]
-		                  + raw->normal[1] * (float) Q3IDE_WALL_OFFSET;
+		sl->position[0] = raw->centroid[0] + dr * raw->right[0] + raw->normal[0] * (float) Q3IDE_WALL_OFFSET;
+		sl->position[1] = raw->centroid[1] + dr * raw->right[1] + raw->normal[1] * (float) Q3IDE_WALL_OFFSET;
 		sl->position[2] = center_z;
-		sl->normal[0]   = raw->normal[0];
-		sl->normal[1]   = raw->normal[1];
-		sl->normal[2]   = raw->normal[2];
-		sl->width       = SLOT_WIN_W;
-		sl->height      = w->height;
-		sl->window_idx  = -1;
+		sl->normal[0] = raw->normal[0];
+		sl->normal[1] = raw->normal[1];
+		sl->normal[2] = raw->normal[2];
+		sl->width = SLOT_WIN_W;
+		sl->height = w->height;
+		sl->window_idx = -1;
 	}
 }
 
@@ -90,14 +88,14 @@ void Q3IDE_WallCache_Build(const vec3_t eye, int area_id)
 			break;
 
 		w = &g_wall_cache.walls[g_wall_cache.wall_count++];
-		w->center[0]   = raw[i].centroid[0];
-		w->center[1]   = raw[i].centroid[1];
-		w->center[2]   = (raw[i].floor_z + raw[i].ceil_z) * 0.5f;
-		w->normal[0]   = raw[i].normal[0];
-		w->normal[1]   = raw[i].normal[1];
-		w->normal[2]   = raw[i].normal[2];
-		w->width       = raw[i].width;
-		w->height      = h;
+		w->center[0] = raw[i].centroid[0];
+		w->center[1] = raw[i].centroid[1];
+		w->center[2] = (raw[i].floor_z + raw[i].ceil_z) * 0.5f;
+		w->normal[0] = raw[i].normal[0];
+		w->normal[1] = raw[i].normal[1];
+		w->normal[2] = raw[i].normal[2];
+		w->width = raw[i].width;
+		w->height = h;
 		dx = w->center[0] - eye[0];
 		dy = w->center[1] - eye[1];
 		dz = w->center[2] - eye[2];
@@ -129,9 +127,9 @@ void Q3IDE_WallCache_Dump(void)
 	Com_Printf("q3ide walls: area=%d walls=%d\n", g_wall_cache.area_id, g_wall_cache.wall_count);
 	for (i = 0; i < g_wall_cache.wall_count; i++) {
 		q3ide_cached_wall_t *w = &g_wall_cache.walls[i];
-		Com_Printf("  [%d] pos=(%.0f,%.0f,%.0f) n=(%.2f,%.2f) w=%.0f h=%.0f dist=%.0f slots=%d/%d\n", i,
-		           w->center[0], w->center[1], w->center[2], w->normal[0], w->normal[1], w->width, w->height,
-		           w->dist_to_player, w->slots_used, w->slot_count);
+		Com_Printf("  [%d] pos=(%.0f,%.0f,%.0f) n=(%.2f,%.2f) w=%.0f h=%.0f dist=%.0f slots=%d/%d\n", i, w->center[0],
+		           w->center[1], w->center[2], w->normal[0], w->normal[1], w->width, w->height, w->dist_to_player,
+		           w->slots_used, w->slot_count);
 		for (j = 0; j < w->slot_count; j++) {
 			Com_Printf("    slot[%d] pos=(%.0f,%.0f,%.0f) win=%d\n", j, w->slots[j].position[0],
 			           w->slots[j].position[1], w->slots[j].position[2], w->slots[j].window_idx);

@@ -33,8 +33,7 @@ void Q3IDE_WM_InvalidateShaders(void)
 {
 	int i;
 	q3ide_wm.border_shader = 0;
-	q3ide_wm.edge_shader   = 0;
-	q3ide_wm.laser_shader  = 0;
+	q3ide_wm.edge_shader = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		q3ide_wm.wins[i].shader = 0;
 }
@@ -60,8 +59,7 @@ void Q3IDE_WM_AddPolys(void)
 		/* Slot 62: solid black — TV chassis edge quads. */
 		byte black_bgra[4] = {0, 0, 0, 255};
 		re.UploadCinematic(1, 1, 1, 1, black_bgra, 62, qtrue, 0x80E1);
-		q3ide_wm.edge_shader  = re.RegisterShader("q3ide/win62");
-		q3ide_wm.laser_shader = re.RegisterShader("q3ide/laser");
+		q3ide_wm.edge_shader = re.RegisterShader("q3ide/win62");
 	}
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];

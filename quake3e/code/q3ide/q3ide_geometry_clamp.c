@@ -2,6 +2,7 @@
  * q3ide_geometry_clamp.c — Window size clamping and ray-window hit detection.
  */
 
+#include "q3ide_params.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
@@ -36,9 +37,9 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	end[2] = start[2] + right[2] * hw;
 	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 	if (tr.fraction < 1.0f) {
-		lim = tr.fraction * hw - 1.5f;
-		if (lim < 1.5f)
-			lim = 1.5f;
+		lim = tr.fraction * hw - Q3IDE_CLAMP_WALL_GAP;
+		if (lim < Q3IDE_CLAMP_WALL_GAP)
+			lim = Q3IDE_CLAMP_WALL_GAP;
 		if (lim < hw)
 			hw = lim;
 	}
@@ -49,9 +50,9 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	end[2] = start[2] - right[2] * hw;
 	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 	if (tr.fraction < 1.0f) {
-		lim = tr.fraction * hw - 1.5f;
-		if (lim < 1.5f)
-			lim = 1.5f;
+		lim = tr.fraction * hw - Q3IDE_CLAMP_WALL_GAP;
+		if (lim < Q3IDE_CLAMP_WALL_GAP)
+			lim = Q3IDE_CLAMP_WALL_GAP;
 		if (lim < hw)
 			hw = lim;
 	}
@@ -62,9 +63,9 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	end[2] = start[2] + up[2] * hh;
 	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 	if (tr.fraction < 1.0f) {
-		lim = tr.fraction * hh - 1.5f;
-		if (lim < 1.5f)
-			lim = 1.5f;
+		lim = tr.fraction * hh - Q3IDE_CLAMP_WALL_GAP;
+		if (lim < Q3IDE_CLAMP_WALL_GAP)
+			lim = Q3IDE_CLAMP_WALL_GAP;
 		if (lim < hh)
 			hh = lim;
 	}
@@ -75,9 +76,9 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	end[2] = start[2] - up[2] * hh;
 	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 	if (tr.fraction < 1.0f) {
-		lim = tr.fraction * hh - 1.5f;
-		if (lim < 1.5f)
-			lim = 1.5f;
+		lim = tr.fraction * hh - Q3IDE_CLAMP_WALL_GAP;
+		if (lim < Q3IDE_CLAMP_WALL_GAP)
+			lim = Q3IDE_CLAMP_WALL_GAP;
 		if (lim < hh)
 			hh = lim;
 	}
@@ -94,10 +95,10 @@ void q3ide_clamp_window_size(q3ide_win_t *win)
 	/* Minimum size: scale both dims uniformly so neither drops below 32. */
 	{
 		float min_scale = 1.0f;
-		if (win->world_w > 0.0f && win->world_w < 32.0f)
-			min_scale = 32.0f / win->world_w;
-		if (win->world_h > 0.0f && win->world_h < 32.0f) {
-			float ms = 32.0f / win->world_h;
+		if (win->world_w > 0.0f && win->world_w < Q3IDE_CLAMP_MIN_SIZE)
+			min_scale = Q3IDE_CLAMP_MIN_SIZE / win->world_w;
+		if (win->world_h > 0.0f && win->world_h < Q3IDE_CLAMP_MIN_SIZE) {
+			float ms = Q3IDE_CLAMP_MIN_SIZE / win->world_h;
 			if (ms > min_scale)
 				min_scale = ms;
 		}
@@ -131,10 +132,14 @@ int Q3IDE_WM_TraceWindowHit(const vec3_t start, const vec3_t dir, int skip_idx)
 			continue;
 		if (i == skip_idx)
 			continue;
+		/* Only hit windows that are actually rendered — same gate as AddPolys.
+		 * Prevents aiming at invisible (LOS-occluded) windows. */
+		if (!win->los_visible && !win->in_overview)
+			continue;
 
 		denom = DotProduct(dir, win->normal);
 		/* Double-sided: accept ray from either side (|denom| check only). */
-		if (fabsf(denom) < 0.001f)
+		if (fabsf(denom) < Q3IDE_TRACE_PLANE_EPS)
 			continue;
 
 		VectorSubtract(win->origin, start, diff);

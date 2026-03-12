@@ -4,6 +4,7 @@
 
 #include "q3ide_win_mngr.h"
 #include "q3ide_log.h"
+#include "q3ide_params.h"
 #include "q3ide_win_mngr_internal.h"
 
 #include "../qcommon/qcommon.h"
@@ -81,7 +82,7 @@ static void *q3ide_poll_thread_fn(void *arg)
 {
 	(void) arg;
 	while (q3ide_wm.poll_running) {
-		struct timespec ts = {0, 500000000}; /* 500ms */
+		struct timespec ts = {0, Q3IDE_SCK_POLL_INTERVAL_NS};
 		nanosleep(&ts, NULL);
 		if (!q3ide_wm.poll_running)
 			continue;

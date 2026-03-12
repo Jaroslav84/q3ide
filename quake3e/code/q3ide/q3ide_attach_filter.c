@@ -10,7 +10,7 @@
 /* ── App category lists (sourced from q3ide_params.h) ───────────── */
 
 const char *q3ide_terminal_apps[] = {Q3IDE_CPU_WINDOWS_LIST};
-const char *q3ide_browser_apps[]  = {Q3IDE_GPU_WINDOWS_LIST};
+const char *q3ide_browser_apps[] = {Q3IDE_GPU_WINDOWS_LIST};
 
 qboolean q3ide_match(const char *app, const char **list)
 {
@@ -39,10 +39,10 @@ qboolean q3ide_is_attached(unsigned int id)
  */
 static qboolean q3ide_is_system_junk(const Q3ideWindowInfo *w)
 {
-	static const char *junk[] = {Q3IDE_APP_BLACKLIST};
-	const char        *t      = w->title ? w->title : "";
-	const char        *a      = w->app_name ? w->app_name : "";
-	int                i;
+	static const char *junk[] = {Q3IDE_DEDICATED_WIN_BLACKLIST};
+	const char *t = w->title ? w->title : "";
+	const char *a = w->app_name ? w->app_name : "";
+	int i;
 
 	for (i = 0; junk[i]; i++)
 		if (Com_Filter(junk[i], t) || Com_Filter(junk[i], a))

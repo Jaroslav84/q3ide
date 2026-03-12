@@ -14,18 +14,15 @@
 #include <string.h>
 
 typedef struct {
-	int   win_idx;
-	int   wall_idx;
-	int   slot_idx;
+	int win_idx;
+	int wall_idx;
+	int slot_idx;
 	float win_w, win_h;
 } q3ide_place_item_t;
 
-static q3ide_place_item_t g_queue[Q3IDE_PLACEMENT_QUEUE_CAP];
-static int                g_queue_head, g_queue_tail;
-static int                g_active;
-
-/* ms timestamp of last Tick call — used for FPS gate */
-static unsigned long long g_last_tick_ms;
+static q3ide_place_item_t g_queue[Q3IDE_MAX_WIN];
+static int g_queue_head, g_queue_tail;
+static int g_active;
 
 int Q3IDE_Placement_IsActive(void)
 {
@@ -72,7 +69,7 @@ void Q3IDE_Placement_QueueAll(void)
 	int wi, wall_idx = 0;
 
 	g_queue_head = g_queue_tail = 0;
-	g_active     = 0;
+	g_active = 0;
 
 	if (!g_wall_cache.valid || g_wall_cache.wall_count == 0) {
 		Q3IDE_LOGI("placement: no walls in cache — skipping");
@@ -91,16 +88,16 @@ void Q3IDE_Placement_QueueAll(void)
 
 	/* Round-robin: assign one window per wall cycling through all walls closest-first */
 	for (wi = 0; wi < Q3IDE_MAX_WIN; wi++) {
-		q3ide_win_t         *w = &q3ide_wm.wins[wi];
+		q3ide_win_t *w = &q3ide_wm.wins[wi];
 		q3ide_cached_wall_t *wall;
-		q3ide_wall_slot_t   *slot;
-		q3ide_place_item_t  *item;
-		float                aspect, win_w, win_h;
-		int                  si, attempts;
+		q3ide_wall_slot_t *slot;
+		q3ide_place_item_t *item;
+		float aspect, win_w, win_h;
+		int si, attempts;
 
 		if (!w->active || !w->is_tunnel)
 			continue;
-		if (g_queue_tail >= Q3IDE_PLACEMENT_QUEUE_CAP)
+		if (g_queue_tail >= Q3IDE_MAX_WIN)
 			break;
 
 		/* Find next wall with a free slot (round-robin, closest-first order) */
@@ -115,7 +112,7 @@ void Q3IDE_Placement_QueueAll(void)
 		if (attempts >= g_wall_cache.wall_count)
 			break; /* all walls full */
 
-		si   = wall->slots_used;
+		si = wall->slots_used;
 		slot = &wall->slots[si];
 
 		aspect = (w->tex_w > 0 && w->tex_h > 0) ? (float) w->tex_w / (float) w->tex_h : (16.0f / 9.0f);
@@ -124,12 +121,12 @@ void Q3IDE_Placement_QueueAll(void)
 			continue;
 		}
 
-		item           = &g_queue[g_queue_tail++];
-		item->win_idx  = wi;
+		item = &g_queue[g_queue_tail++];
+		item->win_idx = wi;
 		item->wall_idx = (int) (wall - g_wall_cache.walls);
 		item->slot_idx = si;
-		item->win_w    = win_w;
-		item->win_h    = win_h;
+		item->win_w = win_w;
+		item->win_h = win_h;
 
 		slot->window_idx = wi;
 		wall->slots_used++;
@@ -139,19 +136,16 @@ void Q3IDE_Placement_QueueAll(void)
 	if (g_queue_tail > 0) {
 		g_active = 1;
 		Q3IDE_WM_PauseStreams();
-		Q3IDE_LOGI("placement: queued %d window(s) across %d wall(s)", g_queue_tail,
-		           g_wall_cache.wall_count);
+		Q3IDE_LOGI("placement: queued %d window(s) across %d wall(s)", g_queue_tail, g_wall_cache.wall_count);
 	}
 }
 
 void Q3IDE_Placement_Tick(void)
 {
-	unsigned long long    now_ms = (unsigned long long) Sys_Milliseconds();
-	unsigned long long    dt;
-	q3ide_place_item_t   *item;
-	q3ide_cached_wall_t  *wall;
-	q3ide_wall_slot_t    *slot;
-	q3ide_win_t          *w;
+	q3ide_place_item_t *item;
+	q3ide_cached_wall_t *wall;
+	q3ide_wall_slot_t *slot;
+	q3ide_win_t *w;
 
 	if (!g_active || g_queue_head >= g_queue_tail) {
 		if (g_active) {
@@ -162,23 +156,17 @@ void Q3IDE_Placement_Tick(void)
 		return;
 	}
 
-	/* FPS gate: skip frame if it took longer than 1000/Q3IDE_PLACEMENT_FPS_GATE ms */
-	dt = now_ms - g_last_tick_ms;
-	g_last_tick_ms = now_ms;
-	if (g_last_tick_ms > 0 && dt > (1000u / (unsigned) Q3IDE_PLACEMENT_FPS_GATE))
-		return;
-
 	item = &g_queue[g_queue_head++];
-	w    = &q3ide_wm.wins[item->win_idx];
+	w = &q3ide_wm.wins[item->win_idx];
 	if (!w->active)
 		return; /* window closed while queued */
 
-	wall         = &g_wall_cache.walls[item->wall_idx];
-	slot         = &wall->slots[item->slot_idx];
-	w->world_w   = item->win_w;
-	w->world_h   = item->win_h;
+	wall = &g_wall_cache.walls[item->wall_idx];
+	slot = &wall->slots[item->slot_idx];
+	w->world_w = item->win_w;
+	w->world_h = item->win_h;
 	Q3IDE_WM_MoveWindow(item->win_idx, slot->position, slot->normal, qtrue);
 
-	Q3IDE_LOGI("placement: win[%d] → wall[%d] slot[%d] (%.0fx%.0f u)", item->win_idx, item->wall_idx,
-	           item->slot_idx, item->win_w, item->win_h);
+	Q3IDE_LOGI("placement: win[%d] → wall[%d] slot[%d] (%.0fx%.0f u)", item->win_idx, item->wall_idx, item->slot_idx,
+	           item->win_w, item->win_h);
 }

@@ -87,6 +87,34 @@ pub const WHITELIST_DEDICATED: &[&str] = &[
 ];
 
 // ══════════════════════════════════════════════════════════════════════════════
+// SKIP_IF_UNTITLED — apps where any window with an empty title should be dropped.
+//
+// Some apps (e.g. Finder) always have a title on real content windows (folder name,
+// filename) but expose background layers (Desktop background, utility panels) with
+// no title. Those are on-screen and pass the size filter, but capturing them shows
+// the desktop wallpaper or is fully black — not useful as a tunnel window.
+// ══════════════════════════════════════════════════════════════════════════════
+pub const SKIP_IF_UNTITLED: &[&str] = &[
+    "finder", // Desktop background window: on-screen, empty title, full display size
+];
+
+// ══════════════════════════════════════════════════════════════════════════════
+// REQUIRE_ON_SCREEN — apps whose off-screen windows are always empty.
+//
+// Electron and native apps can spawn hidden background windows (service workers,
+// agent processes, mini-players, etc.) that pass the size filter but produce
+// zero frames on DEDICATED capture. List app name substrings here to drop any
+// window from that app where is_on_screen == false before it reaches the engine.
+//
+// These windows are still visible inside Display captures (Left/Center/Right).
+// ══════════════════════════════════════════════════════════════════════════════
+pub const REQUIRE_ON_SCREEN: &[&str] = &[
+    "claude",  // Electron: hidden background BrowserWindows
+    "music",   // macOS Music: background agent / mini-player windows
+    "cursor",  // Electron IDE: hidden background BrowserWindows
+];
+
+// ══════════════════════════════════════════════════════════════════════════════
 // DETECTOR thresholds — tune here if detector is too sensitive / slow to react.
 // ══════════════════════════════════════════════════════════════════════════════
 

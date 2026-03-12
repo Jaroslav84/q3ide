@@ -134,27 +134,41 @@ while i < len(lines):
     if m:
         w, h, hz = m.group(1), m.group(2), m.group(3)
         retina = None
+        conn = None
         for j in range(i + 1, min(i + 30, len(lines))):
             if re.match(r'\s+Resolution:', lines[j]):
                 break
-            mf = re.match(r'\s+(?:Framerate|Refresh Rate):\s+([\d.]+)\s*Hz', lines[j])
+            mf = re.match(r'\s+(?:Framerate|Frame Rate|Refresh Rate):\s+([\d.]+)\s*Hz', lines[j])
             if mf and not hz:
                 hz = mf.group(1)
-            if re.search(r'(?:HiDPI|Retina):\s*Yes', lines[j], re.I):
+            mf2 = re.match(r'\s+UI Looks Like:\s+\d+\s*[xX\u00d7]\s*\d+\s*@\s*([\d.]+)', lines[j])
+            if mf2 and not hz:
+                hz = mf2.group(1)
+            # broad fallback: any "NNN Hz" near this display entry
+            mf3 = re.search(r'([\d.]+)\s*Hz', lines[j])
+            if mf3 and not hz:
+                hz = mf3.group(1)
+            if re.search(r'(?:HiDPI|Retina)\s*:\s*Yes', lines[j], re.I):
                 retina = True
-            elif re.search(r'(?:HiDPI|Retina):\s*No', lines[j], re.I):
+            elif re.search(r'(?:HiDPI|Retina)\s*:\s*No', lines[j], re.I):
                 retina = False
-        displays.append((w, h, hz, retina))
+            mc = re.match(r'\s+Connection Type:\s+(.+)', lines[j])
+            if mc and not conn:
+                conn = mc.group(1).strip()
+        displays.append((w, h, hz, retina, conn))
     i += 1
 if not displays:
     print('unknown')
 else:
-    for idx, (w, h, hz, retina) in enumerate(displays):
-        s = f'[{idx}] {w}x{h}'
+    for idx, (w, h, hz, retina, conn) in enumerate(displays):
+        s = f'[{idx}]  {w}x{h}'
         if hz:
-            s += f' @ {int(float(hz))}Hz'
-        s += '  ' + ('Retina' if retina is True else 'Non-Retina' if retina is False else '')
-        print(s.rstrip())
+            s += f'  @{int(float(hz))}Hz'
+        s += '  ' + ('Retina' if retina is True else 'Non-Retina')
+        if conn:
+            conn = conn.replace('Thunderbolt/DisplayPort', 'DP').replace('DisplayPort', 'DP').replace('Thunderbolt', 'TB')
+            s += f'  {conn}'
+        print(s)
 PYEOF
     )
     [ -z "$MONITOR_LAYOUT" ] && MONITOR_LAYOUT="unknown"
@@ -175,6 +189,9 @@ fi
 # Per-line: "  ║  " (5) + art(32) + "  │  " (5) + info(49) + "  ║" (3) = 94
 _TS="$(date '+%H:%M:%S')"
 _RDIV="─────────────────────────────────────────────────"
+_G='\033[32m'; _D='\033[2m'; _R0='\033[0m'
+_yn() { [ "$1" = "YES" ] && printf "${_G}YES${_R0}" || printf "${_D}NO${_R0}"; }
+_api() { printf "%-6s %s" "$1" "$(_yn "$2")"; }
 
 # Parse monitor lines into array (one per display)
 IFS=$'\n' read -r -d '' -a _MON <<< "$MONITOR_LAYOUT" 2>/dev/null || true
@@ -200,32 +217,32 @@ _A=(
     "         Quake III IDE"
 )
 
-# Info column — 16 rows, each ≤49 chars
+# Info column — 16 rows. API row uses ANSI color; no right-wall so width is free.
 _R=(
     "Q3IDE BUILD ENVIRONMENT  [$_TS]"
     "$_RDIV"
     "Version   $Q3IDE_VERSION"
     "Release   $RELEASE_LABEL"
-    "Arch  $Q3E_ARCH   OS  $SYS_TYPE"
+    "$(printf 'Arch  %-12s  OS    %s' "$Q3E_ARCH" "$SYS_TYPE")"
     "$_RDIV"
     "CPU   $CPU"
-    "RAM   $RAM   GPU   $GPU"
+    "$(printf 'RAM   %-8s  GPU   %s' "$RAM" "$GPU")"
     "VRAM  $GPU_VRAM"
     "$_RDIV"
-    "Metal:$METAL_STR  OpenGL:$OPENGL_STR  OpenCL:$OPENCL_STR"
-    "Vulkan:$VULKAN_STR  HiDPI:$HIDPI_STR"
+    "$(_api Metal "$METAL_STR")   $(_api Vulkan "$VULKAN_STR")   $(_api OpenGL "$OPENGL_STR")   $(_api OpenCL "$OPENCL_STR")   $(_api HiDPI "$HIDPI_STR")"
     "$_RDIV"
+    ""
     "${_MON[0]:-}"
     "${_MON[1]:-}"
     "${_MON[2]:-}"
 )
 
 printf '\n'
-printf '  ╔══════════════════════════════════════════════════════════════════════════════════════════╗\n'
+printf '  ╔══════════════════════════════════════════════════════════════════════════════════════════\n'
 for _i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-    printf '  ║  %-32s  │  %-49s  ║\n' "${_A[$_i]}" "${_R[$_i]}"
+    printf '  ║  %-32s  │  %s\n' "${_A[$_i]}" "${_R[$_i]}"
 done
-printf '  ╚══════════════════════════════════════════════════════════════════════════════════════════╝\n'
+printf '  ╚══════════════════════════════════════════════════════════════════════════════════════════\n'
 printf '\n'
 
 # 1. Build qagame + ui dylibs from ioq3 source (skipped with --engine-only)

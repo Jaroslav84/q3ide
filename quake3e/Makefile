@@ -1174,8 +1174,7 @@ Q3OBJ += \
   $(B)/client/q3ide_aas_walls.o \
   $(B)/client/q3ide_wall_cache.o \
   $(B)/client/q3ide_placement.o \
-  $(B)/client/q3ide_teleport.o \
-  $(B)/client/q3ide_laser.o
+  $(B)/client/q3ide_teleport.o
 endif
 
 ifneq ($(USE_SYSTEM_JPEG),1)
@@ -1588,9 +1587,6 @@ $(B)/client/q3ide_placement.o: $(Q3IDEDIR)/q3ide_placement.c
 
 
 $(B)/client/q3ide_teleport.o: $(Q3IDEDIR)/q3ide_teleport.c
-	$(DO_CC)
-
-$(B)/client/q3ide_laser.o: $(Q3IDEDIR)/q3ide_laser.c
 	$(DO_CC)
 
 $(B)/rend1/%.o: $(R1DIR)/%.c

@@ -52,6 +52,8 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr);
 void Q3IDE_SetHudMsg(const char *msg, int duration_ms);
 /* Draw the current HUD message if not expired — call before re.RenderScene. */
 void Q3IDE_DrawHudMsg(const void *refdef_ptr);
+/* Draw 4 red corner crosses on each monitor — debug helper to verify pixel mapping. */
+void Q3IDE_DrawMonitorCorners(const void *refdef_ptr);
 
 /* Internal frame state — shared between q3ide_hooks*.c TUs. */
 typedef struct {

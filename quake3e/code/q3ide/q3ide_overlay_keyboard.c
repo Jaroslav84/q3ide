@@ -3,10 +3,18 @@
  *
  * Owns g_glyphs[]; q3ide_overlay_kbcache.c fills it at most 2 Hz.
  * Replay is cheap: transforms each cached glyph and calls AddPolyToScene.
+ *
+ * Layout (left monitor):
+ *   Keyboard   — top-right corner  (g_glyphs replayed shifted left by g_kb_max_right)
+ *   Winlist    — bottom-left corner (anchored via q3ide_ovl_pixel_pos)
+ *   Notifications (PAUSED/HIDDEN) — below keyboard, right-aligned
+ *   Area label — top-left corner
  */
 
 #include "q3ide_engine_hooks.h"
+#include "q3ide_log.h"
 #include "q3ide_params.h"
+#include "q3ide_params_theme.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
@@ -31,21 +39,17 @@ extern void q3ide_ovl_char_sm(float ox, float oy, float oz, const float *rx, con
                               byte b);
 extern void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, byte r,
                              byte g, byte b);
+extern void q3ide_ovl_pixel_pos(const refdef_t *fd, float px, float py, float out[3]);
+
+/* q3ide_overlay_lamps.c */
+extern void Q3IDE_DrawAreaLabel(float ox, float oy, float oz, const float *rx, const float *ux);
 
 /* q3ide_overlay_winlist.c */
-extern void Q3IDE_DrawAreaLabel(float ox, float oy, float oz, const float *rx, const float *ux, float kb_bot);
 extern void Q3IDE_DrawWinList(const void *refdef_ptr, float ox, float oy, float oz, const float *rx, const float *ux,
-                              float kb_bot, unsigned long long now);
+                              unsigned long long now);
 
 /* q3ide_overlay_kbcache.c */
 extern void q3ide_rebuild_keyboard_cache(void);
-
-/* px_to_wu: convert pixel offset to world units at OVL_DIST using actual FOV.
- * horizontal: fov_x + viewport width.  vertical: fov_y + viewport height.     */
-#define OVL_PX_WU_H(fd) \
-    ((2.0f * Q3IDE_OVL_DIST * tanf((fd)->fov_x * (M_PI / 360.0f))) / (float)(fd)->width)
-#define OVL_PX_WU_V(fd) \
-    ((2.0f * Q3IDE_OVL_DIST * tanf((fd)->fov_y * (M_PI / 360.0f))) / (float)(fd)->height)
 
 /* ── Glyph cache storage — written by kbcache.c, read here ─────────── */
 ovl_rel_glyph_t g_glyphs[OVL_MAX_GLYPHS];
@@ -53,7 +57,8 @@ int g_glyph_count;
 qboolean g_ovl_dirty = qtrue;
 unsigned long long g_ovl_last_build_ms = 0;
 
-float g_kb_bot; /* keyboard bottom offset from anchor — set by kbcache.c */
+float g_kb_bot;       /* keyboard bottom ux offset from anchor — set by kbcache.c */
+float g_kb_max_right; /* max right extent of glyph cache — set by kbcache.c */
 
 /* ── Main draw (called every frame from Q3IDE_Frame) ────────────────── */
 void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
@@ -61,52 +66,19 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
 	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
 	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
-	float ox, oy, oz;
 	unsigned long long now;
 	int gi;
 
 	q3ide_ovl_init();
+	{
+		static int once;
+		if (!once) {
+			Q3IDE_LOGI("ovl_init: chars=%d AddPoly=%s", (int) g_ovl_chars, re.AddPolyToScene ? "ok" : "null");
+			once = 1;
+		}
+	}
 	if (!g_ovl_chars || !re.AddPolyToScene)
 		return;
-
-	/* FOV-aware pixel→world-unit conversion at OVL_DIST */
-	{
-		float pw_h      = OVL_PX_WU_H(fd);
-		float pw_v      = OVL_PX_WU_V(fd);
-		float anchor_r  = Q3IDE_OVL_ANCHOR_RIGHT_BASE - Q3IDE_OVL_ANCHOR_LEFT_PX  * pw_h;
-		float anchor_u  = Q3IDE_OVL_ANCHOR_UP_BASE    - Q3IDE_OVL_ANCHOR_DOWN_PX  * pw_v;
-		float notif_off = Q3IDE_OVL_NOTIF_RIGHT_PX * pw_h;
-		ox = fd->vieworg[0] + fd->viewaxis[0][0] * Q3IDE_OVL_DIST + rx[0] * anchor_r + fd->viewaxis[2][0] * anchor_u;
-		oy = fd->vieworg[1] + fd->viewaxis[0][1] * Q3IDE_OVL_DIST + rx[1] * anchor_r + fd->viewaxis[2][1] * anchor_u;
-		oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST + rx[2] * anchor_r + fd->viewaxis[2][2] * anchor_u;
-		(void)notif_off; /* used below */
-
-	/* ── Notifications: top-right corner of left screen, stacking down ── */
-	{
-		float nx = ox + rx[0] * notif_off;
-		float ny = oy + rx[1] * notif_off;
-		float nz = oz + rx[2] * notif_off;
-		float nl = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE; /* line step down */
-		int nrow = 0;
-
-		/* PAUSED banner */
-		if (q3ide_wm.streams_paused) {
-			float lx = nx + ux[0] * (-nl * nrow);
-			float ly = ny + ux[1] * (-nl * nrow);
-			float lz = nz + ux[2] * (-nl * nrow);
-			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, "PAUSED", 255, 170, 30);
-			nrow++;
-		}
-		/* HIDDEN banner */
-		if (q3ide_wm.wins_hidden) {
-			float lx = nx + ux[0] * (-nl * nrow);
-			float ly = ny + ux[1] * (-nl * nrow);
-			float lz = nz + ux[2] * (-nl * nrow);
-			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, "HIDDEN", 120, 120, 255);
-			nrow++;
-		}
-		(void) nrow;
-	}
 
 	/* Rate-limited cache rebuild */
 	now = (unsigned long long) Sys_Milliseconds();
@@ -114,14 +86,29 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		q3ide_rebuild_keyboard_cache();
 		g_ovl_last_build_ms = now;
 		g_ovl_dirty = qfalse;
+		{
+			static int once2;
+			if (!once2) {
+				Q3IDE_LOGI("ovl kbcache built: glyph_count=%d max_right=%.2f kb_bot=%.2f", g_glyph_count,
+				           g_kb_max_right, g_kb_bot);
+				once2 = 1;
+			}
+		}
 	}
 
-	/* Replay glyph cache */
+	/* ── Keyboard anchor: top-right corner ─────────────────────────── */
+	float kbpos[3];
+	q3ide_ovl_pixel_pos(fd, (float) fd->width - Q3IDE_OVL_KB_RIGHT_MARGIN_PX, (float) Q3IDE_OVL_KB_TOP_MARGIN_PX,
+	                    kbpos);
+
+	/* Replay glyph cache — shift right by -g_kb_max_right so rightmost
+	 * glyph lands at kbpos (right screen edge minus margin). */
 	for (gi = 0; gi < g_glyph_count; gi++) {
 		const ovl_rel_glyph_t *gp = &g_glyphs[gi];
-		float cx = ox + rx[0] * gp->right + ux[0] * gp->up;
-		float cy = oy + rx[1] * gp->right + ux[1] * gp->up;
-		float cz = oz + rx[2] * gp->right + ux[2] * gp->up;
+		float dr = gp->right - g_kb_max_right;
+		float cx = kbpos[0] + rx[0] * dr + ux[0] * gp->up;
+		float cy = kbpos[1] + rx[1] * dr + ux[1] * gp->up;
+		float cz = kbpos[2] + rx[2] * dr + ux[2] * gp->up;
 		if (gp->rotate) {
 			float rot_rx[3], rot_ux[3];
 			int k;
@@ -137,7 +124,44 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		}
 	}
 
-	Q3IDE_DrawAreaLabel(ox, oy, oz, rx, ux, g_kb_bot);
-	Q3IDE_DrawWinList(fd, ox, oy, oz, rx, ux, g_kb_bot, now);
-	} /* end FOV anchor block */
+	/* ── Notifications: below keyboard, right-aligned ───────────────── */
+	{
+		float nl = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE;
+		float notif_cw = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
+		int nrow = 0;
+
+		if (q3ide_wm.streams_paused) {
+			float row_up = g_kb_bot - nl * (float) (nrow + 1);
+			float tw = 6.0f * notif_cw; /* "PAUSED" = 6 chars */
+			float lx = kbpos[0] - rx[0] * tw + ux[0] * row_up;
+			float ly = kbpos[1] - rx[1] * tw + ux[1] * row_up;
+			float lz = kbpos[2] - rx[2] * tw + ux[2] * row_up;
+			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, "PAUSED", Q3IDE_CLR_NOTIF_PAUSED);
+			nrow++;
+		}
+		if (q3ide_wm.wins_hidden) {
+			float row_up = g_kb_bot - nl * (float) (nrow + 1);
+			float tw = 6.0f * notif_cw; /* "HIDDEN" = 6 chars */
+			float lx = kbpos[0] - rx[0] * tw + ux[0] * row_up;
+			float ly = kbpos[1] - rx[1] * tw + ux[1] * row_up;
+			float lz = kbpos[2] - rx[2] * tw + ux[2] * row_up;
+			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, "HIDDEN", Q3IDE_CLR_NOTIF_HIDDEN);
+			nrow++;
+		}
+		(void) nrow;
+	}
+
+	/* ── Area label: top-left corner ────────────────────────────────── */
+	{
+		float alpos[3];
+		q3ide_ovl_pixel_pos(fd, (float) Q3IDE_OVL_WL_LEFT_MARGIN_PX, (float) Q3IDE_OVL_AREA_LABEL_TOP_PX, alpos);
+		Q3IDE_DrawAreaLabel(alpos[0], alpos[1], alpos[2], rx, ux);
+	}
+
+	/* ── Window list: left edge, vertically pixel-anchored ──────────── */
+	{
+		float wlpos[3];
+		q3ide_ovl_pixel_pos(fd, (float) Q3IDE_OVL_WL_LEFT_MARGIN_PX, 0.0f, wlpos);
+		Q3IDE_DrawWinList(fd, wlpos[0], wlpos[1], wlpos[2], rx, ux, now);
+	}
 }

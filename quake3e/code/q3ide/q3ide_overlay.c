@@ -5,6 +5,7 @@
 
 #include "q3ide_engine_hooks.h"
 #include "q3ide_params.h"
+#include "q3ide_params_theme.h"
 #include "q3ide_win_mngr.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -139,9 +140,9 @@ void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float
  */
 void q3ide_ovl_pixel_pos(const refdef_t *fd, float px, float py, float out[3])
 {
-	float D      = Q3IDE_OVL_DIST;
+	float D = Q3IDE_OVL_DIST;
 	float half_w, half_h, off_r, off_u;
-	int   i;
+	int i;
 
 	if (!fd->width || !fd->height)
 		return;
@@ -153,14 +154,70 @@ void q3ide_ovl_pixel_pos(const refdef_t *fd, float px, float py, float out[3])
 	/* signed offset from screen centre, in world units:
 	 *   off_r > 0  →  left  of centre  (rx = -viewaxis[1] = left direction)
 	 *   off_u > 0  →  above centre     (ux =  viewaxis[2]  = up direction)   */
-	off_r = (0.5f - px / (float)fd->width)  * 2.0f * half_w;
-	off_u = (0.5f - py / (float)fd->height) * 2.0f * half_h;
+	off_r = (0.5f - px / (float) fd->width) * 2.0f * half_w;
+	off_u = (0.5f - py / (float) fd->height) * 2.0f * half_h;
 
 	for (i = 0; i < 3; i++)
-		out[i] = fd->vieworg[i]
-		       + fd->viewaxis[0][i] * D     /* forward */
-		       - fd->viewaxis[1][i] * off_r /* right axis, negated → rx dir  */
-		       + fd->viewaxis[2][i] * off_u; /* up axis */
+		out[i] = fd->vieworg[i] + fd->viewaxis[0][i] * D /* forward */
+		         - fd->viewaxis[1][i] * off_r            /* right axis, negated → rx dir  */
+		         + fd->viewaxis[2][i] * off_u;           /* up axis */
+}
+
+/* ── Monitor corner debug crosses ──────────────────────────────── */
+
+/* Big '+' centred on world pos (cx,cy,cz) in red — 3× normal glyph scale. */
+static void draw_corner_cross(float cx, float cy, float cz, const float *rx, const float *ux)
+{
+	polyVert_t v[4];
+	const float scale = 3.0f;
+	const float hw = Q3IDE_OVL_CHAR_W * scale * 0.5f;
+	const float hh = Q3IDE_OVL_CHAR_H * scale * 0.5f;
+	/* UV for '+' (ASCII 43 = 0x2B → col 11, row 2 in bigchars) */
+	const float u0 = 11.0f / 16.0f, u1 = 12.0f / 16.0f;
+	const float t0 = 2.0f / 16.0f, t1 = 3.0f / 16.0f;
+	const float rsc[4] = {-hw, hw, hw, -hw};
+	const float usc[4] = {hh, hh, -hh, -hh};
+	const float uv_s[4] = {u0, u1, u1, u0};
+	const float uv_t[4] = {t0, t0, t1, t1};
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		v[i].xyz[0] = cx + rx[0] * rsc[i] + ux[0] * usc[i];
+		v[i].xyz[1] = cy + rx[1] * rsc[i] + ux[1] * usc[i];
+		v[i].xyz[2] = cz + rx[2] * rsc[i] + ux[2] * usc[i];
+		v[i].st[0] = uv_s[i];
+		v[i].st[1] = uv_t[i];
+		v[i].modulate.rgba[0] = 255;
+		v[i].modulate.rgba[1] = 0;
+		v[i].modulate.rgba[2] = 0;
+		v[i].modulate.rgba[3] = 255;
+	}
+	re.AddPolyToScene(g_ovl_chars, 4, v, 1);
+}
+
+/* Draw 4 red crosses at the 4 corners of the current monitor viewport.
+ * Call once per monitor pass — 3 monitors → 12 crosses total. */
+void Q3IDE_DrawMonitorCorners(const void *refdef_ptr)
+{
+	const refdef_t *fd = (const refdef_t *) refdef_ptr;
+	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
+	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
+	/* (norm_x, norm_y): 0=left/top edge, 1=right/bottom edge */
+	static const float cpx[4] = {0.0f, 1.0f, 0.0f, 1.0f};
+	static const float cpy[4] = {0.0f, 0.0f, 1.0f, 1.0f};
+	int c;
+
+	if (fd->rdflags & RDF_NOWORLDMODEL)
+		return;
+	q3ide_ovl_init();
+	if (!g_ovl_chars || !re.AddPolyToScene)
+		return;
+
+	for (c = 0; c < 4; c++) {
+		float pos[3];
+		q3ide_ovl_pixel_pos(fd, cpx[c] * (float) fd->width, cpy[c] * (float) fd->height, pos);
+		draw_corner_cross(pos[0], pos[1], pos[2], rx, ux);
+	}
 }
 
 /* ── HUD message banner ─────────────────────────────────────────── */
@@ -207,5 +264,5 @@ void Q3IDE_DrawHudMsg(const void *refdef_ptr)
 	oz = fd->vieworg[2] + fd->viewaxis[0][2] * Q3IDE_OVL_DIST - rx[2] * total_w * 0.5f +
 	     fd->viewaxis[2][2] * Q3IDE_OVL_DIST * 0.42f;
 
-	q3ide_ovl_str(ox, oy, oz, rx, ux, g_hud_msg, 255, 220, 80); /* amber */
+	q3ide_ovl_str(ox, oy, oz, rx, ux, g_hud_msg, Q3IDE_CLR_HUD_AMBER);
 }

@@ -17,24 +17,24 @@
 extern qboolean g_f3_active;
 extern qboolean g_ov_placed;
 
-static q3ide_hotkey_t s_f3_hk    = Q3IDE_HOTKEY_INIT;
-static qboolean       g_f3_held  = qfalse; /* true while key is physically held */
+static q3ide_hotkey_t s_f3_hk = Q3IDE_HOTKEY_INIT;
+static qboolean g_f3_held = qfalse; /* true while key is physically held */
 
 /* Arc placement — q3ide_view_modes_arc.c */
 extern void q3ide_focus3_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_rad);
 
 /* Retry state: cap_start_disp fails if the stream is still stopping (async Swift
  * teardown).  Set g_f3_retry_at to a future ms timestamp; Tick() retries then. */
-unsigned long long g_f3_retry_at    = 0;
-static int         g_f3_retry_count = 0;
+unsigned long long g_f3_retry_at = 0;
+static int g_f3_retry_count = 0;
 
 /* Forward declarations from q3ide_view_modes.c */
 extern qboolean q3ide_player_axes(vec3_t eye, vec3_t fwd, vec3_t right);
-extern void     q3ide_overview_detach_all(void);
+extern void q3ide_overview_detach_all(void);
 
 void q3ide_focus3_show(void)
 {
-	int    i, n_disp, disp_idxs[3];
+	int i, n_disp, disp_idxs[3];
 	vec3_t eye, fwd, right, pos, norm;
 
 	if (!q3ide_wm.cap) {
@@ -57,9 +57,9 @@ void q3ide_focus3_show(void)
 	if (n_disp == 0) {
 		/* Attach displays from OS list (displays_only=qtrue) */
 		Q3IDE_WM_PopulateQueue(qtrue);
-		pos[0]  = eye[0] + fwd[0] * Q3IDE_FOCUS3_DIST;
-		pos[1]  = eye[1] + fwd[1] * Q3IDE_FOCUS3_DIST;
-		pos[2]  = eye[2];
+		pos[0] = eye[0] + fwd[0] * Q3IDE_VIEWMODE_ARC_DIST;
+		pos[1] = eye[1] + fwd[1] * Q3IDE_VIEWMODE_ARC_DIST;
+		pos[2] = eye[2];
 		norm[0] = -fwd[0];
 		norm[1] = -fwd[1];
 		norm[2] = 0.0f;
@@ -76,17 +76,15 @@ void q3ide_focus3_show(void)
 	}
 
 	if (n_disp == 0) {
-		/* cap_start_disp failed — stream is likely still stopping (async Swift
-		 * teardown).  Schedule a retry; Tick() will call q3ide_focus3_show() again. */
-		if (g_f3_retry_count < 10) {
+		if (g_f3_retry_count < Q3IDE_SCK_FOCUS3_RETRY_COUNT) {
 			g_f3_retry_count++;
-			g_f3_retry_at = Sys_Milliseconds() + 300;
-			Q3IDE_SetHudMsg("FOCUS 3: starting...", 1000);
-			Q3IDE_LOGI("focus3: cap failed, retry %d in 300ms", g_f3_retry_count);
+			g_f3_retry_at = Sys_Milliseconds() + Q3IDE_SCK_FOCUS3_RETRY_MS;
+			Q3IDE_SetHudMsg("FOCUS 3: starting...", Q3IDE_HUD_CONFIRM_MS);
+			Q3IDE_LOGI("focus3: cap failed, retry %d in %dms", g_f3_retry_count, Q3IDE_SCK_FOCUS3_RETRY_MS);
 		} else {
 			g_f3_retry_count = 0;
-			Q3IDE_SetHudMsg("FOCUS 3: no displays", 2000);
-			Q3IDE_LOGE("focus3: gave up after 10 retries");
+			Q3IDE_SetHudMsg("FOCUS 3: no displays", Q3IDE_HUD_ERROR_MS);
+			Q3IDE_LOGE("focus3: gave up after %d retries", Q3IDE_SCK_FOCUS3_RETRY_COUNT);
 		}
 		return;
 	}
@@ -95,18 +93,17 @@ void q3ide_focus3_show(void)
 
 	q3ide_focus3_place_arc(eye, fwd, disp_idxs, n_disp, 0.0f);
 	g_f3_active = qtrue;
-	Q3IDE_SetHudMsg("FOCUS 3", 1500);
+	Q3IDE_SetHudMsg("FOCUS 3", Q3IDE_HUD_STATUS_MS);
 	Q3IDE_LOGI("focus3: %d displays in arc", n_disp);
 }
 
 void q3ide_focus3_hide(void)
 {
 	int i;
-	g_f3_retry_at    = 0;
+	g_f3_retry_at = 0;
 	g_f3_retry_count = 0;
 	/* cap_stop is required: display captures (owns_stream=qfalse) are NOT stopped
-	 * by DetachById, so cap_start_disp on re-show would fail with "already running".
-	 * Swift teardown is async — q3ide_focus3_show() handles the delay via retry logic. */
+	 * by DetachById, so cap_start_disp on re-show would fail with "already running". */
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w = &q3ide_wm.wins[i];
 		if (w->active && w->is_tunnel && !w->owns_stream) {
@@ -116,7 +113,7 @@ void q3ide_focus3_hide(void)
 		}
 	}
 	g_f3_active = qfalse;
-	Q3IDE_SetHudMsg("FOCUS 3 off", 1000);
+	Q3IDE_SetHudMsg("FOCUS 3 off", Q3IDE_HUD_CONFIRM_MS);
 }
 
 /* ── Command callbacks ───────────────────────────────────────────────── */
@@ -127,7 +124,7 @@ void q3ide_cmd_focus3_down(void)
 		q3ide_overview_detach_all();
 
 	if (cls.state != CA_ACTIVE) {
-		Q3IDE_SetHudMsg("FOCUS 3: not in game", 1500);
+		Q3IDE_SetHudMsg("FOCUS 3: not in game", Q3IDE_HUD_STATUS_MS);
 		return;
 	}
 
@@ -151,11 +148,11 @@ void q3ide_cmd_focus3_up(void)
 
 void q3ide_focus3_tick(void)
 {
-	int     i, si, n_disp, disp_idxs[3];
-	vec3_t  eye, fwd, right;
-	vec3_t  end, mins, maxs;
+	int i, si, n_disp, disp_idxs[3];
+	vec3_t eye, fwd, right;
+	vec3_t end, mins, maxs;
 	trace_t tr;
-	float   d, scale;
+	float d, scale;
 
 	if (!g_f3_active || !g_f3_held)
 		return;
@@ -173,23 +170,23 @@ void q3ide_focus3_tick(void)
 
 	/* Re-apply uniform scale every frame so all panels shrink/grow together
 	 * as the player moves toward or away from walls. */
-	end[0] = eye[0] + fwd[0] * Q3IDE_FOCUS3_DIST;
-	end[1] = eye[1] + fwd[1] * Q3IDE_FOCUS3_DIST;
+	end[0] = eye[0] + fwd[0] * Q3IDE_VIEWMODE_ARC_DIST;
+	end[1] = eye[1] + fwd[1] * Q3IDE_VIEWMODE_ARC_DIST;
 	end[2] = eye[2];
-	VectorSet(mins, -4.0f, -4.0f, -4.0f);
-	VectorSet(maxs, 4.0f, 4.0f, 4.0f);
+	VectorSet(mins, -Q3IDE_TRACE_BOX_HALF, -Q3IDE_TRACE_BOX_HALF, -Q3IDE_TRACE_BOX_HALF);
+	VectorSet(maxs, Q3IDE_TRACE_BOX_HALF, Q3IDE_TRACE_BOX_HALF, Q3IDE_TRACE_BOX_HALF);
 	CM_BoxTrace(&tr, eye, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
-	d     = tr.fraction * Q3IDE_FOCUS3_DIST - Q3IDE_WALL_OFFSET;
+	d = tr.fraction * Q3IDE_VIEWMODE_ARC_DIST - Q3IDE_WALL_OFFSET;
 	if (d < Q3IDE_FOCUS3_MIN_DIST)
 		d = Q3IDE_FOCUS3_MIN_DIST;
-	scale = d / Q3IDE_FOCUS3_DIST;
+	scale = d / Q3IDE_VIEWMODE_ARC_DIST;
 	if (scale > 1.0f)
 		scale = 1.0f;
 	for (si = 0; si < n_disp; si++) {
-		q3ide_win_t *w   = &q3ide_wm.wins[disp_idxs[si]];
-		float        asp = (w->world_h > 0.001f) ? w->world_w / w->world_h : Q3IDE_DISPLAY_ASPECT;
-		w->world_w       = Q3IDE_SPAWN_WIN_W * scale;
-		w->world_h       = w->world_w / asp;
+		q3ide_win_t *w = &q3ide_wm.wins[disp_idxs[si]];
+		float asp = (w->world_h > 0.001f) ? w->world_w / w->world_h : Q3IDE_DISPLAY_ASPECT;
+		w->world_w = Q3IDE_SPAWN_WIN_W * scale;
+		w->world_h = w->world_w / asp;
 	}
 
 	q3ide_focus3_place_arc(eye, fwd, disp_idxs, n_disp, 0.0f);

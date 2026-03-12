@@ -91,7 +91,17 @@ impl SCStreamOutputTrait for DedicatedFrameHandler {
         let Some(raw) = extract_pixels(&sample, output_type) else { return };
         let n = self.frame_count.fetch_add(1, Ordering::Relaxed);
         if should_log_frame(n) {
-            log::info!("dedicated: wid={} frame={} {}x{}", self.window_id, n, raw.width, raw.height);
+            log::info!("dedicated: wid={} frame={} {}x{} stride={}", self.window_id, n, raw.width, raw.height, raw.stride);
+        }
+        if n == 0 {
+            // Diagnostic: log leftmost pixel at mid-row to detect shadow/padding at x=0.
+            let mid = raw.height / 2;
+            let off = (mid * raw.stride) as usize;
+            if off + 3 < raw.pixels.len() {
+                let (b, g, r, a) = (raw.pixels[off], raw.pixels[off + 1], raw.pixels[off + 2], raw.pixels[off + 3]);
+                log::info!("dedicated: wid={} first_frame_diag {}x{}px (stride={}) leftmost_pixel=BGRA({},{},{},{})",
+                    self.window_id, raw.width, raw.height, raw.stride, b, g, r, a);
+            }
         }
         if let Ok(mut slot) = self.latest_frame.lock() {
             *slot = Some(FrameData {
@@ -533,18 +543,50 @@ impl CaptureBackend for SCKBackend {
         }
         let content = SCShareableContent::get()
             .map_err(|e| CaptureError::Platform(format!("SCShareableContent: {e}")))?;
-        Ok(content.windows().iter().map(|w| {
+        Ok(content.windows().iter().filter_map(|w| {
+            let app_name = w.owning_application().map(|a| a.application_name()).unwrap_or_default();
+            let on_screen = w.is_on_screen();
+            let title = w.title().unwrap_or_default();
+
+            {
+                let lower = app_name.to_lowercase();
+
+                // Hard-coded: apps known to spawn hidden background windows.
+                if !on_screen && crate::router::REQUIRE_ON_SCREEN.iter().any(|&k| lower.contains(k)) {
+                    return None;
+                }
+
+                // General: off-screen + no title = background/utility window.
+                // Real document windows always have a title (filename, page title, etc.).
+                if !on_screen && title.is_empty() {
+                    log::debug!(
+                        "list_windows: dropping off-screen untitled wid={} app='{}'",
+                        w.window_id(), app_name
+                    );
+                    return None;
+                }
+
+                // Apps where ANY untitled window is a background layer (e.g. Finder Desktop).
+                if title.is_empty() && crate::router::SKIP_IF_UNTITLED.iter().any(|&k| lower.contains(k)) {
+                    log::debug!(
+                        "list_windows: dropping untitled background window wid={} app='{}'",
+                        w.window_id(), app_name
+                    );
+                    return None;
+                }
+            }
+
             let f = w.frame();
-            WindowInfo {
+            Some(WindowInfo {
                 window_id: w.window_id(),
-                title: w.title().unwrap_or_default(),
-                app_name: w.owning_application().map(|a| a.application_name()).unwrap_or_default(),
+                title,
+                app_name,
                 width: f.size().width as u32,
                 height: f.size().height as u32,
-                is_on_screen: w.is_on_screen(),
+                is_on_screen: on_screen,
                 x: f.origin().x as i32,
                 y: f.origin().y as i32,
-            }
+            })
         }).collect())
     }
 

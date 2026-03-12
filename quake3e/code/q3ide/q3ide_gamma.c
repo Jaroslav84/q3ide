@@ -28,7 +28,7 @@ static qboolean q3ide_glob_match(const char *pattern, const char *str)
 				str++;
 			}
 			return qfalse;
-		} else if (*pattern == '?' || tolower((unsigned char)*pattern) == tolower((unsigned char)*str)) {
+		} else if (*pattern == '?' || tolower((unsigned char) *pattern) == tolower((unsigned char) *str)) {
 			pattern++;
 			str++;
 		} else {
@@ -40,16 +40,16 @@ static qboolean q3ide_glob_match(const char *pattern, const char *str)
 	return (*pattern == '\0' && *str == '\0');
 }
 
-static float g_base_gamma      = 0.0f; /* r_gamma saved before override; 0 = no override active */
-static int   g_base_overbright = -1;   /* r_overbrightbits saved before override; -1 = not saved */
-static char  g_last_mapname[64] = "";
+static float g_base_gamma = 0.0f;  /* r_gamma saved before override; 0 = no override active */
+static int g_base_overbright = -1; /* r_overbrightbits saved before override; -1 = not saved */
+static char g_last_mapname[64] = "";
 
 void q3ide_apply_map_gamma(const char *mapname)
 {
 	const char **pfx;
-	const char  *leaf;
-	float        cur_gamma;
-	qboolean     is_bright = qfalse;
+	const char *leaf;
+	float cur_gamma;
+	qboolean is_bright = qfalse;
 
 	/* Strip leading path — mapname may be "maps/lun3dm5" */
 	leaf = strrchr(mapname, '/');

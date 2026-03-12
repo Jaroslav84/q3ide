@@ -6,6 +6,7 @@
 
 #include "q3ide_engine_hooks.h"
 #include "q3ide_params.h"
+#include "q3ide_params_theme.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
@@ -13,11 +14,11 @@
 #include <string.h>
 
 extern void q3ide_ovl_char(float ox, float oy, float oz, const float *rx, const float *ux, int ch, byte r, byte g,
-                            byte b);
-extern void q3ide_ovl_str(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, byte r,
-                           byte g, byte b);
+                           byte b);
+extern void q3ide_ovl_str(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, byte r, byte g,
+                          byte b);
 extern void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, byte r,
-                              byte g, byte b);
+                             byte g, byte b);
 extern void q3ide_ovl_pixel_pos(const refdef_t *fd, float px, float py, float out[3]);
 
 /* q3ide_overlay_lamps.c */
@@ -33,14 +34,14 @@ extern int q3ide_aimed_win;
  *   O = displayed (active placed windows)
  *   A = all macOS windows SCK knows about
  *   F = failed (no stream / error) — shown red when > 0
- * Three health lamps per entry (* glyphs):
+ * Three health lamps per w->label (* glyphs):
  *   Lamp 1 (ever_failed): green / red
  *   Lamp 2 (failing_now): green / red
  *   Lamp 3 (stream live): green=active  yellow=idle  red=dead
  * Label: -90° rotated text above the lamp cluster.
  */
 void Q3IDE_DrawWinList(const void *refdef_ptr, float ox, float oy, float oz, const float *rx, const float *ux,
-                       float kb_bot, unsigned long long now)
+                       unsigned long long now)
 {
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
 	/* Pixel-perfect bottom: Q3IDE_OVL_WINLIST_BOTTOM_PX from bottom of viewport.
@@ -48,95 +49,121 @@ void Q3IDE_DrawWinList(const void *refdef_ptr, float ox, float oy, float oz, con
 	float wl_bot;
 	{
 		float wp[3];
-		q3ide_ovl_pixel_pos(fd, 0.0f, (float)fd->height - Q3IDE_OVL_WINLIST_BOTTOM_PX, wp);
+		q3ide_ovl_pixel_pos(fd, 0.0f, (float) fd->height - Q3IDE_OVL_WINLIST_BOTTOM_PX, wp);
 		wl_bot = (wp[0] - ox) * ux[0] + (wp[1] - oy) * ux[1] + (wp[2] - oz) * ux[2];
 	}
-	int   n_active = q3ide_wm.num_active;
-	float sm_lh   = (n_active > 10) ? Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE * 0.65f
-	                                 : Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE;
+	/* Header + highlight anchor: Q3IDE_OVL_WINLIST_HDR_OFFSET_PX below the list base */
+	float wl_hdr;
+	{
+		float wp[3];
+		q3ide_ovl_pixel_pos(fd, 0.0f,
+		                    (float) fd->height - Q3IDE_OVL_WINLIST_BOTTOM_PX + Q3IDE_OVL_WINLIST_HDR_OFFSET_PX, wp);
+		wl_hdr = (wp[0] - ox) * ux[0] + (wp[1] - oy) * ux[1] + (wp[2] - oz) * ux[2];
+	}
+	int n_active = q3ide_wm.num_active;
+	float sm_lh = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE;
 	int wrow = 0, wi;
 
-	(void)kb_bot; /* bottom is now fixed; kb_bot no longer drives winlist position */
-
-	/* Header at the very bottom (row 0) — grows upward from here */
+	/* Header — "WINDOWS X/Y DEAD:Z THROTTLED:W" */
 	{
-		char  pfx[48];
-		char  fsuf[8];
-		int   n_all, n_fail, _si;
-		float row_u = wl_bot + (float)wrow * sm_lh;
-		float lx    = ox + ux[0] * row_u;
-		float ly    = oy + ux[1] * row_u;
-		float lz    = oz + ux[2] * row_u;
+		char seg[32];
+		int n_all, n_dead, n_throttled, _si;
+		float cx, cy, cz;
 
-		n_all  = q3ide_wm.macos_win_count;
-		n_fail = 0;
+		cx = ox + ux[0] * wl_hdr;
+		cy = oy + ux[1] * wl_hdr;
+		cz = oz + ux[2] * wl_hdr;
+
+		n_all = q3ide_wm.macos_win_count;
+		n_dead = 0;
+		n_throttled = 0;
 		for (_si = 0; _si < Q3IDE_MAX_WIN; _si++) {
 			const q3ide_win_t *_w = &q3ide_wm.wins[_si];
-			if (_w->active && _w->owns_stream && !_w->stream_active)
-				n_fail++;
+			if (!_w->active)
+				continue;
+			if (_w->owns_stream && !_w->stream_active)
+				n_dead++;
+			if (_w->owns_stream && _w->last_throttle_ms > 0 &&
+			    (now - _w->last_throttle_ms) < Q3IDE_SCK_THROTTLE_RETRIGGER_MS)
+				n_throttled++;
 		}
-		Com_sprintf(pfx, sizeof(pfx), "Windows: %d/%d/", n_active, n_all);
-		q3ide_ovl_str(lx, ly, lz, rx, ux, pfx, 255, 255, 255);
-		{
-			float fx = lx + rx[0] * (float)strlen(pfx) * Q3IDE_OVL_CHAR_W;
-			float fy = ly + rx[1] * (float)strlen(pfx) * Q3IDE_OVL_CHAR_W;
-			float fz = lz + rx[2] * (float)strlen(pfx) * Q3IDE_OVL_CHAR_W;
-			Com_sprintf(fsuf, sizeof(fsuf), "%d", n_fail);
-			if (n_fail > 0)
-				q3ide_ovl_str(fx, fy, fz, rx, ux, fsuf, 255, 50, 50);
-			else
-				q3ide_ovl_str(fx, fy, fz, rx, ux, fsuf, 255, 255, 255);
-		}
-	}
-	wrow++;
 
-	/* Hovered window label — yellow, one row above the header */
+#define HDR_ADV(s)                                                                                                     \
+	cx += rx[0] * (float) strlen(s) * Q3IDE_OVL_CHAR_W;                                                                \
+	cy += rx[1] * (float) strlen(s) * Q3IDE_OVL_CHAR_W;                                                                \
+	cz += rx[2] * (float) strlen(s) * Q3IDE_OVL_CHAR_W
+
+		Com_sprintf(seg, sizeof(seg), "WINDOWS %d/%d ", n_active, n_all);
+		q3ide_ovl_str(cx, cy, cz, rx, ux, seg, 255, 255, 255);
+		HDR_ADV(seg);
+
+		Com_sprintf(seg, sizeof(seg), "DEAD:");
+		q3ide_ovl_str(cx, cy, cz, rx, ux, seg, 255, 255, 255);
+		HDR_ADV(seg);
+
+		Com_sprintf(seg, sizeof(seg), "%d", n_dead);
+		if (n_dead > 0)
+			q3ide_ovl_str(cx, cy, cz, rx, ux, seg, Q3IDE_CLR_HEADER_DEAD);
+		else
+			q3ide_ovl_str(cx, cy, cz, rx, ux, seg, 255, 255, 255);
+		HDR_ADV(seg);
+
+		Com_sprintf(seg, sizeof(seg), " THROTTLED:");
+		q3ide_ovl_str(cx, cy, cz, rx, ux, seg, 255, 255, 255);
+		HDR_ADV(seg);
+
+		Com_sprintf(seg, sizeof(seg), "%d", n_throttled);
+		if (n_throttled > 0)
+			q3ide_ovl_str(cx, cy, cz, rx, ux, seg, Q3IDE_CLR_HEADER_THROTTLED);
+		else
+			q3ide_ovl_str(cx, cy, cz, rx, ux, seg, 255, 255, 255);
+
+#undef HDR_ADV
+	}
+
+	/* Hovered window label — yellow, one row above header (wl_hdr + sm_lh) */
 	if (q3ide_aimed_win >= 0 && q3ide_aimed_win < Q3IDE_MAX_WIN && q3ide_wm.wins[q3ide_aimed_win].active) {
-		const char *lbl   = q3ide_wm.wins[q3ide_aimed_win].label;
-		float       row_u = wl_bot + (float)wrow * sm_lh;
-		float       hx    = ox + ux[0] * row_u;
-		float       hy    = oy + ux[1] * row_u;
-		float       hz    = oz + ux[2] * row_u;
-		q3ide_ovl_str(hx, hy, hz, rx, ux, lbl[0] ? lbl : "(no label)", 255, 220, 0);
-		wrow++;
+		const char *lbl = q3ide_wm.wins[q3ide_aimed_win].label;
+		float row_u = wl_hdr + sm_lh;
+		float hx = ox + ux[0] * row_u;
+		float hy = oy + ux[1] * row_u;
+		float hz = oz + ux[2] * row_u;
+		q3ide_ovl_str(hx, hy, hz, rx, ux, lbl[0] ? lbl : "(no label)", Q3IDE_CLR_WINLABEL_HOVER);
 	}
 
-	/* Per-window entries — grow upward */
+	/* Per-window entries — grow upward from wl_bot, wrow starts at 0 */
 	for (wi = 0; wi < Q3IDE_MAX_WIN; wi++) {
 		q3ide_win_t *w = &q3ide_wm.wins[wi];
-		char         entry[22];
-		float        row_u, lx, ly, lz;
-		qboolean     failing_now, stream_idle;
+		float row_u, lx, ly, lz;
+		qboolean failing_now, stream_idle;
 
 		if (!w->active)
 			continue;
 
-		Q_strncpyz(entry, w->label, sizeof(entry));
-		if (strlen(w->label) > 20) {
-			entry[19] = '~';
-			entry[20] = '\0';
-		}
+		row_u = wl_bot + (float) wrow * sm_lh;
+		lx = ox + ux[0] * row_u;
+		ly = oy + ux[1] * row_u;
+		lz = oz + ux[2] * row_u;
 
-		row_u = wl_bot + (float)wrow * sm_lh;
-		lx    = ox + ux[0] * row_u;
-		ly    = oy + ux[1] * row_u;
-		lz    = oz + ux[2] * row_u;
-
-		failing_now =
-		    (w->owns_stream && !w->stream_active) || (w->last_throttle_ms > 0 && (now - w->last_throttle_ms) < 2000ULL);
+		failing_now = (w->owns_stream && !w->stream_active) ||
+		              (w->last_throttle_ms > 0 && (now - w->last_throttle_ms) < Q3IDE_SCK_THROTTLE_RETRIGGER_MS);
 		stream_idle = w->stream_active && w->last_frame_ms > 0 && (now - w->last_frame_ms) >= Q3IDE_IDLE_TIMEOUT_MS;
 
 		/* Lamp 1: ever_failed */
-		q3ide_ovl_char(lx, ly, lz, rx, ux, '*', w->ever_failed ? 255 : 40, w->ever_failed ? 50 : 200,
-		               w->ever_failed ? 50 : 70);
+		if (w->ever_failed)
+			q3ide_ovl_char(lx, ly, lz, rx, ux, '*', Q3IDE_CLR_LAMP_FAILED);
+		else
+			q3ide_ovl_char(lx, ly, lz, rx, ux, '*', Q3IDE_CLR_LAMP_OK);
 
 		/* Lamp 2: failing_now */
 		{
 			float l2x = lx + rx[0] * Q3IDE_OVL_CHAR_W * 1.6f;
 			float l2y = ly + rx[1] * Q3IDE_OVL_CHAR_W * 1.6f;
 			float l2z = lz + rx[2] * Q3IDE_OVL_CHAR_W * 1.6f;
-			q3ide_ovl_char(l2x, l2y, l2z, rx, ux, '*', failing_now ? 255 : 40, failing_now ? 30 : 200,
-			               failing_now ? 30 : 70);
+			if (failing_now)
+				q3ide_ovl_char(l2x, l2y, l2z, rx, ux, '*', Q3IDE_CLR_LAMP_FAILING);
+			else
+				q3ide_ovl_char(l2x, l2y, l2z, rx, ux, '*', Q3IDE_CLR_LAMP_OK);
 		}
 
 		/* Lamp 3: stream live state */
@@ -145,11 +172,11 @@ void Q3IDE_DrawWinList(const void *refdef_ptr, float ox, float oy, float oz, con
 			float l3y = ly + rx[1] * Q3IDE_OVL_CHAR_W * 3.2f;
 			float l3z = lz + rx[2] * Q3IDE_OVL_CHAR_W * 3.2f;
 			if (!w->stream_active)
-				q3ide_ovl_char(l3x, l3y, l3z, rx, ux, '*', 255, 30, 30);
+				q3ide_ovl_char(l3x, l3y, l3z, rx, ux, '*', Q3IDE_CLR_LAMP_DEAD);
 			else if (stream_idle)
-				q3ide_ovl_char(l3x, l3y, l3z, rx, ux, '*', 255, 200, 0);
+				q3ide_ovl_char(l3x, l3y, l3z, rx, ux, '*', Q3IDE_CLR_LAMP_IDLE);
 			else
-				q3ide_ovl_char(l3x, l3y, l3z, rx, ux, '*', 40, 220, 80);
+				q3ide_ovl_char(l3x, l3y, l3z, rx, ux, '*', Q3IDE_CLR_LAMP_ACTIVE);
 		}
 
 		/* Window name — normal horizontal text to the right of lamps */
@@ -158,9 +185,9 @@ void Q3IDE_DrawWinList(const void *refdef_ptr, float ox, float oy, float oz, con
 			float lly = ly + rx[1] * Q3IDE_OVL_CHAR_W * 4.8f;
 			float llz = lz + rx[2] * Q3IDE_OVL_CHAR_W * 4.8f;
 			if (w->owns_stream && !w->stream_active)
-				q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 255, 80, 40);
+				q3ide_ovl_str_sm(llx, lly, llz, rx, ux, w->label, Q3IDE_CLR_WINNAME_DEAD);
 			else
-				q3ide_ovl_str_sm(llx, lly, llz, rx, ux, entry, 210, 210, 210);
+				q3ide_ovl_str_sm(llx, lly, llz, rx, ux, w->label, Q3IDE_CLR_WINNAME_NORMAL);
 		}
 
 		wrow++;

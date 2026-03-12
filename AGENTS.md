@@ -8,6 +8,8 @@ Match the question. Simple question = simple answer. No theories, no code, no wa
 
 If the user asks a question — answer it. Do not start planning, implementing, or showing code examples unless explicitly told to.
 
+**If the message ends with `?` — you are NOT allowed to write or modify any code. Answer only. No exceptions.**
+
 ## Parallel Agents — Lint/Build Fail Triage
 
 **4–6 agents run simultaneously. Each owns specific files. Never fix another agent's files.**
@@ -72,6 +74,7 @@ Q3IDE_WM_ResumeStreams();
 
 **Rules — no exceptions:**
 - ALL new magic numbers go here. Never hardcode values in `.c` files.
+- This includes **every timeout, delay, threshold, interval, cap, and timer** — `1000ULL`, `2000ULL`, `500ms`, `30px`, all of it. If it's a number that controls behaviour, it belongs here.
 - NEVER add, edit, or remove entries without understanding the full downstream impact.
 - NEVER duplicate a constant that already exists here. Search before adding.
 - When removing a constant, grep every `.c`/`.h` file first — if anything references it, the removal is a breaking change.
@@ -89,6 +92,14 @@ Q3IDE_WM_ResumeStreams();
 - **ALWAYS remind the user to `--clean` build** after C source changes. `make` timestamps can miss changes across Docker/macOS sync.
 - **When running inside Docker** — use the Remote API + WebSocket bridge (see section below). Do NOT fall back to log polling; use the live WebSocket stream instead.
 
+
+## NO Unsolicited Optimizations
+
+**Agents are forbidden to introduce optimizations, caps, throttles, rate limits, or performance tuning of any kind unless the user explicitly asks.**
+
+Why: performance improvements are introduced gradually and deliberately. Agents adding their own caps or throttles introduce unexpected behaviour that breaks the developer's mental model of the system and causes hard-to-trace bugs.
+
+If you think something could be optimized — say so in **Concerns**, but do NOT implement it.
 
 ## Debug Tips
 

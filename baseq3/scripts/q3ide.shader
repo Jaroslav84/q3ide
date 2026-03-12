@@ -728,15 +728,3 @@ q3ide/win63
         rgbGen vertex
     }
 }
-
-q3ide/laser
-{
-    nomipmaps
-    nopicmip
-    {
-        map $whiteimage
-        blendFunc add
-        rgbGen vertex
-        alphaGen vertex
-    }
-}

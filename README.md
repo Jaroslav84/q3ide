@@ -60,6 +60,8 @@ sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --
   - Auto attach/detach new and closed macOS windows into Quake (PollChanges)
   - Unminimizes every app and re-focuses Quake before first attach
   - ICC color restore on cmd-tab — monitors snap back to calibrated profiles the moment you leave Quake. Otherwise we have white windows when using SCStream
+
+  what did we add her?.....
 - **Window Manager**
   - Shoot wall to place window 1,2...N
   - Highlight window on aim
@@ -72,13 +74,13 @@ sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --
   - "I" to view ALL monitors
   - "O" to view ALL windows -> good for FPS stress testing
   - "H" to hide ALL windows
-  - "K" to laser ALL windows (points a laser ray to windows)
+  - "K" to highlight ALL windows with a laser ray pointing to it
   - ";" to freeze stream (last frame frozen, 100% FPS regain)
-- **Left Monitor Overlay**:
+- **Left Monitor Overlay**: rate-limited
   - keybindings
-  - stats
   - notifications
   - list of windows
+  - stats
 
 --- 
 

@@ -17,8 +17,8 @@
 #include <math.h>
 
 extern q3ide_hooks_state_t q3ide_state;
-extern int                  q3ide_last_attack;
-extern int                  q3ide_aimed_win;
+extern int q3ide_last_attack;
+extern int q3ide_aimed_win;
 
 /* q3ide_gamma.c */
 extern void q3ide_gamma_tick(const char *cur_map);
@@ -35,7 +35,7 @@ void Q3IDE_Frame(void)
 	if (!q3ide_state.autoexec_done && cls.state == CA_ACTIVE) {
 		if (q3ide_state.autoexec_delay == 0)
 			q3ide_state.autoexec_delay = Sys_Milliseconds();
-		if (Sys_Milliseconds() - q3ide_state.autoexec_delay >= 1000) {
+		if (Sys_Milliseconds() - q3ide_state.autoexec_delay >= Q3IDE_AUTOEXEC_DELAY_MS) {
 			{
 				cvar_t *cmd = Cvar_Get("nextdemo", "", 0);
 				if (cmd && cmd->string[0]) {
@@ -116,9 +116,11 @@ void Q3IDE_Frame(void)
 					vec3_t _pt;
 					trace_t _tr;
 					int _pi;
-					/* 5 sample points: center, BL, BR, TR, TL corners (inset 10%). */
-					static const float _cx[5] = {0.0f, -0.9f, 0.9f, 0.9f, -0.9f};
-					static const float _cy[5] = {0.0f, -0.9f, -0.9f, 0.9f, 0.9f};
+					/* 5 sample points: center + 4 corners inset by Q3IDE_LOS_CORNER_INSET. */
+					static const float _cx[5] = {0.0f, -Q3IDE_LOS_CORNER_INSET, Q3IDE_LOS_CORNER_INSET,
+					                             Q3IDE_LOS_CORNER_INSET, -Q3IDE_LOS_CORNER_INSET};
+					static const float _cy[5] = {0.0f, -Q3IDE_LOS_CORNER_INSET, -Q3IDE_LOS_CORNER_INSET,
+					                             Q3IDE_LOS_CORNER_INSET, Q3IDE_LOS_CORNER_INSET};
 					static vec3_t _mins = {0, 0, 0}, _maxs = {0, 0, 0};
 
 					_rx = (_hl > 0.01f) ? -_ny / _hl : 1.0f;
@@ -128,7 +130,7 @@ void Q3IDE_Frame(void)
 
 					/* Proximity exemption: within 1 window diagonal the player is
 					 * clearly next to the TV — skip LOS, always show it. */
-					if (_w->player_dist < sqrtf(_hw * _hw + _hh * _hh) * 2.0f) {
+					if (_w->player_dist < sqrtf(_hw * _hw + _hh * _hh) * Q3IDE_LOS_PROXIMITY_MULT) {
 						_w->los_visible = qtrue;
 						continue;
 					}
@@ -139,7 +141,7 @@ void Q3IDE_Frame(void)
 						_pt[1] = _w->origin[1] + _ry * _cx[_pi] * _hw;
 						_pt[2] = _w->origin[2] + _cy[_pi] * _hh;
 						CM_BoxTrace(&_tr, eye, _pt, _mins, _maxs, 0, CONTENTS_SOLID, qfalse);
-						if (_tr.fraction >= 0.95f) {
+						if (_tr.fraction >= Q3IDE_LOS_HIT_THRESHOLD) {
 							_w->los_visible = qtrue;
 							break;
 						}
@@ -170,7 +172,7 @@ void Q3IDE_Frame(void)
 		/* Area-change detector — rebuild wall cache + queue windows on transition */
 		{
 			static int last_area;
-			int        cur_area = Q3IDE_AAS_PointArea(eye);
+			int cur_area = Q3IDE_AAS_PointArea(eye);
 			if (cur_area > 0 && cur_area != last_area) {
 				last_area = cur_area;
 				Q3IDE_WallCache_Build(eye, cur_area);
@@ -187,7 +189,7 @@ void Q3IDE_Frame(void)
 	{
 		static unsigned long long last_hb_ms;
 		unsigned long long now_ms = Sys_Milliseconds();
-		if (now_ms - last_hb_ms >= 5000) {
+		if (now_ms - last_hb_ms >= Q3IDE_HEARTBEAT_MS) {
 			static int last_framecount;
 			unsigned long long elapsed = now_ms - last_hb_ms;
 			int frames = cls.framecount - last_framecount;

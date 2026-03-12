@@ -156,14 +156,13 @@ typedef struct {
 	int fbuf_size;
 	qhandle_t border_shader; /* scratch slot 63: solid red — hover/select borders */
 	qhandle_t edge_shader;   /* scratch slot 62: solid black — TV chassis edge quads */
-	qhandle_t laser_shader;  /* q3ide/laser: additive red — K-key laser beams */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;
 	pthread_mutex_t poll_mutex;
 	volatile int poll_running;
 	Q3ideWindowChangeList poll_pending; /* protected by poll_mutex */
 	qboolean poll_has_pending;          /* protected by poll_mutex */
-	int macos_win_count; /* total SCK-visible windows; cached at init, ±1 on SCK events */
+	int macos_win_count;                /* total SCK-visible windows; cached at init, ±1 on SCK events */
 } q3ide_wm_t;
 
 extern q3ide_wm_t q3ide_wm;

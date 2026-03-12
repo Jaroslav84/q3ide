@@ -48,18 +48,15 @@
 
 typedef struct {
 	unsigned long long press_ms; /* Sys_Milliseconds() at key-down; 0 = idle */
-	qboolean           locked;   /* tap-locked on — second press needed to turn off */
+	qboolean locked;             /* tap-locked on — second press needed to turn off */
 } q3ide_hotkey_t;
 
-#define Q3IDE_HOTKEY_INIT \
-	{                     \
-		0ULL, qfalse      \
-	}
+#define Q3IDE_HOTKEY_INIT {0ULL, qfalse}
 
 typedef enum {
-	Q3IDE_HK_NONE       = 0, /* no state change */
-	Q3IDE_HK_ACTIVATE   = 1, /* turn feature ON  */
-	Q3IDE_HK_DEACTIVATE = 2  /* turn feature OFF */
+	Q3IDE_HK_NONE = 0,      /* no state change */
+	Q3IDE_HK_ACTIVATE = 1,  /* turn feature ON  */
+	Q3IDE_HK_DEACTIVATE = 2 /* turn feature OFF */
 } q3ide_hk_result_t;
 
 /*

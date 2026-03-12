@@ -6,7 +6,7 @@
 
 #include "placement.h"
 #include "../engine/adapter.h"
-#include "../q3ide_design.h"
+#include "../q3ide/q3ide_params.h"
 
 #include <math.h>
 
