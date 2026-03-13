@@ -560,9 +560,22 @@ void RE_RenderScene( const refdef_t *fd ) {
 	r_firstSceneLitSurf = tr.refdef.numLitSurfs;
 #endif
 
+// q3ide [BEGIN] Multi-Viewport Preservation - code/renderervk/tr_scene.c
+// Preserve entities and dlights across multiple viewport passes so all monitors see the same scene.
+#ifdef USE_Q3IDE
+	if ( ri.Cvar_VariableIntegerValue( "r_multiViewRemaining" ) > 0 ) {
+		/* Multi-viewport: preserve entities/dlights so side monitors see
+		 * the same scene; only advance polys (re-added fresh each pass). */
+		r_firstScenePoly = r_numpolys;
+	} else {
+#endif
 	r_firstSceneEntity = r_numentities;
 	r_firstSceneDlight = r_numdlights;
 	r_firstScenePoly = r_numpolys;
+#ifdef USE_Q3IDE
+	}
+#endif
+// q3ide [END] Multi-Viewport Preservation
 
 	tr.frontEndMsec += ri.Milliseconds() - startTime;
 }

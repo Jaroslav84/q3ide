@@ -141,8 +141,6 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 
 /* g_ov_active: true while overview is showing (q3ide_view_modes_overview.c) */
 extern qboolean g_ov_active;
-/* Restack arc after a window leaves it (q3ide_view_modes_grid.c) */
-extern void q3ide_overview_layout(void);
 
 void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_clamp)
 {
@@ -161,11 +159,11 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_cl
 	if (!skip_clamp)
 		q3ide_clamp_window_size(&q3ide_wm.wins[idx]);
 	/* User shot this window onto a wall during overview: mark it wall-placed,
-	 * pull it from the arc, and restack the remaining arc windows. */
+	 * pull it from the arc.  Do NOT reflow the arc — remaining windows keep
+	 * their current grid positions so the 3xN structure stays intact. */
 	if (!skip_clamp && g_ov_active) {
 		q3ide_wm.wins[idx].wall_placed = qtrue;
 		q3ide_wm.wins[idx].in_overview = qfalse;
-		q3ide_overview_layout();
 	}
 	q3ide_apply_wall_stack(&q3ide_wm.wins[idx], idx);
 }

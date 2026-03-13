@@ -25,11 +25,13 @@ So u can place windows in air and on walls. Great. But our window placement on w
 
 
 ======
+- highlight window on wall -> hold "CMD" to move existing windows on wall
+- highlight window on wall -> hold "CMD" + scroll with mouse to make existing window on wall bigger/smaller. Scroll UP is smaller
 - multiplay in mind?
 - matrix needed
 - grapple neeeded
 - laser neeeded
-- shoot window out of "I" and "O" needed
+
 
 WHEN TO PAUSE STREAM HACKS (to gain FPS back)
 ===============================================

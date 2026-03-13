@@ -26,7 +26,7 @@ float g_ov_scroll_z = 0.0f;       /* world-unit vertical shift for the O grid */
 qboolean g_ov_scrolling = qfalse; /* true shortly after a scroll tick */
 unsigned long long g_ov_last_scroll_ms = 0ULL;
 static q3ide_hotkey_t s_ov_hk = Q3IDE_HOTKEY_INIT;
-static qboolean g_ov_held = qfalse;
+qboolean g_ov_held = qfalse;
 
 /* From layout TU */
 extern void q3ide_overview_layout(void);
@@ -178,17 +178,4 @@ void Q3IDE_ViewModesOverview_Shutdown(void)
 	Cmd_RemoveCommand("-q3ide_overview");
 }
 
-void Q3IDE_Overview_Tick(void)
-{
-	unsigned long long now;
-	if (!g_ov_active)
-		return;
-	if (g_ov_scrolling) {
-		now = (unsigned long long) Sys_Milliseconds();
-		if (now - g_ov_last_scroll_ms < Q3IDE_OVERVIEW_SCROLL_IDLE_MS)
-			return; /* user still scrolling — don't readjust */
-		g_ov_scrolling = qfalse;
-	}
-	if (g_ov_held)
-		q3ide_overview_layout();
-}
+/* Live sync and tick live in q3ide_view_modes_overview_sync.c */

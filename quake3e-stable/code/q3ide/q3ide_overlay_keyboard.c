@@ -32,17 +32,17 @@ extern void q3ide_ovl_char_sm(float ox, float oy, float oz, const float *rx, con
 extern void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, byte r,
                              byte g, byte b);
 
-/* q3ide_overlay_winlist.c */
+/* q3ide_overlay_lamps.c */
 extern void Q3IDE_DrawAreaLabel(float ox, float oy, float oz, const float *rx, const float *ux, float kb_bot);
-extern void Q3IDE_DrawWinList(float ox, float oy, float oz, const float *rx, const float *ux, float kb_bot,
-                              unsigned long long now);
+/* q3ide_overlay_winlist.c */
+extern void Q3IDE_DrawWinList(const void *refdef_ptr, unsigned long long now);
 
 /* q3ide_overlay_kbcache.c */
 extern void q3ide_rebuild_keyboard_cache(void);
 
 /* ── Panel anchor (world-unit offsets from camera forward axis) ─────── */
 #define ANCHOR_RIGHT (-Q3IDE_OVL_DIST * 0.88f - 1.0f) /* far-left, shifted 50px left  */
-#define ANCHOR_UP    (Q3IDE_OVL_DIST * 0.46f)          /* shifted 50px down from before */
+#define ANCHOR_UP    (Q3IDE_OVL_DIST * 0.46f)         /* shifted 50px down from before */
 
 /* ── Notification corner: top-right of left screen, left-aligned text ── */
 /* Offset rightward from anchor to the inner edge of the left monitor.    */
@@ -80,7 +80,7 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		float nx = ox + rx[0] * NOTIF_RIGHT_OFFSET;
 		float ny = oy + rx[1] * NOTIF_RIGHT_OFFSET;
 		float nz = oz + rx[2] * NOTIF_RIGHT_OFFSET;
-		float nl = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE; /* line step down */
+		float nl = Q3IDE_OVL_SM_LINE_H; /* line step down */
 		int nrow = 0;
 
 		/* PAUSED banner */
@@ -132,5 +132,5 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 	}
 
 	Q3IDE_DrawAreaLabel(ox, oy, oz, rx, ux, g_kb_bot);
-	Q3IDE_DrawWinList(ox, oy, oz, rx, ux, g_kb_bot, now);
+	Q3IDE_DrawWinList(refdef_ptr, now);
 }

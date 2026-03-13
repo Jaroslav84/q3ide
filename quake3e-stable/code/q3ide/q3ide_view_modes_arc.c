@@ -13,16 +13,16 @@
 
 static float trace_arc_dist(vec3_t eye, vec3_t fwd, float ideal_dist)
 {
-	vec3_t  end, mins, maxs;
+	vec3_t end, mins, maxs;
 	trace_t tr;
-	float   d;
+	float d;
 
 	end[0] = eye[0] + fwd[0] * ideal_dist;
 	end[1] = eye[1] + fwd[1] * ideal_dist;
 	end[2] = eye[2]; /* horizontal trace — ignore vertical pitch */
 
-	VectorSet(mins, -4.0f, -4.0f, -4.0f);
-	VectorSet(maxs, 4.0f, 4.0f, 4.0f);
+	VectorSet(mins, -Q3IDE_TRACE_BOX_HALF, -Q3IDE_TRACE_BOX_HALF, -Q3IDE_TRACE_BOX_HALF);
+	VectorSet(maxs, Q3IDE_TRACE_BOX_HALF, Q3IDE_TRACE_BOX_HALF, Q3IDE_TRACE_BOX_HALF);
 	CM_BoxTrace(&tr, eye, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 
 	d = tr.fraction * ideal_dist - Q3IDE_WALL_OFFSET;
@@ -31,27 +31,86 @@ static float trace_arc_dist(vec3_t eye, vec3_t fwd, float ideal_dist)
 	return d;
 }
 
+/* ── Overview arc placement — writes ov_origin/ov_normal, no MoveWindow ─ */
+
+/*
+ * Same math as q3ide_focus3_place_arc but stores results in each window's
+ * ov_origin/ov_normal fields instead of calling Q3IDE_WM_MoveWindow.
+ * Also sets in_overview=qtrue so the scene renders these at the arc position.
+ */
+void q3ide_ov_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_rad)
+{
+	float R, Rh, Rv, cp, sp;
+	float a, b, theta, rad, c, s;
+	vec3_t dir, pos, norm;
+	int k;
+
+	if (n == 0)
+		return;
+
+	R = trace_arc_dist(eye, fwd, Q3IDE_VIEWMODE_ARC_DIST);
+	cp = cosf(pitch_rad);
+	sp = sinf(pitch_rad);
+	Rh = R * cp;
+	Rv = R * sp;
+
+	/* Center panel straight ahead */
+	pos[0] = eye[0] + fwd[0] * Rh;
+	pos[1] = eye[1] + fwd[1] * Rh;
+	pos[2] = eye[2] + Rv;
+	norm[0] = -fwd[0] * cp;
+	norm[1] = -fwd[1] * cp;
+	norm[2] = -sp;
+	VectorCopy(pos, q3ide_wm.wins[idxs[0]].ov_origin);
+	VectorCopy(norm, q3ide_wm.wins[idxs[0]].ov_normal);
+	q3ide_wm.wins[idxs[0]].in_overview = qtrue;
+
+	a = q3ide_wm.wins[idxs[0]].world_w * 0.5f;
+
+	for (k = 1; k < n && k < 3; k++) {
+		b = q3ide_wm.wins[idxs[k]].world_w * 0.5f;
+		if (Rh > 0.001f)
+			theta = atan2f(b, Rh) + asinf(a / sqrtf(Rh * Rh + b * b));
+		else
+			theta = (float) M_PI * 0.5f;
+		rad = (k == 1) ? -theta : theta;
+		c = cosf(rad);
+		s = sinf(rad);
+		dir[0] = fwd[0] * c - fwd[1] * s;
+		dir[1] = fwd[0] * s + fwd[1] * c;
+		pos[0] = eye[0] + dir[0] * Rh;
+		pos[1] = eye[1] + dir[1] * Rh;
+		pos[2] = eye[2] + Rv;
+		norm[0] = -dir[0] * cp;
+		norm[1] = -dir[1] * cp;
+		norm[2] = -sp;
+		VectorCopy(pos, q3ide_wm.wins[idxs[k]].ov_origin);
+		VectorCopy(norm, q3ide_wm.wins[idxs[k]].ov_normal);
+		q3ide_wm.wins[idxs[k]].in_overview = qtrue;
+	}
+}
+
 /* ── Focus3 arc placement ────────────────────────────────────────────── */
 
 /*
  * Place up to 3 windows as a seamless edge-touching arc.
  * Traces forward to find available depth; scales window sizes proportionally
- * if a wall is closer than Q3IDE_FOCUS3_DIST (aspect ratio preserved).
+ * if a wall is closer than Q3IDE_VIEWMODE_ARC_DIST (aspect ratio preserved).
  * pitch_rad: vertical tilt (0=flat row). idxs[0]=center, [1]=left, [2]=right.
  */
 void q3ide_focus3_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_rad)
 {
-	float   R, Rh, Rv, cp, sp, scale;
-	float   a, b, theta, rad, c, s;
-	vec3_t  dir, pos, norm;
-	int     k;
+	float R, Rh, Rv, cp, sp, scale;
+	float a, b, theta, rad, c, s;
+	vec3_t dir, pos, norm;
+	int k;
 
 	if (n == 0)
 		return;
 
 	/* Shrink arc radius to fit available space (sizes already scaled by caller) */
-	R     = trace_arc_dist(eye, fwd, Q3IDE_FOCUS3_DIST);
-	scale = R / Q3IDE_FOCUS3_DIST;
+	R = trace_arc_dist(eye, fwd, Q3IDE_VIEWMODE_ARC_DIST);
+	scale = R / Q3IDE_VIEWMODE_ARC_DIST;
 	if (scale > 1.0f)
 		scale = 1.0f;
 
@@ -61,9 +120,9 @@ void q3ide_focus3_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitc
 	Rv = R * sp;
 
 	/* k=0: center panel straight ahead */
-	pos[0]  = eye[0] + fwd[0] * Rh;
-	pos[1]  = eye[1] + fwd[1] * Rh;
-	pos[2]  = eye[2] + Rv;
+	pos[0] = eye[0] + fwd[0] * Rh;
+	pos[1] = eye[1] + fwd[1] * Rh;
+	pos[2] = eye[2] + Rv;
 	norm[0] = -fwd[0] * cp;
 	norm[1] = -fwd[1] * cp;
 	norm[2] = -sp;
@@ -77,15 +136,15 @@ void q3ide_focus3_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitc
 		if (Rh > 0.001f)
 			theta = atan2f(b, Rh) + asinf(a / sqrtf(Rh * Rh + b * b));
 		else
-			theta = (float)M_PI * 0.5f;
-		rad    = (k == 1) ? -theta : theta;
-		c      = cosf(rad);
-		s      = sinf(rad);
+			theta = (float) M_PI * 0.5f;
+		rad = (k == 1) ? -theta : theta;
+		c = cosf(rad);
+		s = sinf(rad);
 		dir[0] = fwd[0] * c - fwd[1] * s;
 		dir[1] = fwd[0] * s + fwd[1] * c;
-		pos[0]  = eye[0] + dir[0] * Rh;
-		pos[1]  = eye[1] + dir[1] * Rh;
-		pos[2]  = eye[2] + Rv;
+		pos[0] = eye[0] + dir[0] * Rh;
+		pos[1] = eye[1] + dir[1] * Rh;
+		pos[2] = eye[2] + Rv;
 		norm[0] = -dir[0] * cp;
 		norm[1] = -dir[1] * cp;
 		norm[2] = -sp;

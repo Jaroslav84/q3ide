@@ -32,6 +32,10 @@ void Q3IDE_OnVidRestart(void);
  * Returns 1 if q3ide consumed the key (caller should return immediately). */
 qboolean Q3IDE_OnKeyEvent(int key, qboolean down);
 
+/* Called from CL_MouseEvent before applying deltas to viewangles.
+ * Returns qtrue if q3ide consumed the movement (suppresses mouselook). */
+qboolean Q3IDE_OnMouseEvent(int dx, int dy);
+
 /* Returns 1 if q3ide is consuming input.
  * Called from CL_CreateNewCommands to suppress BUTTON_ATTACK. */
 qboolean Q3IDE_ConsumesInput(void);

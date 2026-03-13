@@ -1,15 +1,4 @@
-/*
- * q3ide_log.c — Async structured logging for Q3IDE.
- *
- * Game thread: formats and enqueues messages (lock + memcpy + signal, ~100ns).
- * Background thread: drains queue and flushes to disk — zero game-thread I/O.
- *
- * Two output files in logs/ next to engine.log:
- *   q3ide.log          — levelled text log with session boundaries
- *   q3ide_events.jsonl — one JSON object per line for agent tooling
- *
- * Disable file logging: +set q3ide_log_disable 1  (used by --release stable).
- */
+/* q3ide_log.c — Async structured logging: game thread enqueues, background thread flushes. */
 
 #include "q3ide_log.h"
 #include "q3ide_params.h"
@@ -28,14 +17,10 @@
 #define q3ide_getpid() ((int) getpid())
 #endif
 
-/* ── Ring-buffer slot ───────────────────────────────────────────── */
-
 typedef struct {
 	char line[Q3IDE_LOG_LINE_LEN];
 	int is_event; /* 1 = q3ide_events.jsonl, 0 = q3ide.log */
 } log_slot_t;
-
-/* ── State ──────────────────────────────────────────────────────── */
 
 static log_slot_t g_slots[Q3IDE_LOG_QUEUE_CAP];
 static volatile int g_head; /* next write index (producer) */
@@ -49,8 +34,6 @@ static FILE *g_log_f;
 static FILE *g_evt_f;
 static int g_pid;
 
-/* ── Writer thread ──────────────────────────────────────────────── */
-
 static void *log_writer(void *arg)
 {
 	(void) arg;
@@ -58,7 +41,6 @@ static void *log_writer(void *arg)
 		pthread_mutex_lock(&g_mtx);
 		while (g_head == g_tail && g_thr_run)
 			pthread_cond_wait(&g_cnd, &g_mtx);
-		/* drain all queued items before checking exit */
 		while (g_head != g_tail) {
 			log_slot_t s = g_slots[g_tail];
 			g_tail = (g_tail + 1) & (Q3IDE_LOG_QUEUE_CAP - 1);
@@ -84,14 +66,12 @@ static void *log_writer(void *arg)
 	return NULL;
 }
 
-/* ── Enqueue (game thread) ──────────────────────────────────────── */
-
 static void enqueue(const char *line, int is_event)
 {
 	int next;
 	pthread_mutex_lock(&g_mtx);
 	next = (g_head + 1) & (Q3IDE_LOG_QUEUE_CAP - 1);
-	if (next != g_tail) { /* drop silently when full */
+	if (next != g_tail) {
 		Q_strncpyz(g_slots[g_head].line, line, Q3IDE_LOG_LINE_LEN);
 		g_slots[g_head].is_event = is_event;
 		g_head = next;
@@ -99,8 +79,6 @@ static void enqueue(const char *line, int is_event)
 	}
 	pthread_mutex_unlock(&g_mtx);
 }
-
-/* ── Path helpers ───────────────────────────────────────────────── */
 
 static void q3ide_logdir(char *out, int size)
 {
@@ -155,14 +133,12 @@ void Q3IDE_Log_Shutdown(void)
 
 	Q3IDE_Event("session_end", "");
 
-	/* stop writer thread — it drains the remaining queue before exiting */
 	pthread_mutex_lock(&g_mtx);
 	g_thr_run = 0;
 	pthread_cond_signal(&g_cnd);
 	pthread_mutex_unlock(&g_mtx);
 	pthread_join(g_thr, NULL);
 
-	/* write session footer directly (thread is gone) */
 	if (g_log_f) {
 		q3ide_timebuf(ts, sizeof(ts));
 		fprintf(g_log_f, "=== END pid=%d %s ===\n", g_pid, ts);

@@ -109,13 +109,21 @@ changes easily.
 
 /* World-unit width for Q3IDE_WIN_INCHES diagonal 16:9 at 24u/ft (2u/inch):
  *   width = diag × (16/√337) × 2  ≈  diag × 1.7436                          */
-#define Q3IDE_WIN_INCHES            100.0f                       /* real-world diagonal in inches — drives spawn size */
+#define Q3IDE_WORLD_UNITS_PER_INCH  2.0f   /* 2u per inch — 24u/ft scale; used for size conversions */
+#define Q3IDE_WIN_INCHES            100.0f /* real-world diagonal in inches — drives spawn size */
 #define Q3IDE_SPAWN_WIN_W           (Q3IDE_WIN_INCHES * 1.7436f) /* ≈174u world width for 100" diagonal */
 #define Q3IDE_DISPLAY_ASPECT        (16.0f / 9.0f)               /* assumed aspect ratio for display captures */
 #define Q3IDE_WINDOW_DEFAULT_WIDTH  256.0f /* NOT_USED_YET — fallback world width when no wall geometry */
 #define Q3IDE_WINDOW_DEFAULT_HEIGHT 192.0f /* NOT_USED_YET — fallback world height (4:3 matches default width) */
 #define Q3IDE_WINDOW_MIN_WIDTH      64.0f  /* NOT_USED_YET — smallest world width before window is unreadable */
 #define Q3IDE_SPAWN_WIN_DIST        200.0f /* NOT_USED_YET — distance ahead of player eye for initial placement */
+
+/* ── Drag & Resize (CMD + aim-to-move, scroll-resize) ───────────── */
+#define Q3IDE_RESIZE_SCROLL_STEP 80.0f   /* world units added/removed per scroll tick */
+#define Q3IDE_RESIZE_MIN_INCHES  10.0f   /* minimum resize diagonal in real-world inches */
+#define Q3IDE_RESIZE_MAX_INCHES  9999.0f /* maximum resize diagonal — effectively no limit */
+#define Q3IDE_RESIZE_MIN_DIAG    (Q3IDE_RESIZE_MIN_INCHES * Q3IDE_WORLD_UNITS_PER_INCH)
+#define Q3IDE_RESIZE_MAX_DIAG    (Q3IDE_RESIZE_MAX_INCHES * Q3IDE_WORLD_UNITS_PER_INCH)
 
 /* ── Interaction & timing ────────────────────────────────────────── */
 
@@ -151,11 +159,11 @@ changes easily.
 #define Q3IDE_OVL_WL_LEFT_MARGIN_PX  10 /* px — gap from left screen edge to window list */
 #define Q3IDE_OVL_WL_RIGHT_MARGIN_PX 20 /* NEW px — gap from right screen edge to window list anchor */
 #define Q3IDE_OVL_WL_CONTENT_PX 260 /* NEW px — total panel width (lamps + max label); anchor = right-margin - this */
-#define Q3IDE_OVL_AREA_LABEL_BOTTOM_PX  10  /* px — distance from screen bottom for area/room label */
-#define Q3IDE_OVL_WINLIST_BOTTOM_PX     180 /* px — distance from bottom of screen to winlist bottom edge */
-#define Q3IDE_OVL_WINLIST_HDR_OFFSET_PX 50  /* px — extra downward offset for Windows:/highlight header */
-#define Q3IDE_AIM_LABEL_TOP_PX          30  /* NEW px — aimed window label distance from top of each monitor */
-#define Q3IDE_OVL_WINHDR_UP_PX          30  /* NEW px — upward offset for WINDOWS: header vs default wl_top */
+#define Q3IDE_OVL_AREA_LABEL_BOTTOM_PX  10 /* px — distance from screen bottom for area/room label */
+#define Q3IDE_OVL_WINLIST_BOTTOM_PX     10 /* px — distance from bottom of screen to winlist bottom edge */
+#define Q3IDE_OVL_WINLIST_HDR_OFFSET_PX 50 /* px — extra downward offset for Windows:/highlight header */
+#define Q3IDE_AIM_LABEL_TOP_PX          30 /* NEW px — aimed window label distance from top of each monitor */
+#define Q3IDE_OVL_WINHDR_UP_PX          30 /* NEW px — upward offset for WINDOWS: header vs default wl_top */
 
 /* Text layout — derived from calibrated char size */
 #define Q3IDE_OVL_PX_TO_WU     (Q3IDE_OVL_CHAR_W / 12.9f) /* ~0.01039 wu/px — pixel to world-unit conversion */

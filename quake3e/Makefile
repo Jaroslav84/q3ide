@@ -1152,6 +1152,7 @@ Q3OBJ += \
   $(B)/client/q3ide_shoot_to_place.o \
   $(B)/client/q3ide_missile_tracking.o \
   $(B)/client/q3ide_key_events.o \
+  $(B)/client/q3ide_drag_resize.o \
   $(B)/client/q3ide_los_cache.o \
   $(B)/client/q3ide_dylib.o \
   $(B)/client/q3ide_win_mngr.o \
@@ -1165,6 +1166,7 @@ Q3OBJ += \
   $(B)/client/q3ide_render.o \
   $(B)/client/q3ide_view_modes.o \
   $(B)/client/q3ide_view_modes_overview.o \
+  $(B)/client/q3ide_view_modes_overview_sync.o \
   $(B)/client/q3ide_view_modes_grid.o \
   $(B)/client/q3ide_view_modes_monitors.o \
   $(B)/client/q3ide_view_modes_arc.o \
@@ -1510,6 +1512,9 @@ $(B)/client/q3ide_missile_tracking.o: $(Q3IDEDIR)/q3ide_missile_tracking.c
 $(B)/client/q3ide_key_events.o: $(Q3IDEDIR)/q3ide_key_events.c
 	$(DO_CC)
 
+$(B)/client/q3ide_drag_resize.o: $(Q3IDEDIR)/q3ide_drag_resize.c
+	$(DO_CC)
+
 $(B)/client/q3ide_los_cache.o: $(Q3IDEDIR)/q3ide_los_cache.c
 	$(DO_CC)
 
@@ -1546,6 +1551,9 @@ $(B)/client/q3ide_view_modes.o: $(Q3IDEDIR)/q3ide_view_modes.c
 	$(DO_CC)
 
 $(B)/client/q3ide_view_modes_overview.o: $(Q3IDEDIR)/q3ide_view_modes_overview.c
+	$(DO_CC)
+
+$(B)/client/q3ide_view_modes_overview_sync.o: $(Q3IDEDIR)/q3ide_view_modes_overview_sync.c
 	$(DO_CC)
 
 $(B)/client/q3ide_view_modes_grid.o: $(Q3IDEDIR)/q3ide_view_modes_grid.c

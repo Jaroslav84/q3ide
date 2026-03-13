@@ -4877,16 +4877,14 @@ static byte *resample_image_data( const int target_format, byte *data, const int
 		*bytes_per_pixel = 2;
 		return buffer; // must be freed after upload!
 
+	// q3ide [BEGIN] BGRA passthrough - code/renderervk/vk.c
 	case VK_FORMAT_B8G8R8A8_UNORM:
-		buffer = (byte*)ri.Hunk_AllocateTempMemory( data_size );
-		for ( i = 0; i < data_size; i += 4 ) {
-			buffer[i + 0] = data[i + 2];
-			buffer[i + 1] = data[i + 1];
-			buffer[i + 2] = data[i + 0];
-			buffer[i + 3] = data[i + 3];
-		}
+		/* q3ide: SCStream delivers bytes already in BGRA memory order.
+		 * The old swap (RGBA→BGRA) caused a double-swap when input was BGRA.
+		 * Pass through directly — the VK format matches the byte layout. */
 		*bytes_per_pixel = 4;
-		return buffer;
+		return data;
+	// q3ide [END] BGRA passthrough
 
 	case VK_FORMAT_R8G8B8_UNORM: {
 		buffer = (byte*)ri.Hunk_AllocateTempMemory( (data_size * 3) / 4 );
@@ -6630,6 +6628,23 @@ static void get_viewport_rect(VkRect2D *r)
 {
 	if ( backEnd.projection2D )
 	{
+// q3ide [BEGIN] Center Monitor 2D - code/renderervk/vk.c
+// In multi-monitor mode, offset 2D viewport to center monitor so HUD/console/crosshair stay centered.
+#ifdef USE_Q3IDE
+		if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+			int cx = ri.Cvar_VariableIntegerValue( "r_mmCenterX" );
+			int cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
+			int ch = ri.Cvar_VariableIntegerValue( "r_mmCenterH" );
+			if ( cw > 0 && ch > 0 ) {
+				r->offset.x = cx;
+				r->offset.y = 0;
+				r->extent.width = cw;
+				r->extent.height = ch;
+				return;
+			}
+		}
+#endif
+// q3ide [END] Center Monitor 2D
 		r->offset.x = 0;
 		r->offset.y = 0;
 		r->extent.width = vk.renderWidth;
@@ -6724,8 +6739,21 @@ static void get_mvp_transform( float *mvp )
 {
 	if ( backEnd.projection2D )
 	{
+// q3ide [BEGIN] Center Monitor 2D MVP - code/renderervk/vk.c
+// Use center monitor dimensions for 2D ortho so coordinates match the center viewport.
+#ifdef USE_Q3IDE
+		int q3ide_cw = 0, q3ide_ch = 0;
+		if ( ri.Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+			q3ide_cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
+			q3ide_ch = ri.Cvar_VariableIntegerValue( "r_mmCenterH" );
+		}
+		float mvp0 = 2.0f / ( q3ide_cw > 0 ? q3ide_cw : glConfig.vidWidth );
+		float mvp5 = 2.0f / ( q3ide_ch > 0 ? q3ide_ch : glConfig.vidHeight );
+#else
 		float mvp0 = 2.0f / glConfig.vidWidth;
 		float mvp5 = 2.0f / glConfig.vidHeight;
+#endif
+// q3ide [END] Center Monitor 2D MVP
 
 		mvp[0]  =  mvp0; mvp[1]  =  0.0f; mvp[2]  = 0.0f; mvp[3]  = 0.0f;
 		mvp[4]  =  0.0f; mvp[5]  =  mvp5; mvp[6]  = 0.0f; mvp[7]  = 0.0f;
@@ -7524,7 +7552,6 @@ void vk_end_frame( void )
 			vk_begin_render_pass( vk.render_pass.gamma, vk.framebuffers.gamma[ vk.cmd->swapchain_image_index ], qfalse, vk.renderWidth, vk.renderHeight );
 			qvkCmdBindPipeline( vk.cmd->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.gamma_pipeline );
 			qvkCmdBindDescriptorSets( vk.cmd->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk.pipeline_layout_post_process, 0, 1, &vk.color_descriptor, 0, NULL );
-
 			qvkCmdDraw( vk.cmd->command_buffer, 4, 1, 0, 0 );
 		}
 	}

@@ -12,6 +12,7 @@
 #include "q3ide_win_mngr_internal.h"
 #include "q3ide_view_modes.h"
 #include "q3ide_aas.h"
+#include "q3ide_map_skin_browser.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -27,7 +28,7 @@ int q3ide_aimed_win = -1; /* window under crosshair this frame, -1 = none */
 
 extern void Q3IDE_Cmd_f(void); /* command dispatcher in q3ide_console.c */
 
-/* Shoot-to-place — q3ide_engine_hooks_input.c */
+/* Shoot-to-place — q3ide_shoot_to_place.c */
 extern void q3ide_shoot_frame(void);
 
 /* ============================================================
@@ -47,6 +48,7 @@ void Q3IDE_Init(void)
 		Q3IDE_LOGW("running without capture");
 
 	Q3IDE_ViewModes_Init();
+	Q3IDE_MMenu_Init();
 
 	Cmd_AddCommand("q3ide", Q3IDE_Cmd_f);
 	q3ide_state.initialized = qtrue;
@@ -88,48 +90,11 @@ void Q3IDE_AddPolysToScene(void)
 
 qboolean Q3IDE_ConsumesInput(void)
 {
-	return qfalse;
+	return Q3IDE_MMenu_IsOpen();
 }
 
-qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
-{
-	if (!q3ide_state.initialized)
-		return qfalse;
-	/* ";" — pause/resume streams (freeze last frame, 100% FPS restore) */
-	if (key == ';') {
-		static q3ide_hotkey_t s_pause_hk = Q3IDE_HOTKEY_INIT;
-		if (down) {
-			if (q3ide_hk_down(&s_pause_hk, s_pause_hk.locked) == Q3IDE_HK_ACTIVATE)
-				Q3IDE_WM_PauseStreams();
-			else
-				Q3IDE_WM_ResumeStreams();
-		} else {
-			if (q3ide_hk_up(&s_pause_hk, qtrue) == Q3IDE_HK_DEACTIVATE)
-				Q3IDE_WM_ResumeStreams();
-		}
-		return qtrue;
-	}
-	/* "H" — hide windows + pause streams (tap = toggle, hold = temporary) */
-	if (key == 'h') {
-		static q3ide_hotkey_t s_hide_hk = Q3IDE_HOTKEY_INIT;
-		if (down) {
-			if (q3ide_hk_down(&s_hide_hk, s_hide_hk.locked) == Q3IDE_HK_ACTIVATE) {
-				Q3IDE_WM_HideWins();
-				Q3IDE_WM_PauseStreams();
-			} else {
-				Q3IDE_WM_ShowWins();
-				Q3IDE_WM_ResumeStreams();
-			}
-		} else {
-			if (q3ide_hk_up(&s_hide_hk, qtrue) == Q3IDE_HK_DEACTIVATE) {
-				Q3IDE_WM_ShowWins();
-				Q3IDE_WM_ResumeStreams();
-			}
-		}
-		return qtrue;
-	}
-	return qfalse;
-}
+/* Key event handling — q3ide_key_events.c */
+extern qboolean Q3IDE_OnKeyEvent(int key, qboolean down);
 
 static void q3ide_render_bye(void)
 {

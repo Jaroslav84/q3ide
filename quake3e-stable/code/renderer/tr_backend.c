@@ -985,6 +985,9 @@ void RB_SetGL2D( void ) {
 			backEnd.refdef.floatTime = (double)backEnd.refdef.time * 0.001;
 			return;
 		}
+		/* r_mmCenterW/H not yet set — display detection hasn't run.
+		 * Fall through to full-screen 2D so menus render visibly
+		 * rather than clipping to a zero-size viewport. */
 	}
 #endif
 // q3ide [END] Center Monitor 2D

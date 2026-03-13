@@ -368,6 +368,13 @@ CL_MouseEvent
 =================
 */
 void CL_MouseEvent( int dx, int dy /*, int time*/ ) {
+#ifdef USE_Q3IDE
+	{
+		extern qboolean Q3IDE_OnMouseEvent(int dx, int dy);
+		if ( Q3IDE_OnMouseEvent( dx, dy ) )
+			return;
+	}
+#endif
 	if ( Key_GetCatcher() & KEYCATCH_UI ) {
 		VM_Call( uivm, 2, UI_MOUSE_EVENT, dx, dy );
 	} else if ( Key_GetCatcher() & KEYCATCH_CGAME ) {

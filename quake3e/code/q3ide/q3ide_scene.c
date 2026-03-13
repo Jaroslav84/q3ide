@@ -81,36 +81,47 @@ void Q3IDE_WM_AddPolys(void)
 
 	highlight_win = (q3ide_aimed_win >= 0) ? q3ide_aimed_win : q3ide_selected_win;
 
-	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-		q3ide_win_t *win = &q3ide_wm.wins[i];
+	{
+		extern int Q3IDE_DragResize_GetDragWin(void);
+		int drag_win = Q3IDE_DragResize_GetDragWin();
 
-		if (!win->active)
-			continue;
+		/* Two-pass: all normal windows first, drag_win last (always on top). */
+		for (i = 0; i < Q3IDE_MAX_WIN + 1; i++) {
+			int idx = (i < Q3IDE_MAX_WIN) ? i : drag_win;
+			q3ide_win_t *win;
 
-		/* ── Wall render: wall-placed windows only, LOS-gated ── */
-		if (win->wall_placed && win->los_visible) {
-			int bm = (i == highlight_win) ? 1 : 0;
-			/* Background only when no texture yet. */
-			if (!win->shader)
-				q3ide_add_bg(win, win->origin, win->normal);
+			if (idx < 0)
+				continue; /* no drag win */
+			if (i < Q3IDE_MAX_WIN && idx == drag_win)
+				continue; /* skip drag_win in first pass */
+
+			win = &q3ide_wm.wins[idx];
+			if (!win->active)
+				continue;
+
+			/* ── Wall render ── */
+			if (win->wall_placed && win->los_visible) {
+				int bm = (idx == highlight_win) ? 1 : 0;
+				if (!win->shader)
+					q3ide_add_bg(win, win->origin, win->normal);
 #if !Q3IDE_DISABLE_EDGE_QUADS
-			q3ide_add_frame(win, bm, win->origin, win->normal);
+				q3ide_add_frame(win, bm, win->origin, win->normal);
 #endif
-			if (win->shader)
-				q3ide_add_poly(win, win->origin, win->normal);
-		}
+				if (win->shader)
+					q3ide_add_poly(win, win->origin, win->normal);
+			}
 
-		/* ── Arc render: all in_overview windows ── */
-		if (win->in_overview) {
-			/* Green border for wall-placed windows, red for highlighted, black otherwise. */
-			int arc_bm = win->wall_placed ? 2 : (i == highlight_win ? 1 : 0);
-			if (!win->shader)
-				q3ide_add_bg(win, win->ov_origin, win->ov_normal);
+			/* ── Arc render ── */
+			if (win->in_overview) {
+				int arc_bm = (idx == highlight_win) ? 1 : (win->wall_placed ? 2 : 0);
+				if (!win->shader)
+					q3ide_add_bg(win, win->ov_origin, win->ov_normal);
 #if !Q3IDE_DISABLE_EDGE_QUADS
-			q3ide_add_frame(win, arc_bm, win->ov_origin, win->ov_normal);
+				q3ide_add_frame(win, arc_bm, win->ov_origin, win->ov_normal);
 #endif
-			if (win->shader)
-				q3ide_add_poly(win, win->ov_origin, win->ov_normal);
+				if (win->shader)
+					q3ide_add_poly(win, win->ov_origin, win->ov_normal);
+			}
 		}
 	}
 }

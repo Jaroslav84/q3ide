@@ -109,7 +109,10 @@ typedef struct {
 	/* Batch 2: Interaction */
 	char label[128];      /* display name: window title or "Display N" */
 	qboolean los_visible; /* cached LOS result — updated once per frame, reused across monitor passes */
-	qboolean in_overview; /* qtrue while this window is placed in the O overview grid */
+	qboolean in_overview; /* qtrue while this window is placed in the O overview arc */
+	qboolean wall_placed; /* qtrue = attached to a wall; survives O open/close */
+	vec3_t ov_origin;     /* arc position while in_overview */
+	vec3_t ov_normal;     /* arc normal while in_overview */
 	/* Tunnel: OS screen-capture window. detach-all only removes these.
 	 * Non-tunnel windows (HUD, FPS, overlays) survive detach-all. */
 	qboolean is_tunnel;
@@ -144,7 +147,8 @@ typedef struct {
 	q3ide_fn_resume_streams cap_resume_streams; /* optional: resume frame delivery */
 	q3ide_fn_poll_changes cap_poll_changes;     /* optional: window open/close events */
 	q3ide_fn_free_changes cap_free_changes;     /* optional */
-	qboolean streams_paused;                    /* qtrue while ";" is held */
+	qboolean streams_paused;                    /* qtrue while streams are paused */
+	qboolean streams_user_paused;               /* qtrue when user explicitly paused via ";" — blocks ResumeStreams */
 	qboolean wins_hidden;                       /* qtrue while "H" hides all windows */
 	Q3ideCapture *cap;
 	vec3_t player_eye;               /* eye position, set each frame by UpdatePlayerPos */
@@ -154,15 +158,17 @@ typedef struct {
 	int frame_uploads; /* texture uploads since last heartbeat */
 	byte *fbuf;
 	int fbuf_size;
-	qhandle_t border_shader; /* scratch slot 63: solid red — hover/select borders */
-	qhandle_t edge_shader;   /* scratch slot 62: solid black — TV chassis edge quads */
+	qhandle_t border_shader;   /* scratch slot 63: solid red — hover/select borders */
+	qhandle_t edge_shader;     /* scratch slot 62: solid black — TV chassis edge quads */
+	qhandle_t bg_shader;       /* q3ide/bg: black + logo — always-rendered diagnostic backdrop */
+	qhandle_t ov_green_shader; /* scratch slot 61: solid green — wall-placed windows in arc */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;
 	pthread_mutex_t poll_mutex;
 	volatile int poll_running;
 	Q3ideWindowChangeList poll_pending; /* protected by poll_mutex */
 	qboolean poll_has_pending;          /* protected by poll_mutex */
-	int macos_win_count; /* total SCK-visible windows; cached at init, ±1 on SCK events */
+	int macos_win_count;                /* total SCK-visible windows; cached at init, ±1 on SCK events */
 } q3ide_wm_t;
 
 extern q3ide_wm_t q3ide_wm;

@@ -153,7 +153,10 @@ void Q3IDE_WM_PopulateQueue(qboolean displays_only)
 				g_pending[g_pending_n].is_display = qfalse;
 				g_pending[g_pending_n].aspect =
 				    (w->height > 0) ? (float) w->width / (float) w->height : Q3IDE_DISPLAY_ASPECT;
-				if (w->title && w->title[0])
+				if (w->app_name && w->app_name[0] && w->title && w->title[0])
+					Com_sprintf(g_pending[g_pending_n].label, sizeof(g_pending[g_pending_n].label), "%s: %s",
+					            w->app_name, w->title);
+				else if (w->title && w->title[0])
 					Q_strncpyz(g_pending[g_pending_n].label, w->title, sizeof(g_pending[g_pending_n].label));
 				else if (w->app_name && w->app_name[0])
 					Q_strncpyz(g_pending[g_pending_n].label, w->app_name, sizeof(g_pending[g_pending_n].label));
@@ -176,11 +179,11 @@ int Q3IDE_WM_FlushAllPending(vec3_t pos, vec3_t norm)
 	return count;
 }
 
-/* Pop up to Q3IDE_ATTACH_MAX_SKIP items until one succeeds or queue empties. */
+/* Pop up to Q3IDE_SCK_ATTACH_MAX_SKIP items until one succeeds or queue empties. */
 qboolean Q3IDE_WM_AttachNextPending(vec3_t pos, vec3_t norm)
 {
 	int tries;
-	for (tries = 0; tries < Q3IDE_ATTACH_MAX_SKIP && g_pending_n > 0; tries++) {
+	for (tries = 0; tries < Q3IDE_SCK_ATTACH_MAX_SKIP && g_pending_n > 0; tries++) {
 		q3ide_attach_item_t it = g_pending[0];
 		g_pending_n--;
 		memmove(g_pending, g_pending + 1, (size_t) g_pending_n * sizeof(q3ide_attach_item_t));

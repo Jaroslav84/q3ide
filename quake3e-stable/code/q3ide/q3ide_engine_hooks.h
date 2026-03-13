@@ -32,6 +32,10 @@ void Q3IDE_OnVidRestart(void);
  * Returns 1 if q3ide consumed the key (caller should return immediately). */
 qboolean Q3IDE_OnKeyEvent(int key, qboolean down);
 
+/* Called from CL_MouseEvent before applying deltas to viewangles.
+ * Returns qtrue if q3ide consumed the movement (suppresses mouselook). */
+qboolean Q3IDE_OnMouseEvent(int dx, int dy);
+
 /* Returns 1 if q3ide is consuming input.
  * Called from CL_CreateNewCommands to suppress BUTTON_ATTACK. */
 qboolean Q3IDE_ConsumesInput(void);
@@ -52,6 +56,12 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr);
 void Q3IDE_SetHudMsg(const char *msg, int duration_ms);
 /* Draw the current HUD message if not expired — call before re.RenderScene. */
 void Q3IDE_DrawHudMsg(const void *refdef_ptr);
+/* Draw the aimed window name centred at the top of the viewport — call on every monitor. */
+void Q3IDE_DrawAimLabel(const void *refdef_ptr);
+/* Draw 4 red corner crosses on each monitor — debug helper to verify pixel mapping. */
+void Q3IDE_DrawMonitorCorners(const void *refdef_ptr);
+/* Draw calibration rulers on the right monitor so char sizes can be measured. */
+void Q3IDE_DrawCalibration(const void *refdef_ptr);
 
 /* Internal frame state — shared between q3ide_hooks*.c TUs. */
 typedef struct {

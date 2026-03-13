@@ -18,9 +18,10 @@ const q3ide_params_t q3ide_params = {
     .accentColor = {160, 0, 0},
 };
 
-/* Geometry helpers — q3ide_geometry.c */
-extern void q3ide_add_frame(q3ide_win_t *win, qboolean highlighted);
-extern void q3ide_add_poly(q3ide_win_t *win);
+/* Geometry helpers — q3ide_geometry.c / q3ide_geometry_border.c */
+extern void q3ide_add_frame(q3ide_win_t *win, int border_mode, vec3_t origin, vec3_t normal);
+extern void q3ide_add_poly(q3ide_win_t *win, vec3_t origin, vec3_t normal);
+extern void q3ide_add_bg(q3ide_win_t *win, vec3_t origin, vec3_t normal);
 
 /* Shoot-to-place selection — q3ide_engine.c */
 extern int q3ide_selected_win;
@@ -34,6 +35,8 @@ void Q3IDE_WM_InvalidateShaders(void)
 	int i;
 	q3ide_wm.border_shader = 0;
 	q3ide_wm.edge_shader = 0;
+	q3ide_wm.bg_shader = 0;
+	q3ide_wm.ov_green_shader = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		q3ide_wm.wins[i].shader = 0;
 }
@@ -43,6 +46,7 @@ void Q3IDE_WM_InvalidateShaders(void)
 void Q3IDE_WM_AddPolys(void)
 {
 	int i;
+	int highlight_win;
 
 	if (!re.AddPolyToScene)
 		return;
@@ -51,35 +55,73 @@ void Q3IDE_WM_AddPolys(void)
 		return;
 
 	if (!q3ide_wm.border_shader && re.RegisterShader && re.UploadCinematic) {
-		/* Slot 63: accent colour (Quake red) — borders. */
+		/* Slot 63: accent colour (Quake red) — borders.
+		 * Bytes in BGRA order so the VK_FORMAT_B8G8R8A8_UNORM override path
+		 * is triggered (format=GL_BGRA). Passthrough in resample_image_data
+		 * keeps bytes as-is: byte[2]=R=160 → GPU reads red correctly.
+		 * Two calls: first creates the scratch image, second dirty-updates it
+		 * so OpenGL also gets the correct GL_BGRA path (R_CreateImage ignores format). */
 		byte accent_bgra[4] = {q3ide_params.accentColor[2], q3ide_params.accentColor[1], q3ide_params.accentColor[0],
 		                       255};
-		re.UploadCinematic(1, 1, 1, 1, accent_bgra, 63, qtrue, 0x80E1);
+		re.UploadCinematic(1, 1, 1, 1, accent_bgra, 63, qfalse, 0x80E1 /* GL_BGRA */);
+		re.UploadCinematic(1, 1, 1, 1, accent_bgra, 63, qtrue, 0x80E1 /* GL_BGRA */);
 		q3ide_wm.border_shader = re.RegisterShader("q3ide/win63");
 		/* Slot 62: solid black — TV chassis edge quads. */
 		byte black_bgra[4] = {0, 0, 0, 255};
-		re.UploadCinematic(1, 1, 1, 1, black_bgra, 62, qtrue, 0x80E1);
+		re.UploadCinematic(1, 1, 1, 1, black_bgra, 62, qfalse, 0x80E1 /* GL_BGRA */);
+		re.UploadCinematic(1, 1, 1, 1, black_bgra, 62, qtrue, 0x80E1 /* GL_BGRA */);
 		q3ide_wm.edge_shader = re.RegisterShader("q3ide/win62");
+		q3ide_wm.bg_shader = re.RegisterShader("q3ide/bg");
+		/* Slot 61: solid green — wall-placed windows shown in arc. */
+		byte green_bgra[4] = {0, 128, 0, 255};
+		re.UploadCinematic(1, 1, 1, 1, green_bgra, 61, qfalse, 0x80E1 /* GL_BGRA */);
+		re.UploadCinematic(1, 1, 1, 1, green_bgra, 61, qtrue, 0x80E1 /* GL_BGRA */);
+		q3ide_wm.ov_green_shader = re.RegisterShader("q3ide/win61");
 	}
-	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-		q3ide_win_t *win = &q3ide_wm.wins[i];
 
-		if (!win->active)
-			continue;
+	highlight_win = (q3ide_aimed_win >= 0) ? q3ide_aimed_win : q3ide_selected_win;
 
-		/* LOS cached once per frame in Q3IDE_Frame — no per-pass trace needed.
-		 * Skip LOS for overview windows: grid floats map-independently. */
-		if (!win->los_visible && !win->in_overview)
-			continue;
+	{
+		extern int Q3IDE_DragResize_GetDragWin(void);
+		int drag_win = Q3IDE_DragResize_GetDragWin();
 
-		{
-			qboolean highlighted = (i == q3ide_selected_win || i == q3ide_aimed_win);
-#if !Q3IDE_DISABLE_EDGE_QUADS
-			q3ide_add_frame(win, highlighted);
-#endif
-			if (!win->shader)
+		/* Two-pass: all normal windows first, drag_win last (always on top). */
+		for (i = 0; i < Q3IDE_MAX_WIN + 1; i++) {
+			int idx = (i < Q3IDE_MAX_WIN) ? i : drag_win;
+			q3ide_win_t *win;
+
+			if (idx < 0)
+				continue; /* no drag win */
+			if (i < Q3IDE_MAX_WIN && idx == drag_win)
+				continue; /* skip drag_win in first pass */
+
+			win = &q3ide_wm.wins[idx];
+			if (!win->active)
 				continue;
-			q3ide_add_poly(win);
+
+			/* ── Wall render ── */
+			if (win->wall_placed && win->los_visible) {
+				int bm = (idx == highlight_win) ? 1 : 0;
+				if (!win->shader)
+					q3ide_add_bg(win, win->origin, win->normal);
+#if !Q3IDE_DISABLE_EDGE_QUADS
+				q3ide_add_frame(win, bm, win->origin, win->normal);
+#endif
+				if (win->shader)
+					q3ide_add_poly(win, win->origin, win->normal);
+			}
+
+			/* ── Arc render ── */
+			if (win->in_overview) {
+				int arc_bm = (idx == highlight_win) ? 1 : (win->wall_placed ? 2 : 0);
+				if (!win->shader)
+					q3ide_add_bg(win, win->ov_origin, win->ov_normal);
+#if !Q3IDE_DISABLE_EDGE_QUADS
+				q3ide_add_frame(win, arc_bm, win->ov_origin, win->ov_normal);
+#endif
+				if (win->shader)
+					q3ide_add_poly(win, win->ov_origin, win->ov_normal);
+			}
 		}
 	}
 }
@@ -140,10 +182,10 @@ void Q3IDE_WM_CmdStatus(void)
 		if (!w->active)
 			continue;
 		Com_Printf("  [%d] id=%u slot=%d sz=%.0fx%.0f frames=%llu status=%s"
-		           " dist=%.0f%s%s\n",
+		           " dist=%.0f wall=%d ov=%d%s%s\n",
 		           i, w->capture_id, w->scratch_slot, w->world_w, w->world_h, w->frames,
-		           snames[w->status < 4 ? w->status : 3], w->player_dist, w->label[0] ? " label=" : "",
-		           w->label[0] ? w->label : "");
+		           snames[w->status < 4 ? w->status : 3], w->player_dist, (int) w->wall_placed, (int) w->in_overview,
+		           w->label[0] ? " label=" : "", w->label[0] ? w->label : "");
 		count++;
 	}
 	if (!count)

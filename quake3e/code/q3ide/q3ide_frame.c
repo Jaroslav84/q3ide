@@ -22,6 +22,9 @@ extern int q3ide_aimed_win;
 /* Shoot-to-place — q3ide_shoot_to_place.c */
 extern void q3ide_shoot_frame(void);
 
+/* Drag & resize — q3ide_drag_resize.c */
+extern void Q3IDE_DragResize_Frame(void);
+
 /* LOS cache update — q3ide_los_cache.c */
 extern void Q3IDE_UpdateLOS(const vec3_t eye);
 
@@ -133,6 +136,7 @@ void Q3IDE_Frame(void)
 
 		Q3IDE_UpdateLOS(eye);
 		q3ide_shoot_frame();
+		Q3IDE_DragResize_Frame();
 	}
 
 	Q3IDE_ViewModes_Tick();

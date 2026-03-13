@@ -2,15 +2,15 @@
 
 #include "q3ide_win_mngr.h"
 #include "q3ide_log.h"
+#include "q3ide_params.h"
 #include "q3ide_win_mngr_internal.h"
 #include "../qcommon/qcommon.h"
 #include <string.h>
 
-/* ── App category lists ─────────────────────────────────────────── */
+/* ── App category lists (sourced from q3ide_params.h) ───────────── */
 
-const char *q3ide_terminal_apps[] = {"iTerm2", "Terminal", NULL};
-const char *q3ide_browser_apps[] = {"Google Chrome", "Chromium", "Safari",         "Firefox", "Arc",
-                                    "Brave Browser", "Opera",    "Microsoft Edge", NULL};
+const char *q3ide_terminal_apps[] = {Q3IDE_CPU_WINDOWS_LIST};
+const char *q3ide_browser_apps[] = {Q3IDE_GPU_WINDOWS_LIST};
 
 qboolean q3ide_match(const char *app, const char **list)
 {
@@ -34,44 +34,35 @@ qboolean q3ide_is_attached(unsigned int id)
 
 /*
  * Returns qtrue for windows that are system UI — not real application content.
+ * Pattern list defined in q3ide_params.h: Q3IDE_JUNK_LIST.
+ * Glob syntax: no wildcard = exact match, *word* = substring. Case-insensitive.
  */
 static qboolean q3ide_is_system_junk(const Q3ideWindowInfo *w)
 {
+	static const char *junk[] = {Q3IDE_DEDICATED_WIN_BLACKLIST};
 	const char *t = w->title ? w->title : "";
 	const char *a = w->app_name ? w->app_name : "";
+	int i;
 
-	if (Q_stristr(t, "Wallpaper-") || Q_stristr(a, "Wallpaper"))
-		return qtrue;
-	if (!Q_stricmp(t, "Dock") || !Q_stricmp(a, "Dock"))
-		return qtrue;
-	if (!Q_stricmp(t, "LPSpringboard") || !Q_stricmp(a, "LPSpringboard"))
-		return qtrue;
-	if (!Q_stricmp(t, "loginwindow") || !Q_stricmp(a, "loginwindow"))
-		return qtrue;
-	if (Q_stristr(t, "Accessibility Services") || Q_stristr(a, "Accessibility Services"))
-		return qtrue;
-	if (!Q_stricmp(t, "Spotlight") || !Q_stricmp(a, "Spotlight"))
-		return qtrue;
-	if (!Q_stricmp(t, "Notification Center") || !Q_stricmp(a, "NotificationCenter"))
-		return qtrue;
-	if (Q_stristr(t, "Open and Save Panel Service") || Q_stristr(a, "Open and Save Panel Service"))
-		return qtrue;
-	if (Q_stristr(t, "Screen & System Audio Recording") || Q_stristr(a, "Screen & System Audio Recording"))
-		return qtrue;
-	if (!Q_stricmp(a, "WindowServer"))
-		return qtrue;
-	if (!Q_stricmp(t, "Desktop") || !Q_stricmp(a, "Desktop"))
-		return qtrue; /* Finder desktop layers */
-	if (!Q_stricmp(t, "Little Snitch Agent") || !Q_stricmp(a, "Little Snitch Agent"))
-		return qtrue;
-	if (Q_stristr(t, "Keyboard Maestro Engine") || Q_stristr(a, "Keyboard Maestro Engine"))
-		return qtrue;
-	if (!Q_stricmp(a, "Default Folder X"))
-		return qtrue;
-	/* Exclude the game itself — capturing the Quake window inside itself kills FPS */
-	if (Q_stristr(t, "Quake 3") || Q_stristr(a, "Quake3"))
-		return qtrue;
-
+	for (i = 0; junk[i]; i++) {
+		const char *pat = junk[i];
+		/* Strip leading/trailing '*' for case-insensitive substring match */
+		int is_sub = pat[0] == '*';
+		const char *inner = is_sub ? pat + 1 : pat;
+		char core[128];
+		int clen;
+		Q_strncpyz(core, inner, sizeof(core));
+		clen = (int) strlen(core);
+		if (clen > 0 && core[clen - 1] == '*')
+			core[clen - 1] = '\0';
+		if (is_sub) {
+			if (Q_stristr(t, core) || Q_stristr(a, core))
+				return qtrue;
+		} else {
+			if (Q_stricmp(t, pat) == 0 || Q_stricmp(a, pat) == 0)
+				return qtrue;
+		}
+	}
 	return qfalse;
 }
 

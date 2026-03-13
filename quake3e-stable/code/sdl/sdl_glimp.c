@@ -261,6 +261,7 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 		display = FindNearestDisplay( &x, &y, 640, 480 );
 
 		//Com_Printf("Selected display: %i\n", display );
+
 	}
 
 	if ( display >= 0 && SDL_GetDesktopDisplayMode( display, &desktopMode ) == 0 )
@@ -803,6 +804,12 @@ void VKimp_Init( glconfig_t *config )
 	r_swapInterval = Cvar_Get( "r_swapInterval", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	r_stereoEnabled = Cvar_Get( "r_stereoEnabled", "0", CVAR_ARCHIVE | CVAR_LATCH );
 	Cvar_SetDescription( r_stereoEnabled, "Enable stereo rendering for techniques like shutter glasses." );
+
+// q3ide [BEGIN] Multi-Monitor Cvar (Vulkan) - code/sdl/sdl_glimp.c
+#ifdef USE_Q3IDE
+	r_multiMonitor = Cvar_Get( "r_multiMonitor", "0", CVAR_ARCHIVE_ND | CVAR_LATCH );
+#endif
+// q3ide [END] Multi-Monitor Cvar (Vulkan)
 
 	// feedback to renderer configuration
 	glw_state.config = config;

@@ -15,19 +15,39 @@
 extern float g_kb_bot;
 
 /* ── Key dimensions ─────────────────────────────────────────────────── */
-#define KCW   (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE)
-#define KCELL (KCW * 3.6f)
+#define KCW    (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE)
+#define KCELL  (KCW * 3.6f)
 #define KB_GAP 0.10f
 
 /* ── Color lookup ───────────────────────────────────────────────────── */
 static void key_color(key_state_t st, byte *r, byte *g, byte *b)
 {
 	switch (st) {
-	case KEY_Q3IDE:     *r = 220; *g = 220; *b = 220; break; /* white    */
-	case KEY_QUAKE:     *r = 190; *g = 155; *b = 25;  break; /* amber    */
-	case KEY_COLLISION: *r = 255; *g = 30;  *b = 30;  break; /* red      */
-	case KEY_PASSTHROUGH: *r = 60; *g = 200; *b = 120; break; /* green   */
-	default:            *r = 155; *g = 155; *b = 155; break; /* gray +40% */
+	case KEY_Q3IDE:
+		*r = 220;
+		*g = 220;
+		*b = 220;
+		break; /* white    */
+	case KEY_QUAKE:
+		*r = 190;
+		*g = 155;
+		*b = 25;
+		break; /* amber    */
+	case KEY_COLLISION:
+		*r = 255;
+		*g = 30;
+		*b = 30;
+		break; /* red      */
+	case KEY_PASSTHROUGH:
+		*r = 60;
+		*g = 200;
+		*b = 120;
+		break; /* green   */
+	default:
+		*r = 155;
+		*g = 155;
+		*b = 155;
+		break; /* gray +40% */
 	}
 }
 
@@ -102,8 +122,7 @@ void q3ide_rebuild_keyboard_cache(void)
 				float key_r, key_u;
 				if (!krows[i][j].display || classify(krows[i][j].keynum) != KEY_Q3IDE)
 					continue;
-				Com_sprintf(lbl_buf, sizeof(lbl_buf), "%c: %s", krows[i][j].display,
-				            q3ide_label(krows[i][j].keynum));
+				Com_sprintf(lbl_buf, sizeof(lbl_buf), "%c: %s", krows[i][j].display, q3ide_label(krows[i][j].keynum));
 				ovl_emit_str_rot(lbl_r, 0.0f, lbl_buf, 230, 230, 230);
 				key_r = krow_indent[i] * KCELL + j * KCELL + KCW;
 				key_u = kb_top - i * Q3IDE_OVL_KEY_ROW_H;

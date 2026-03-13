@@ -12,39 +12,18 @@
 #include "q3ide_win_mngr_internal.h"
 
 /* Shared overview state — defined in q3ide_view_modes_overview.c */
-typedef struct {
-	qboolean active;
-	vec3_t origin[Q3IDE_MAX_WIN];
-	vec3_t normal[Q3IDE_MAX_WIN];
-	float world_w[Q3IDE_MAX_WIN];
-	float world_h[Q3IDE_MAX_WIN];
-} win_snapshot_t;
-
-extern win_snapshot_t g_ov;
+extern qboolean g_ov_active;
 extern qboolean g_ov_placed;
+extern float g_ov_scroll_z;
 
 /* Helpers from other overview/focus3 TUs */
 extern qboolean q3ide_player_axes(vec3_t eye, vec3_t fwd, vec3_t right);
-extern void q3ide_focus3_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_rad);
+extern void q3ide_ov_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_rad);
 
 /* App category lists — q3ide_attach_filter.c */
 extern const char *q3ide_terminal_apps[];
 extern const char *q3ide_browser_apps[];
 extern qboolean q3ide_match(const char *app, const char **list);
-
-/* ── Window snapshot ─────────────────────────────────────────────────── */
-
-void q3ide_ov_snapshot_save(win_snapshot_t *s)
-{
-	int i;
-	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-		VectorCopy(q3ide_wm.wins[i].origin, s->origin[i]);
-		VectorCopy(q3ide_wm.wins[i].normal, s->normal[i]);
-		s->world_w[i] = q3ide_wm.wins[i].world_w;
-		s->world_h[i] = q3ide_wm.wins[i].world_h;
-	}
-	s->active = qtrue;
-}
 
 /* Category: 0=display, 1=terminal, 2=browser, 3=other */
 static int ov_win_category(const q3ide_win_t *w)
@@ -58,6 +37,17 @@ static int ov_win_category(const q3ide_win_t *w)
 	return 3;
 }
 
+/* ── Direct scroll apply — no re-arc, just shift ov_origin Z ────────── */
+
+void q3ide_ov_scroll_apply(float delta)
+{
+	int i;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].in_overview)
+			q3ide_wm.wins[i].ov_origin[2] += delta;
+	}
+}
+
 /* ── Overview layout (re-run every frame while active) ──────────────── */
 
 void q3ide_overview_layout(void)
@@ -69,9 +59,10 @@ void q3ide_overview_layout(void)
 	vec3_t eye, fwd, right, row_eye;
 	(void) right;
 
+	/* Collect only in_overview windows for arc layout */
 	n = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
-		if (q3ide_wm.wins[i].active)
+		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].in_overview)
 			active_idx[n++] = i;
 
 	if (n == 0 || !q3ide_player_axes(eye, fwd, right))
@@ -89,7 +80,8 @@ void q3ide_overview_layout(void)
 		active_idx[j + 1] = tmp;
 	}
 
-	z_off = -(float) cl.snap.ps.viewheight;
+	/* g_ov_scroll_z shifts the whole grid up/down in world units. */
+	z_off = -(float) cl.snap.ps.viewheight + g_ov_scroll_z;
 	cell_h = 0.0f;
 	for (k = 0; k < n; k += 3) {
 		row_n = 0;
@@ -101,8 +93,7 @@ void q3ide_overview_layout(void)
 
 		wh = 0.0f;
 		for (i = 0; i < row_n; i++) {
-			int idx = row_idxs[i];
-			float h = (g_ov.active && g_ov.world_h[idx] > 0.0f) ? g_ov.world_h[idx] : q3ide_wm.wins[idx].world_h;
+			float h = q3ide_wm.wins[row_idxs[i]].world_h;
 			if (h > wh)
 				wh = h;
 		}
@@ -112,17 +103,8 @@ void q3ide_overview_layout(void)
 		z_off += cell_h * 0.5f + (cell_h > 0.0f ? Q3IDE_OVERVIEW_GAP : 0.0f) + wh * 0.5f;
 		cell_h = wh;
 
-		for (i = 0; i < row_n; i++) {
-			int idx = row_idxs[i];
-			if (g_ov.active && g_ov.world_w[idx] > 0.0f) {
-				q3ide_wm.wins[idx].world_w = g_ov.world_w[idx];
-				q3ide_wm.wins[idx].world_h = g_ov.world_h[idx];
-			}
-			q3ide_wm.wins[idx].in_overview = qtrue;
-		}
-
 		VectorCopy(eye, row_eye);
 		row_eye[2] += z_off;
-		q3ide_focus3_place_arc(row_eye, fwd, row_idxs, row_n, 0.0f);
+		q3ide_ov_place_arc(row_eye, fwd, row_idxs, row_n, 0.0f);
 	}
 }

@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Holy Rule **ABSOLUTELY NO FUCKING NO EXCEPTIONS**
 
 - never use 'rm'. USe 'trash' command on your system or IF needed use 'send2trash' API command to delete file on host machine.
+- the **Response format rule** is MANDATORY!
 
 ## Communication Style Rules **NO EXCEPTIONS**
 
@@ -13,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
     why:
         1: The developer has little knowledge about how quake3 engine works. Teach him slowly. 
         2: The developer did ray-tracing a few times for his CS computer graphics classes in which he failed
-- **Response format**: MANDATORY
+- **Response format rule**: MANDATORY as last step (even after lint.sh) **NO EXCEPTIONS!!**
     Every response that completes a task MUST end with these 4 lines.
     **THIS IS NOT OPTIONAL. USER RUNS MULTIPLE TERMINALS. THEY CANNOT TELL WHICH AGENT DID WHAT WITHOUT THIS SUMMARY. SKIPPING IT CAUSES REAL CONFUSION AND FRUSTRATION.**
     ```
@@ -68,6 +69,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **C99 (q3ide/):** tabs, K&R braces, `snake_case`. All public symbols prefixed `q3ide_`/`Q3IDE_`. All Quake3e hooks inside `#ifdef USE_Q3IDE`.
 - **Rust (capture/):** No `unsafe` outside `lib.rs`. `Result`/`?` for errors. `crossbeam` for concurrency.
 - **Naming:** VisionOS terminology — Window, Ornament (not panel/toolbar).
+- **Positioning UI**: if develoepr asks to move some UI elements aroud but the end rosult would clip the UI out of the screen then push back.
 - **File names:** never too short or cryptic. Must be tiny, human-readable. Spell out what the file does. If a new teammate can't guess the contents from the name alone, rename it. Examples:
     - `q3ide_wm.h` → `q3ide_win_mngr.h`
     - `q3ide_cmd.c` → `q3ide_commands.c`

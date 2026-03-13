@@ -17,7 +17,9 @@
  */
 
 #include "../qcommon/q_shared.h"
+#include "q3ide_params.h"
 #include "q3ide_engine_hooks.h"
+#include "q3ide_map_skin_browser.h"
 #include "q3ide_win_mngr.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -48,15 +50,18 @@ static void q3ide_sorted_monitors(int n, int *sorted)
 void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 {
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
-	int n, i, sorted[16];
+	int n, i, sorted[Q3IDE_MAX_MONITORS];
 	float angle;
 	int center;
 
 	n = Cvar_VariableIntegerValue("r_mmNumMon");
 	if (n <= 1) {
-		if (!(fd->rdflags & RDF_NOWORLDMODEL)) {
+		if (!(fd->rdflags & RDF_NOWORLDMODEL) && cls.state == CA_ACTIVE) {
 			Q3IDE_WM_AddPolys();
 			Q3IDE_DrawHudMsg(fd);
+			Q3IDE_DrawAimLabel(fd);
+			Q3IDE_DrawLeftOverlay(fd);
+			Q3IDE_MMenu_Draw(fd);
 		}
 		re.RenderScene(fd);
 		return;
@@ -91,8 +96,8 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		view.y = 0;
 		view.width = mon_w;
 		view.height = mon_h;
-		view.fov_x = 90.0f;
-		view.fov_y = 2.0f * RAD2DEG(atanf(tanf(DEG2RAD(45.0f)) * (float) mon_h / (float) mon_w));
+		view.fov_x = Q3IDE_MONITOR_FOV;
+		view.fov_y = 2.0f * RAD2DEG(atanf(tanf(DEG2RAD(Q3IDE_MONITOR_FOV * 0.5f)) * (float) mon_h / (float) mon_w));
 
 		/* Rotate view axis around Z by yaw_offset degrees */
 		if (yaw_offset != 0.0f) {
@@ -109,11 +114,19 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 
 		/* Tell RE_RenderScene how many passes remain so it preserves entities. */
 		Cvar_Set("r_multiViewRemaining", va("%d", n - i - 1));
-		Q3IDE_WM_AddPolys();
-		Q3IDE_DrawHudMsg(&view);
-		/* Left monitor (sorted[0]): draw keybinding cheat sheet overlay */
-		if (i == 0)
-			Q3IDE_DrawLeftOverlay(&view);
+		/* Only inject q3ide content during active gameplay — menus/loading screens
+		 * must not see our polys or overlays. */
+		if (cls.state == CA_ACTIVE) {
+			Q3IDE_WM_AddPolys();
+			Q3IDE_DrawHudMsg(&view);
+			Q3IDE_DrawAimLabel(&view);
+			/* Left monitor: keybinding cheat sheet overlay */
+			if (i == 0)
+				Q3IDE_DrawLeftOverlay(&view);
+			/* Centre monitor: map/skin browser */
+			if (i == center)
+				Q3IDE_MMenu_Draw(&view);
+		}
 		re.RenderScene(&view);
 	}
 }

@@ -23,27 +23,34 @@ ifeq ($(COMPILE_PLATFORM),mingw32)
   endif
 endif
 
-BUILD_CLIENT     = 1
-BUILD_SERVER     = 1
+# What to build
+BUILD_CLIENT     = 1  # the game client (quake3e)
+BUILD_SERVER     = 1  # dedicated server (quake3e.ded) — set 0 to skip
 
-USE_SDL          = 1
-USE_CURL         = 1
-USE_LOCAL_HEADERS= 0
-USE_SYSTEM_JPEG  = 0
+# Windowing / input
+USE_SDL          = 1  # required on macOS and Linux; do not disable
 
-USE_OGG_VORBIS    = 1
-USE_SYSTEM_OGG    = 0
-USE_SYSTEM_VORBIS = 0
+# Network / assets
+USE_CURL         = 1  # HTTP downloads (maps, mods); safe to leave on
+USE_LOCAL_HEADERS= 0  # use bundled headers instead of system — leave 0
+USE_SYSTEM_JPEG  = 0  # use system libjpeg — leave 0 (bundled version is safer)
 
-USE_VULKAN       = 1
-USE_OPENGL       = 1
-USE_OPENGL2      = 0
-USE_OPENGL_API   = 1
-USE_VULKAN_API   = 1
-USE_RENDERER_DLOPEN = 1
+# Audio
+USE_OGG_VORBIS    = 1  # OGG music support
+USE_SYSTEM_OGG    = 0  # use system libogg — leave 0
+USE_SYSTEM_VORBIS = 0  # use system libvorbis — leave 0
 
-# valid options: opengl, vulkan, opengl2
-RENDERER_DEFAULT = opengl
+# Renderers — both compiled as dylibs; build.sh auto-selects at launch based on GPU.
+# USE_RENDERER_DLOPEN=1 means all enabled renderers are built; RENDERER_DEFAULT is just the fallback name.
+USE_VULKAN       = 1  # Vulkan renderer — on (AMD/NVIDIA gets this at launch)
+USE_OPENGL       = 1  # OpenGL renderer — on (Intel/Apple fallback)
+USE_OPENGL2      = 0  # OpenGL2 renderer — off, broken on macOS
+USE_OPENGL_API   = 1  # expose OpenGL API to renderer plugins — required
+USE_VULKAN_API   = 1  # expose Vulkan API — required for Vulkan renderer
+USE_RENDERER_DLOPEN = 1  # load renderer as a dylib at runtime — required for dynamic switching
+
+# Fallback renderer name — build.sh overrides this at launch with +set cl_renderer
+RENDERER_DEFAULT = vulkan
 
 CNAME            = quake3e
 DNAME            = quake3e.ded
@@ -1142,9 +1149,14 @@ Q3OBJ += \
   $(B)/client/q3ide_console.o \
   $(B)/client/q3ide_engine.o \
   $(B)/client/q3ide_frame.o \
-  $(B)/client/q3ide_engine_hooks_input.o \
+  $(B)/client/q3ide_shoot_to_place.o \
+  $(B)/client/q3ide_missile_tracking.o \
+  $(B)/client/q3ide_key_events.o \
+  $(B)/client/q3ide_drag_resize.o \
+  $(B)/client/q3ide_los_cache.o \
   $(B)/client/q3ide_dylib.o \
   $(B)/client/q3ide_win_mngr.o \
+  $(B)/client/q3ide_win_streams.o \
   $(B)/client/q3ide_scene.o \
   $(B)/client/q3ide_poll.o \
   $(B)/client/q3ide_commands.o \
@@ -1154,20 +1166,26 @@ Q3OBJ += \
   $(B)/client/q3ide_render.o \
   $(B)/client/q3ide_view_modes.o \
   $(B)/client/q3ide_view_modes_overview.o \
-  $(B)/client/q3ide_view_modes_overview_layout.o \
+  $(B)/client/q3ide_view_modes_overview_sync.o \
+  $(B)/client/q3ide_view_modes_grid.o \
   $(B)/client/q3ide_view_modes_monitors.o \
   $(B)/client/q3ide_view_modes_arc.o \
-  $(B)/client/q3ide_gamma.o \
   $(B)/client/q3ide_hotkey.o \
   $(B)/client/q3ide_distance.o \
   $(B)/client/q3ide_geometry.o \
+  $(B)/client/q3ide_geometry_border.o \
   $(B)/client/q3ide_geometry_clamp.o \
+  $(B)/client/q3ide_window_trace.o \
   $(B)/client/q3ide_log.o \
+  $(B)/client/q3ide_map_skin_browser.o \
+  $(B)/client/q3ide_map_skin_browser_draw.o \
   $(B)/client/q3ide_overlay.o \
+  $(B)/client/q3ide_overlay_hud.o \
   $(B)/client/q3ide_overlay_keyboard.o \
   $(B)/client/q3ide_overlay_kbcache.o \
   $(B)/client/q3ide_overlay_winlist.o \
   $(B)/client/q3ide_overlay_lamps.o \
+  $(B)/client/q3ide_overlay_aim_label.o \
   $(B)/client/q3ide_aas.o \
   $(B)/client/q3ide_aas_query.o \
   $(B)/client/q3ide_aas_face.o \
@@ -1485,13 +1503,28 @@ $(B)/client/q3ide_engine.o: $(Q3IDEDIR)/q3ide_engine.c
 $(B)/client/q3ide_frame.o: $(Q3IDEDIR)/q3ide_frame.c
 	$(DO_CC)
 
-$(B)/client/q3ide_engine_hooks_input.o: $(Q3IDEDIR)/q3ide_engine_hooks_input.c
+$(B)/client/q3ide_shoot_to_place.o: $(Q3IDEDIR)/q3ide_shoot_to_place.c
+	$(DO_CC)
+
+$(B)/client/q3ide_missile_tracking.o: $(Q3IDEDIR)/q3ide_missile_tracking.c
+	$(DO_CC)
+
+$(B)/client/q3ide_key_events.o: $(Q3IDEDIR)/q3ide_key_events.c
+	$(DO_CC)
+
+$(B)/client/q3ide_drag_resize.o: $(Q3IDEDIR)/q3ide_drag_resize.c
+	$(DO_CC)
+
+$(B)/client/q3ide_los_cache.o: $(Q3IDEDIR)/q3ide_los_cache.c
 	$(DO_CC)
 
 $(B)/client/q3ide_dylib.o: $(Q3IDEDIR)/q3ide_dylib.c
 	$(DO_CC)
 
 $(B)/client/q3ide_win_mngr.o: $(Q3IDEDIR)/q3ide_win_mngr.c
+	$(DO_CC)
+
+$(B)/client/q3ide_win_streams.o: $(Q3IDEDIR)/q3ide_win_streams.c
 	$(DO_CC)
 
 $(B)/client/q3ide_scene.o: $(Q3IDEDIR)/q3ide_scene.c
@@ -1520,16 +1553,16 @@ $(B)/client/q3ide_view_modes.o: $(Q3IDEDIR)/q3ide_view_modes.c
 $(B)/client/q3ide_view_modes_overview.o: $(Q3IDEDIR)/q3ide_view_modes_overview.c
 	$(DO_CC)
 
-$(B)/client/q3ide_view_modes_overview_layout.o: $(Q3IDEDIR)/q3ide_view_modes_overview_layout.c
+$(B)/client/q3ide_view_modes_overview_sync.o: $(Q3IDEDIR)/q3ide_view_modes_overview_sync.c
+	$(DO_CC)
+
+$(B)/client/q3ide_view_modes_grid.o: $(Q3IDEDIR)/q3ide_view_modes_grid.c
 	$(DO_CC)
 
 $(B)/client/q3ide_view_modes_monitors.o: $(Q3IDEDIR)/q3ide_view_modes_monitors.c
 	$(DO_CC)
 
 $(B)/client/q3ide_view_modes_arc.o: $(Q3IDEDIR)/q3ide_view_modes_arc.c
-	$(DO_CC)
-
-$(B)/client/q3ide_gamma.o: $(Q3IDEDIR)/q3ide_gamma.c
 	$(DO_CC)
 
 $(B)/client/q3ide_hotkey.o: $(Q3IDEDIR)/q3ide_hotkey.c
@@ -1541,16 +1574,32 @@ $(B)/client/q3ide_distance.o: $(Q3IDEDIR)/q3ide_distance.c
 $(B)/client/q3ide_geometry.o: $(Q3IDEDIR)/q3ide_geometry.c
 	$(DO_CC)
 
+$(B)/client/q3ide_geometry_border.o: $(Q3IDEDIR)/q3ide_geometry_border.c
+	$(DO_CC)
+
 $(B)/client/q3ide_geometry_clamp.o: $(Q3IDEDIR)/q3ide_geometry_clamp.c
+	$(DO_CC)
+
+$(B)/client/q3ide_window_trace.o: $(Q3IDEDIR)/q3ide_window_trace.c
 	$(DO_CC)
 
 $(B)/client/q3ide_log.o: $(Q3IDEDIR)/q3ide_log.c
 	$(DO_CC)
 
+$(B)/client/q3ide_map_skin_browser.o: $(Q3IDEDIR)/q3ide_map_skin_browser.c
+	$(DO_CC)
+
+$(B)/client/q3ide_map_skin_browser_draw.o: $(Q3IDEDIR)/q3ide_map_skin_browser_draw.c
+	$(DO_CC)
+
 $(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c
 	$(DO_CC)
 
+
 $(B)/client/q3ide_overlay.o: $(Q3IDEDIR)/q3ide_overlay.c
+	$(DO_CC)
+
+$(B)/client/q3ide_overlay_hud.o: $(Q3IDEDIR)/q3ide_overlay_hud.c
 	$(DO_CC)
 
 $(B)/client/q3ide_overlay_keyboard.o: $(Q3IDEDIR)/q3ide_overlay_keyboard.c
@@ -1565,6 +1614,9 @@ $(B)/client/q3ide_overlay_winlist.o: $(Q3IDEDIR)/q3ide_overlay_winlist.c
 $(B)/client/q3ide_overlay_lamps.o: $(Q3IDEDIR)/q3ide_overlay_lamps.c
 	$(DO_CC)
 
+$(B)/client/q3ide_overlay_aim_label.o: $(Q3IDEDIR)/q3ide_overlay_aim_label.c
+	$(DO_CC)
+
 $(B)/client/q3ide_aas.o: $(Q3IDEDIR)/q3ide_aas.c
 	$(DO_CC)
 
@@ -1576,7 +1628,6 @@ $(B)/client/q3ide_aas_face.o: $(Q3IDEDIR)/q3ide_aas_face.c
 
 $(B)/client/q3ide_aas_walls.o: $(Q3IDEDIR)/q3ide_aas_walls.c
 	$(DO_CC)
-
 
 $(B)/client/q3ide_teleport.o: $(Q3IDEDIR)/q3ide_teleport.c
 	$(DO_CC)

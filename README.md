@@ -1,4 +1,4 @@
-![Version](https://img.shields.io/badge/Version-v0.3-blue?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v0.3.1-red?style=for-the-badge)
 
 # q3ide
 
@@ -40,7 +40,12 @@ It's the beginning of something more with an awesome FPS engine behind it.
 Add Quake 3 pack files into `/baseq3/` then:
 
 ```bash
-sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --execute '' --clean
+sh ./scripts/build.sh --release stable --run
+```
+
+or with extras:
+```bash
+sh ./scripts/build.sh --release stable --run --level q3dm0 --bots 0 --music 0 --execute '' --clean
 ```
 
 --
@@ -51,16 +56,20 @@ sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --
 - **Multi-window tunneling from macOS to Quake** (SCStream → texture → GPU)
   - **Stream Router**: Display Composition Stream vs Per-window SCStream - both have their advantages and disadvantages. Extra 20% FPS gains.
     - COMPOSITE for CPU apps (Terminal, etc) - 1 screen where each terminal window gets cropped - more efficient
-    - DEDICATED for GPU apps (Browser, VLC)
+    - DEDICATED for GPU apps (Browser, VLC, etc)
   - **Both-sides window rendering**: windows are visible from front AND back efficiently 
   - **Pause SCStream**: to get back the 90 FPS in game (`STREAMS_PAUSED` AtomicBool — `get_frame()` returns None, last frame frozen on GPU, streams stay warm). This can be leveraged in a BIG BIG matter.
   - **Gracefull FPS control**: new windows spawns with [1,2,4,8,16,32,auto]
   - **Idle SCStream**: `IN-PROGRESS` apple idle detector is not that great for use. We sample every 1s for changes and pause streams :) FPS saver feature!
 - **Window Manager**
-  - Highlight/select window on aim
-  - Shoot wall to place window 1,2...N
-  - Shoot existing window THEN wall to position/reposition window
-  - Shoot windows inside "O" Overview then on wall to stick them
+  - **Focus and Overview**: with different window layouts
+    - "I" shows your monitors
+    - "O" shows an overview off all windows on macOS 
+  - **Highlight window**: on aim
+  - **Move window**: Highlight window + hold "CMD" then aim to move existing windows on wall 
+  - **Zoom window**: Highlight window + hold "CMD" + SCROLL to make existing window on wall bigger/smaller
+  - **Shot wall**: to place window 1,2...N
+  - **Reposition existing window**: shot window THEN now place on the wall (works in "O" Overview too)
 - **MacOS daemon**
   - Auto attach/detach new and closed macOS windows into Quake (PollChanges)
   - Unminimizes every app and re-focuses Quake before first attach
@@ -68,9 +77,7 @@ sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --
 - **Spatial Context / Window Placement**
   - LOS visibility culling (per-frame trace)
   - AAS area detection (just tracking, no placement)
-- **Hotkeys**: with 'Hold & Release' for temporary enable
-  - "I" to view ALL monitors
-  - "O" to view ALL windows -> good for FPS stress testing
+- **Other Hotkeys/Feaures**: with 'Hold & Release' for temporary enable
   - "H" to hide ALL windows
   - "K" to kill ALL windows
   - "M" to show menu for custom maps/skins
