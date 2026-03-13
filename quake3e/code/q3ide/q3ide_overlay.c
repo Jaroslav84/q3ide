@@ -89,6 +89,41 @@ void q3ide_ovl_char_sm(float ox, float oy, float oz, const float *rx, const floa
 	re.AddPolyToScene(g_ovl_chars, 4, v, 1);
 }
 
+/* Scaled variant — arbitrary scale multiplier, used by map switcher */
+void q3ide_ovl_str_sc(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, float scale,
+                      byte r, byte g, byte b)
+{
+	float cw = Q3IDE_OVL_CHAR_W * scale;
+	float ch = Q3IDE_OVL_CHAR_H * scale;
+	static const float rsc[4] = {0.0f, 1.0f, 1.0f, 0.0f};
+	static const float usc[4] = {0.0f, 0.0f, -1.0f, -1.0f};
+	int i = 0;
+	for (; *s; s++, i++) {
+		polyVert_t v[4];
+		int        ch_idx = (unsigned char) *s;
+		float      col    = (float) (ch_idx & 15);
+		float      row    = (float) (ch_idx >> 4);
+		float      u0 = col / 16.0f, u1 = (col + 1.0f) / 16.0f;
+		float      t0 = row / 16.0f, t1 = (row + 1.0f) / 16.0f;
+		float      bx = ox + rx[0] * cw * i;
+		float      by = oy + rx[1] * cw * i;
+		float      bz = oz + rx[2] * cw * i;
+		int        k;
+		for (k = 0; k < 4; k++) {
+			v[k].xyz[0]          = bx + rx[0] * cw * rsc[k] + ux[0] * ch * usc[k];
+			v[k].xyz[1]          = by + rx[1] * cw * rsc[k] + ux[1] * ch * usc[k];
+			v[k].xyz[2]          = bz + rx[2] * cw * rsc[k] + ux[2] * ch * usc[k];
+			v[k].st[0]           = (k == 0 || k == 3) ? u0 : u1;
+			v[k].st[1]           = (k < 2) ? t0 : t1;
+			v[k].modulate.rgba[0] = r;
+			v[k].modulate.rgba[1] = g;
+			v[k].modulate.rgba[2] = b;
+			v[k].modulate.rgba[3] = 255;
+		}
+		re.AddPolyToScene(g_ovl_chars, 4, v, 1);
+	}
+}
+
 /* Small variant — Q3IDE_OVL_SMALL_SCALE scale for secondary info */
 void q3ide_ovl_str_sm(float ox, float oy, float oz, const float *rx, const float *ux, const char *s, byte r, byte g,
                       byte b)
@@ -200,7 +235,7 @@ static void draw_corner_cross(float cx, float cy, float cz, const float *rx, con
 void Q3IDE_DrawMonitorCorners(const void *refdef_ptr)
 {
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
-	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
+	const float rx[3] = {fd->viewaxis[1][0], fd->viewaxis[1][1], fd->viewaxis[1][2]};
 	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
 	/* (norm_x, norm_y): 0=left/top edge, 1=right/bottom edge */
 	static const float cpx[4] = {0.0f, 1.0f, 0.0f, 1.0f};
@@ -220,6 +255,87 @@ void Q3IDE_DrawMonitorCorners(const void *refdef_ptr)
 	}
 }
 
+/* ── Calibration overlay (right screen) ────────────────────────── */
+
+/*
+ * Q3IDE_DrawCalibration — draws measurement rulers on the right monitor.
+ *
+ * Layout (all centered horizontally at mid-screen):
+ *   Row 0: normal-scale ruler:  |====================|  (22 chars, red)
+ *   Row 1: label "NRM 22CH" small grey
+ *   Row 2: small-scale ruler:   |====================|  (22 chars, green)
+ *   Row 3: label "SM 22CH" small grey
+ *   Row 4: "Hello World?" normal scale (yellow)
+ *   Row 5: "Hello World?" small scale (cyan)
+ *
+ * Measure pixel distance between the two | marks on each ruler to get
+ * the real pixel width of one character at each scale.
+ */
+void Q3IDE_DrawCalibration(const void *refdef_ptr)
+{
+	const refdef_t *fd = (const refdef_t *) refdef_ptr;
+	const float rx[3] = {fd->viewaxis[1][0], fd->viewaxis[1][1], fd->viewaxis[1][2]};
+	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
+	float mid[3];
+	float lh = Q3IDE_OVL_LINE_H;
+	float cw_n = Q3IDE_OVL_CHAR_W;
+	float cw_s = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
+	int i;
+	char ruler[23];
+
+	q3ide_ovl_init();
+	if (!g_ovl_chars || !re.AddPolyToScene)
+		return;
+
+	/* Screen centre */
+	q3ide_ovl_pixel_pos(fd, (float) fd->width * 0.5f, (float) fd->height * 0.5f, mid);
+
+	/* Build ruler string: |====================| (22 chars) */
+	ruler[0] = '|';
+	for (i = 1; i <= 20; i++)
+		ruler[i] = '=';
+	ruler[21] = '|';
+	ruler[22] = '\0';
+
+/* Helper: draw string centred on mid at vertical offset row*lh */
+#define DRAW_CTR_N(str, roff, r, g, b)                                                                                 \
+	do {                                                                                                               \
+		int _len = (int) strlen(str);                                                                                  \
+		float _w = (float) _len * cw_n;                                                                                \
+		float _bx = mid[0] - rx[0] * _w * 0.5f + ux[0] * (-(roff) * lh);                                               \
+		float _by = mid[1] - rx[1] * _w * 0.5f + ux[1] * (-(roff) * lh);                                               \
+		float _bz = mid[2] - rx[2] * _w * 0.5f + ux[2] * (-(roff) * lh);                                               \
+		q3ide_ovl_str(_bx, _by, _bz, rx, ux, str, r, g, b);                                                            \
+	} while (0)
+#define DRAW_CTR_S(str, roff, r, g, b)                                                                                 \
+	do {                                                                                                               \
+		int _len = (int) strlen(str);                                                                                  \
+		float _w = (float) _len * cw_s;                                                                                \
+		float _bx = mid[0] - rx[0] * _w * 0.5f + ux[0] * (-(roff) * lh);                                               \
+		float _by = mid[1] - rx[1] * _w * 0.5f + ux[1] * (-(roff) * lh);                                               \
+		float _bz = mid[2] - rx[2] * _w * 0.5f + ux[2] * (-(roff) * lh);                                               \
+		q3ide_ovl_str_sm(_bx, _by, _bz, rx, ux, str, r, g, b);                                                         \
+	} while (0)
+
+	/* Row 0: normal ruler (red) */
+	DRAW_CTR_N(ruler, 0.0f, 255, 80, 80);
+	/* Row 1: label */
+	DRAW_CTR_S("NRM: 22 chars above", 1.0f, 160, 160, 160);
+	/* Row 2: small ruler (green) */
+	DRAW_CTR_S(ruler, 2.0f, 80, 255, 80);
+	/* Row 3: label */
+	DRAW_CTR_S("SM: 22 chars above", 3.0f, 160, 160, 160);
+	/* Row 4: "Hello World?" normal (yellow) */
+	DRAW_CTR_N("Hello World?", 4.5f, 255, 255, 80);
+	/* Row 5: "Hello World?" small (cyan) */
+	DRAW_CTR_S("Hello World?", 5.5f, 80, 255, 255);
+	/* Row 6: label */
+	DRAW_CTR_S("Hello World? NRM above | SM below", 6.5f, 160, 160, 160);
+
+#undef DRAW_CTR_N
+#undef DRAW_CTR_S
+}
+
 /* ── HUD message banner ─────────────────────────────────────────── */
 
 static char g_hud_msg[64];
@@ -237,7 +353,7 @@ void Q3IDE_DrawHudMsg(const void *refdef_ptr)
 	unsigned long long now_ms;
 	int len;
 	float ox, oy, oz, total_w;
-	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
+	const float rx[3] = {fd->viewaxis[1][0], fd->viewaxis[1][1], fd->viewaxis[1][2]};
 	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
 
 	if (!g_hud_msg[0])

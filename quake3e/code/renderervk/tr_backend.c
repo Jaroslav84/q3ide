@@ -1095,7 +1095,7 @@ void RE_StretchRaw( int x, int y, int w, int h, int cols, int rows, byte *data, 
 		ri.Error( ERR_DROP, "%s(): size not a power of 2: %i by %i", __func__, cols, rows );
 	}
 
-	RE_UploadCinematic( w, h, cols, rows, data, client, dirty );
+	RE_UploadCinematic( w, h, cols, rows, data, client, dirty, 0 );
 
 	if ( r_speeds->integer ) {
 		end = ri.Milliseconds();

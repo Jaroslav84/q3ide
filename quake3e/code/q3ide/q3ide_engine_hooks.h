@@ -54,6 +54,8 @@ void Q3IDE_SetHudMsg(const char *msg, int duration_ms);
 void Q3IDE_DrawHudMsg(const void *refdef_ptr);
 /* Draw 4 red corner crosses on each monitor — debug helper to verify pixel mapping. */
 void Q3IDE_DrawMonitorCorners(const void *refdef_ptr);
+/* Draw calibration rulers on the right monitor so char sizes can be measured. */
+void Q3IDE_DrawCalibration(const void *refdef_ptr);
 
 /* Internal frame state — shared between q3ide_hooks*.c TUs. */
 typedef struct {

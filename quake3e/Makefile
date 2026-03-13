@@ -23,26 +23,33 @@ ifeq ($(COMPILE_PLATFORM),mingw32)
   endif
 endif
 
-BUILD_CLIENT     = 1
-BUILD_SERVER     = 1
+# What to build
+BUILD_CLIENT     = 1  # the game client (quake3e)
+BUILD_SERVER     = 1  # dedicated server (quake3e.ded) — set 0 to skip
 
-USE_SDL          = 1
-USE_CURL         = 1
-USE_LOCAL_HEADERS= 0
-USE_SYSTEM_JPEG  = 0
+# Windowing / input
+USE_SDL          = 1  # required on macOS and Linux; do not disable
 
-USE_OGG_VORBIS    = 1
-USE_SYSTEM_OGG    = 0
-USE_SYSTEM_VORBIS = 0
+# Network / assets
+USE_CURL         = 1  # HTTP downloads (maps, mods); safe to leave on
+USE_LOCAL_HEADERS= 0  # use bundled headers instead of system — leave 0
+USE_SYSTEM_JPEG  = 0  # use system libjpeg — leave 0 (bundled version is safer)
 
-USE_VULKAN       = 1
-USE_OPENGL       = 1
-USE_OPENGL2      = 0
-USE_OPENGL_API   = 1
-USE_VULKAN_API   = 1
-USE_RENDERER_DLOPEN = 1
+# Audio
+USE_OGG_VORBIS    = 1  # OGG music support
+USE_SYSTEM_OGG    = 0  # use system libogg — leave 0
+USE_SYSTEM_VORBIS = 0  # use system libvorbis — leave 0
 
-# valid options: opengl, vulkan, opengl2
+# Renderers — each 1 compiles that renderer in as an option.
+# RENDERER_DEFAULT picks which one loads on launch.
+USE_VULKAN       = 0  # Vulkan renderer — off, not used
+USE_OPENGL       = 1  # OpenGL renderer — on, this is what we run
+USE_OPENGL2      = 0  # OpenGL2 renderer — off, broken on macOS
+USE_OPENGL_API   = 1  # expose OpenGL API to renderer plugins — required
+USE_VULKAN_API   = 0  # expose Vulkan API — off since USE_VULKAN=0
+USE_RENDERER_DLOPEN = 1  # load renderer as a dylib at runtime — required for dynamic switching
+
+# Active renderer — switch this to vulkan or opengl2 to change renderer (Makefile auto-adjusts USE_* flags)
 RENDERER_DEFAULT = opengl
 
 CNAME            = quake3e
@@ -1163,6 +1170,7 @@ Q3OBJ += \
   $(B)/client/q3ide_geometry.o \
   $(B)/client/q3ide_geometry_clamp.o \
   $(B)/client/q3ide_log.o \
+  $(B)/client/q3ide_main_menu.o \
   $(B)/client/q3ide_overlay.o \
   $(B)/client/q3ide_overlay_keyboard.o \
   $(B)/client/q3ide_overlay_kbcache.o \
@@ -1172,8 +1180,6 @@ Q3OBJ += \
   $(B)/client/q3ide_aas_query.o \
   $(B)/client/q3ide_aas_face.o \
   $(B)/client/q3ide_aas_walls.o \
-  $(B)/client/q3ide_wall_cache.o \
-  $(B)/client/q3ide_placement.o \
   $(B)/client/q3ide_teleport.o
 endif
 
@@ -1552,6 +1558,9 @@ $(B)/client/q3ide_log.o: $(Q3IDEDIR)/q3ide_log.c
 $(B)/client/q3ide_render.o: $(Q3IDEDIR)/q3ide_render.c
 	$(DO_CC)
 
+$(B)/client/q3ide_main_menu.o: $(Q3IDEDIR)/q3ide_main_menu.c
+	$(DO_CC)
+
 $(B)/client/q3ide_overlay.o: $(Q3IDEDIR)/q3ide_overlay.c
 	$(DO_CC)
 
@@ -1578,13 +1587,6 @@ $(B)/client/q3ide_aas_face.o: $(Q3IDEDIR)/q3ide_aas_face.c
 
 $(B)/client/q3ide_aas_walls.o: $(Q3IDEDIR)/q3ide_aas_walls.c
 	$(DO_CC)
-
-$(B)/client/q3ide_wall_cache.o: $(Q3IDEDIR)/q3ide_wall_cache.c
-	$(DO_CC)
-
-$(B)/client/q3ide_placement.o: $(Q3IDEDIR)/q3ide_placement.c
-	$(DO_CC)
-
 
 $(B)/client/q3ide_teleport.o: $(Q3IDEDIR)/q3ide_teleport.c
 	$(DO_CC)

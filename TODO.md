@@ -37,11 +37,6 @@ So u can place windows in air and on walls. Great. But our window placement on w
 
 
 
-
-- allow to switch MAPS like projects
-
-
-
 Maps
 =====
 

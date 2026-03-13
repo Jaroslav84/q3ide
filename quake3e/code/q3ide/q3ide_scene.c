@@ -21,6 +21,7 @@ const q3ide_params_t q3ide_params = {
 /* Geometry helpers — q3ide_geometry.c */
 extern void q3ide_add_frame(q3ide_win_t *win, qboolean highlighted);
 extern void q3ide_add_poly(q3ide_win_t *win);
+extern void q3ide_add_bg(q3ide_win_t *win);
 
 /* Shoot-to-place selection — q3ide_engine.c */
 extern int q3ide_selected_win;
@@ -34,6 +35,7 @@ void Q3IDE_WM_InvalidateShaders(void)
 	int i;
 	q3ide_wm.border_shader = 0;
 	q3ide_wm.edge_shader = 0;
+	q3ide_wm.bg_shader = 0;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++)
 		q3ide_wm.wins[i].shader = 0;
 }
@@ -60,12 +62,17 @@ void Q3IDE_WM_AddPolys(void)
 		byte black_bgra[4] = {0, 0, 0, 255};
 		re.UploadCinematic(1, 1, 1, 1, black_bgra, 62, qtrue, 0x80E1);
 		q3ide_wm.edge_shader = re.RegisterShader("q3ide/win62");
+		q3ide_wm.bg_shader = re.RegisterShader("q3ide/bg");
 	}
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *win = &q3ide_wm.wins[i];
 
 		if (!win->active)
 			continue;
+
+		/* Background (black + logo): always rendered regardless of LOS — lets you
+		 * spot windows with texture/stream issues even through walls. */
+		q3ide_add_bg(win);
 
 		/* LOS cached once per frame in Q3IDE_Frame — no per-pass trace needed.
 		 * Skip LOS for overview windows: grid floats map-independently. */

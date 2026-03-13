@@ -144,7 +144,8 @@ typedef struct {
 	q3ide_fn_resume_streams cap_resume_streams; /* optional: resume frame delivery */
 	q3ide_fn_poll_changes cap_poll_changes;     /* optional: window open/close events */
 	q3ide_fn_free_changes cap_free_changes;     /* optional */
-	qboolean streams_paused;                    /* qtrue while ";" is held */
+	qboolean streams_paused;                    /* qtrue while streams are paused */
+	qboolean streams_user_paused;               /* qtrue when user explicitly paused via ";" — blocks ResumeStreams */
 	qboolean wins_hidden;                       /* qtrue while "H" hides all windows */
 	Q3ideCapture *cap;
 	vec3_t player_eye;               /* eye position, set each frame by UpdatePlayerPos */
@@ -156,6 +157,7 @@ typedef struct {
 	int fbuf_size;
 	qhandle_t border_shader; /* scratch slot 63: solid red — hover/select borders */
 	qhandle_t edge_shader;   /* scratch slot 62: solid black — TV chassis edge quads */
+	qhandle_t bg_shader;     /* q3ide/bg: black + logo — always-rendered diagnostic backdrop */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;
 	pthread_mutex_t poll_mutex;

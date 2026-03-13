@@ -31,7 +31,7 @@ These variables can be overridden on the command line (e.g., `make USE_VULKAN=1`
 | `USE_SDL` | 0 (Linux) / varies | Use SDL2 for windowing/input |
 | `USE_OPENGL` | 1 | Build OpenGL renderer |
 | `USE_OPENGL2` | 0 | Build OpenGL2 renderer |
-| `USE_VULKAN` | 1 | Build Vulkan renderer |
+| `USE_VULKAN` | 0 | Build Vulkan renderer |
 | `USE_RENDERER_DLOPEN` | 1 | Dynamic renderer loading |
 | `RENDERER_DEFAULT` | opengl | Default renderer when dynamic loading |
 | `USE_CURL` | 1 | Enable HTTP downloads |

@@ -38,7 +38,67 @@ while [[ $# -gt 0 ]]; do
                 1|true)  MUSIC_ON=true;  shift 2 ;;
                 *)       MUSIC_ON=true;  shift ;;
             esac ;;
-        --level)        LEVEL="$2"; shift 2 ;;
+        --level)
+            case "${2:-}" in
+                r|random)
+                    _maps=(
+                        # Lunaran
+                        lun3dm1 lun3dm2 lun3dm3-cpm lun3dm4 lun3dm5 lun3_20b1
+                        # Acidwire
+                        acid3dm2 acid3dm3 acid3dm3r acid3tourney3
+                        acid3dm4 acid3dm5 acid3dm6 acid3dm7
+                        acid3dm8 acid3dm9 acid3dm10 acid3dm11 acid3dm12
+                        # CPMA
+                        cpm1a cpm2 cpm3 cpm3a cpm4 cpm4a cpm5 cpm6 cpm7 cpm8 cpm9 cpm10
+                        cpm11 cpm11a cpm12 cpm13 cpm14 cpm15 cpm16 cpm17
+                        cpm18 cpm18r cpm19 cpm20 cpm21 cpm22 cpm23 cpm24
+                        cpm25 cpm26 cpm27 cpm28 cpm29
+                        cpmctf1 cpmctf2 cpmctf3 cpmctf4 cpmctf5 cpma3
+                        # CTF
+                        q3ctfchnu01 QuadCTF jlctf1 jlctf2 jlctf3 q3tourney6_ctf
+                        # DC Mappack
+                        dc_map02 dc_map03 dc_map04 dc_map05 dc_map06 dc_map07
+                        dc_map08 dc_map09 dc_map10 dc_map11 dc_map12 dc_map13
+                        dc_map14 dc_map15 dc_map16 dc_map17 dc_map18 dc_map19
+                        dc_map20 dc_map21 dc_map22 dc_map23 dc_map24
+                        # ZTN
+                        ztn3dm1 ztn3dm1-ho ztn3tourney1
+                        # Classic Pro DM
+                        hub3aeroq3 aggressor bloodcovenant focal_p132 overkill
+                        pro-nodm9 pro-q3dm6 pro-q3dm13 pro-q3tourney2 pro-q3tourney4
+                        pro-q3tourney7 pukka3tourney2 tig_den
+                        # Egyptian
+                        egyptsm1 gpl-gypt
+                        # OSP
+                        ospca1 ospctf1 ospctf2
+                        ospdm1 ospdm2 ospdm3 ospdm4 ospdm5 ospdm6
+                        ospdm7 ospdm8 ospdm9 ospdm10 ospdm11 ospdm12
+                        # Threewave CTF
+                        q3wcp1 q3wcp2 q3wcp3 q3wcp4 q3wcp5 q3wcp6 q3wcp7 q3wcp8
+                        q3wxs1 q3wcp9 q3wcp10 q3wcp11 q3wcp12 q3wcp13 q3wcp14 q3wcp15
+                        q3wcp16 q3wxs2
+                        # WTF Pack
+                        wtf01 wtf02 wtf03 wtf04 wtf05 wtf06 wtf07 wtf08 wtf09 wtf10
+                        wtf11 wtf12 wtf13 wtf14 wtf15 wtf16 wtf17 wtf18 wtf19 wtf20
+                        wtf21 wtf22 wtf23 wtf24 wtf25 wtf26 wtf27 wtf28 wtf29 wtf30
+                        wtf31 wtf32 wtf33 wtf34 wtf35 wtf36 wtf37 wtf38 wtf39 wtf40
+                        wtf41 wtf42 wtf43 wtf44 wtf45 wtf46 wtf47 wtf48
+                        wtf01-pro wtf02-pro wtf04-pro wtf07-pro wtf08-pro
+                        wtf25-pro wtf32-day wtf33-pro wtf37-pro wtf48-pro
+                        wtf35-bfg wtf35-gauntlet wtf35-grayscale wtf35-grenades
+                        wtf35-lightning wtf35-machine wtf35-plasmagun
+                        wtf35-rocket wtf35-shotgun wtf35-ultra
+                        # sst13 fun
+                        13matrix 13star 13cube 13island 13stone 13dyna
+                        # Other
+                        ori_apt quatrix r7-blockworld1 m3amap1
+                    )
+                    LEVEL="${_maps[$RANDOM % ${#_maps[@]}]}"
+                    echo "[build] Random map: $LEVEL"
+                    shift 2 ;;
+                *)
+                    LEVEL="$2"; shift 2 ;;
+            esac ;;
         --execute)      EXECUTE="$2"; shift 2 ;;
         --bots)         BOTS="$2"; shift 2 ;;
         --release)
@@ -47,7 +107,7 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             RELEASE_BUILD="$2"; shift 2 ;;
-        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--fast] [--run] [--api] [--engine-only] [--music] [--level <map>] [--execute '<cmd>'] [--bots <n>] [--release orig|stable|nightbuild|/path]"; exit 1 ;;
+        *)              echo "Unknown flag: $1"; echo "Usage: build.sh [--clean] [--fast] [--run] [--api] [--engine-only] [--music] [--level <map|r>] [--execute '<cmd>'] [--bots <n>] [--release orig|stable|nightbuild|/path]"; exit 1 ;;
     esac
 done
 
@@ -114,13 +174,6 @@ if [ "$OS_TYPE" = "Darwin" ]; then
     HIDPI_N=$(echo "$SP_DISP" | grep -ic "HiDPI: Yes\|Retina: Yes" || true)
     [ "${HIDPI_N:-0}" -gt 0 ] && HIDPI_STR="YES" || HIDPI_STR="NO"
     OPENGL_STR="YES"  # always present on macOS (deprecated but present)
-    if [ -f "/usr/local/lib/libMoltenVK.dylib" ] || \
-       [ -f "$HOME/VulkanSDK/macOS/lib/libMoltenVK.dylib" ] || \
-       [ -d "/usr/local/share/vulkan" ]; then
-        VULKAN_STR="YES"
-    else
-        VULKAN_STR="NO"
-    fi
 
     # Monitor info: one line per display "[n] WxH @ HzHz  Retina|Non-Retina"
     MONITOR_LAYOUT=$(python3 - <<'PYEOF' 2>/dev/null
@@ -180,8 +233,7 @@ else
     GPU=$(lspci 2>/dev/null | grep -i "vga\|3d\|display" | head -1 | sed 's/.*: //' || true)
     [ -z "$GPU" ] && GPU="unknown"
     GPU_VRAM="?"
-    METAL_STR="NO"; OPENCL_STR="NO"; HIDPI_STR="NO"; OPENGL_STR="NO"
-    if command -v vulkaninfo >/dev/null 2>&1; then VULKAN_STR="YES"; else VULKAN_STR="NO"; fi
+    METAL_STR="NO"; OPENCL_STR="NO"; HIDPI_STR="NO"; OPENGL_STR="YES"
     MONITOR_LAYOUT="unknown"
 fi
 
@@ -197,27 +249,28 @@ _api() { printf "%-6s %s" "$1" "$(_yn "$2")"; }
 IFS=$'\n' read -r -d '' -a _MON <<< "$MONITOR_LAYOUT" 2>/dev/null || true
 [ ${#_MON[@]} -eq 0 ] && _MON=("unknown")
 
-# ASCII skull art — 16 lines, each ≤32 chars
+# ASCII skull art — 17 lines (shifted down 1, left 2), each ≤32 chars
 _A=(
-    "         .,o'           \`o,."
-    "       o8'                \`8o"
-    "     o8:                    ;8o"
-    "    .88                      88."
-    "    :88.                    ,88:"
-    "    \`888                    888'"
-    "     888o   \`888 88 888'   o888"
-    "    \`888o,. \`88 88 88' .,o888'"
-    "      \`888888888 88 8888888888'"
-    "       \`8888888 88 88888888'"
-    "           \`::88 88 ;88;:'"
-    "             88 88 88"
-    "             88 88 88"
-    "              8 88 8"
     ""
-    "         Quake III IDE"
+    "       .,o'           \`o,."
+    "     o8'                \`8o"
+    "   o8:                    ;8o"
+    "  .88                      88."
+    "  :88.                    ,88:"
+    "  \`888                    888'"
+    "   888o   \`888 88 888'   o888"
+    "  \`888o,. \`88 88 88' .,o888'"
+    "    \`888888888 88 8888888888'"
+    "     \`8888888 88 88888888'"
+    "         \`::88 88 ;88;:'"
+    "           88 88 88"
+    "           88 88 88"
+    "            8 88 8"
+    ""
+    "       Quake III IDE"
 )
 
-# Info column — 16 rows. API row uses ANSI color; no right-wall so width is free.
+# Info column — 18 rows. API rows use ANSI color; no right-wall so width is free.
 _R=(
     "Q3IDE BUILD ENVIRONMENT  [$_TS]"
     "$_RDIV"
@@ -229,17 +282,22 @@ _R=(
     "$(printf 'RAM   %-8s  GPU   %s' "$RAM" "$GPU")"
     "VRAM  $GPU_VRAM"
     "$_RDIV"
-    "$(_api Metal "$METAL_STR")   $(_api Vulkan "$VULKAN_STR")   $(_api OpenGL "$OPENGL_STR")   $(_api OpenCL "$OPENCL_STR")   $(_api HiDPI "$HIDPI_STR")"
+    "$(_api Metal "$METAL_STR")   $(_api OpenGL "$OPENGL_STR")   $(_api OpenCL "$OPENCL_STR")   $(_api HiDPI "$HIDPI_STR")"
     "$_RDIV"
-    ""
     "${_MON[0]:-}"
     "${_MON[1]:-}"
     "${_MON[2]:-}"
+    ""
+    "$_RDIV"
+    "${LEVEL:+Map   $LEVEL}"
 )
+
+# ASCII art needs 19 lines too — pad with blanks
+_A+=( "" )
 
 printf '\n'
 printf '  ╔══════════════════════════════════════════════════════════════════════════════════════════\n'
-for _i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+for _i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
     printf '  ║  %-32s  │  %s\n' "${_A[$_i]}" "${_R[$_i]}"
 done
 printf '  ╚══════════════════════════════════════════════════════════════════════════════════════════\n'

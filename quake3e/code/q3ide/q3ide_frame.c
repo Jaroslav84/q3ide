@@ -10,8 +10,6 @@
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
 #include "q3ide_aas.h"
-#include "q3ide_wall_cache.h"
-#include "q3ide_placement.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -25,6 +23,42 @@ extern void q3ide_gamma_tick(const char *cur_map);
 
 /* Shoot-to-place — q3ide_engine_hooks_input.c */
 extern void q3ide_shoot_frame(void);
+
+static const char *map_pack_name(const char *m)
+{
+	if (!m || !m[0])
+		return "Quake III";
+	if (!Q_stricmpn(m, "acid", 4))
+		return "Acid";
+	if (!Q_stricmpn(m, "cpmctf", 6) || !Q_stricmpn(m, "cpma", 4))
+		return "CPMA";
+	if (!Q_stricmpn(m, "cpm", 3))
+		return "CPMA";
+	if (!Q_stricmpn(m, "dc_map", 6))
+		return "DC Mappack";
+	if (!Q_stricmpn(m, "ztn", 3))
+		return "ZTN";
+	if (!Q_stricmpn(m, "osp", 3))
+		return "OSP";
+	if (!Q_stricmpn(m, "q3wcp", 5) || !Q_stricmpn(m, "q3wxs", 5))
+		return "Threewave CTF";
+	if (!Q_stricmpn(m, "wtf", 3))
+		return "WTF Pack";
+	if (!Q_stricmpn(m, "13", 2))
+		return "sst13";
+	if (!Q_stricmpn(m, "pro-", 4) || !Q_stricmpn(m, "pukka", 5) || !Q_stricmp(m, "hub3aeroq3") ||
+	    !Q_stricmp(m, "aggressor") || !Q_stricmp(m, "bloodcovenant") || !Q_stricmp(m, "overkill") ||
+	    !Q_stricmp(m, "tig_den"))
+		return "Pro DM";
+	if (!Q_stricmpn(m, "egypt", 5) || !Q_stricmpn(m, "gpl-gypt", 8))
+		return "Egyptian";
+	if (!Q_stricmpn(m, "jlctf", 5) || !Q_stricmp(m, "q3tourney6_ctf") || !Q_stricmp(m, "QuadCTF") ||
+	    !Q_stricmp(m, "q3ctfchnu01"))
+		return "CTF";
+	if (!Q_stricmpn(m, "q3dm", 4) || !Q_stricmpn(m, "q3tourney", 9))
+		return "Quake III";
+	return "Custom";
+}
 
 void Q3IDE_Frame(void)
 {
@@ -78,6 +112,12 @@ void Q3IDE_Frame(void)
 				}
 				Q3IDE_LOGI("map entities: %d total", n);
 			}
+			{
+				const char *mapname = Cvar_VariableString("mapname");
+				char banner[64];
+				Com_sprintf(banner, sizeof(banner), "%s  /  %s", map_pack_name(mapname), mapname);
+				Q3IDE_SetHudMsg(banner, Q3IDE_MAP_BANNER_MS);
+			}
 			q3ide_state.autoexec_done = qtrue;
 		}
 	}
@@ -128,11 +168,17 @@ void Q3IDE_Frame(void)
 					_hw = _w->world_w * 0.5f;
 					_hh = _w->world_h * 0.5f;
 
-					/* Proximity exemption: within 1 window diagonal the player is
-					 * clearly next to the TV — skip LOS, always show it. */
-					if (_w->player_dist < sqrtf(_hw * _hw + _hh * _hh) * Q3IDE_LOS_PROXIMITY_MULT) {
-						_w->los_visible = qtrue;
-						continue;
+					/* Proximity exemption: within N× diagonal, always show.
+					 * Hysteresis: already-visible windows use larger threshold
+					 * to avoid flicker at the boundary. */
+					{
+						float _diag  = sqrtf(_hw * _hw + _hh * _hh);
+						float _thresh = _diag * (_w->los_visible ? Q3IDE_LOS_PROXIMITY_HYST_MULT
+						                                          : Q3IDE_LOS_PROXIMITY_MULT);
+						if (_w->player_dist < _thresh) {
+							_w->los_visible = qtrue;
+							continue;
+						}
 					}
 
 					_w->los_visible = qfalse;
@@ -169,19 +215,8 @@ void Q3IDE_Frame(void)
 
 		q3ide_shoot_frame();
 
-		/* Area-change detector — rebuild wall cache + queue windows on transition */
-		{
-			static int last_area;
-			int cur_area = Q3IDE_AAS_PointArea(eye);
-			if (cur_area > 0 && cur_area != last_area) {
-				last_area = cur_area;
-				Q3IDE_WallCache_Build(eye, cur_area);
-				Q3IDE_Placement_QueueAll();
-			}
-		}
 	}
 
-	Q3IDE_Placement_Tick();
 	Q3IDE_ViewModes_Tick();
 	Q3IDE_WM_PollFrames();
 

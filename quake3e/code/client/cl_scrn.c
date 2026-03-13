@@ -526,23 +526,6 @@ static void SCR_DrawScreenField( stereoFrame_t stereoFrame ) {
 
 	uiFullscreen = (uivm && VM_Call( uivm, 0, UI_IS_FULLSCREEN ));
 
-// q3ide [BEGIN] ESC Menu Debug Log - code/client/cl_scrn.c
-#ifdef USE_Q3IDE
-	{
-		static qboolean last_ui_fs = -1;
-		static int last_state = -1;
-		int keycatch = Key_GetCatcher();
-		if ( (int)uiFullscreen != (int)last_ui_fs || cls.state != last_state ) {
-			Com_Printf( "q3ide SCRN: uiFullscreen=%d state=%d keycatch=0x%x vidW=%d vidH=%d\n",
-				(int)uiFullscreen, cls.state, keycatch,
-				cls.glconfig.vidWidth, cls.glconfig.vidHeight );
-			last_ui_fs = uiFullscreen;
-			last_state = cls.state;
-		}
-	}
-#endif
-// q3ide [END] ESC Menu Debug Log
-
 	// wide aspect ratio screens need to have the sides cleared
 	// unless they are displaying game renderings
 	if ( uiFullscreen || cls.state < CA_LOADING ) {

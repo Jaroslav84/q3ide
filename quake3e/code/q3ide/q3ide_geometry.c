@@ -31,6 +31,64 @@ void q3ide_win_basis(q3ide_win_t *win, vec3_t right, vec3_t up)
 }
 
 /*
+ * q3ide_add_bg — black+logo backdrop sandwiched around the tunnel face.
+ *
+ * Two quads submitted as one poly call (numPolys=2):
+ *   front bg: depth = 1.0 - BG_DEPTH_OFFSET — behind front face, CCW from front
+ *   back  bg: depth = 1.0 + BG_DEPTH_OFFSET — behind back  face, CCW from back
+ * Standard backface cull (no cull none) means each quad is only visible from
+ * its own side, so neither bleeds through to occlude the opposite tunnel face.
+ */
+void q3ide_add_bg(q3ide_win_t *win)
+{
+	static const float sx[4] = {-1, 1, 1, -1};
+	static const float sy[4] = {-1, -1, 1, 1};
+	static const int back_idx[4] = {3, 2, 1, 0};
+	polyVert_t verts[8];
+	vec3_t right, up;
+	float hw = win->world_w * 0.5f, hh = win->world_h * 0.5f;
+	float fd = 1.0f - Q3IDE_BG_DEPTH_OFFSET;
+	float bd = 1.0f + Q3IDE_BG_DEPTH_OFFSET;
+	int i, bi;
+
+	if (!q3ide_wm.bg_shader || !re.AddPolyToScene)
+		return;
+
+	q3ide_win_basis(win, right, up);
+	for (i = 0; i < 4; i++) {
+		float bx = right[0] * sx[i] * hw + up[0] * sy[i] * hh;
+		float by = right[1] * sx[i] * hw + up[1] * sy[i] * hh;
+		float bz = right[2] * sx[i] * hw + up[2] * sy[i] * hh;
+		float u = (sx[i] + 1.0f) * 0.5f;
+		float v = (1.0f - sy[i]) * 0.5f;
+
+		/* Front bg — CCW from front, at depth fd */
+		verts[i].xyz[0] = win->origin[0] + bx + win->normal[0] * fd;
+		verts[i].xyz[1] = win->origin[1] + by + win->normal[1] * fd;
+		verts[i].xyz[2] = win->origin[2] + bz + win->normal[2] * fd;
+		verts[i].st[0] = u;
+		verts[i].st[1] = v;
+		verts[i].modulate.rgba[0] = 255;
+		verts[i].modulate.rgba[1] = 255;
+		verts[i].modulate.rgba[2] = 255;
+		verts[i].modulate.rgba[3] = 255;
+
+		/* Back bg — reversed winding (CCW from back), at depth bd */
+		bi = 4 + back_idx[i];
+		verts[bi].xyz[0] = win->origin[0] + bx + win->normal[0] * bd;
+		verts[bi].xyz[1] = win->origin[1] + by + win->normal[1] * bd;
+		verts[bi].xyz[2] = win->origin[2] + bz + win->normal[2] * bd;
+		verts[bi].st[0] = u;
+		verts[bi].st[1] = v;
+		verts[bi].modulate.rgba[0] = 255;
+		verts[bi].modulate.rgba[1] = 255;
+		verts[bi].modulate.rgba[2] = 255;
+		verts[bi].modulate.rgba[3] = 255;
+	}
+	re.AddPolyToScene(q3ide_wm.bg_shader, 4, verts, 2);
+}
+
+/*
  * Fill 4 verts of one border strip into buf[base..base+3].
  * xs/ys are the 4 corner offsets in right/up space; depth is normal scale.
  */

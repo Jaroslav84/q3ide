@@ -2,13 +2,43 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Holy Rule
+
+- never usr 'rm'. Use 'trash' command instead. You can dig through trashes too.
+
 ## Communication Style
 
-Match the question. Simple question = simple answer. No theories, no code, no walls of text unless asked.
+**Rules — no exceptions:**
+- If the message has sentences with `?` — you are NOT allowed to write or modify any code. Answer question only.
+- Explain in plain English. Heavy jargon or math only if unavoidable — use the proper name in parentheses after. No file names in explanations. Show the constant name when it's relevant.
 
-If the user asks a question — answer it. Do not start planning, implementing, or showing code examples unless explicitly told to.
+## Coding Style
 
-**If the message ends with `?` — you are NOT allowed to write or modify any code. Answer only. No exceptions.**
+- Minimize Quake3e internal code changes — keep engine swappable.
+- **File size:** max 400 lines, sweet spot 200. Never grow internal Quake3e files.
+- **C99 (q3ide/):** tabs, K&R braces, `snake_case`. All public symbols prefixed `q3ide_`/`Q3IDE_`. All Quake3e hooks inside `#ifdef USE_Q3IDE`.
+- **Rust (capture/):** No `unsafe` outside `lib.rs`. `Result`/`?` for errors. `crossbeam` for concurrency.
+- **Naming:** VisionOS terminology — Window, Ornament (not panel/toolbar).
+- **File names:** never too short or cryptic. Must be tiny, human-readable. Spell out what the file does. `q3ide_wm.h` → `q3ide_win_mngr.h`, `q3ide_cmd.c` → `q3ide_commands.c`, `q3ide_geom.c` → `q3ide_geometry.c`. If a new teammate can't guess the contents from the name alone, rename it.
+- **ALWAYS remind the user to `--clean` build** after C source changes. `make` timestamps can miss changes across Docker/macOS sync.
+- **When running inside Docker** — use the Remote API + WebSocket bridge (see section below). Do NOT fall back to log polling; use the live WebSocket stream instead.
+
+
+## q3ide_params.h — THE HOLY BOOK
+
+`quake3e/code/q3ide/q3ide_params.h` is the **single source of truth** for every tunable constant in q3ide.
+
+**Rules — no exceptions:**
+- ALL new magic numbers go here. Never hardcode values in `.c` files.
+- This includes **every timeout, delay, threshold, interval, cap, and timer** — `1000ULL`, `2000ULL`, `500ms`, `30px`, all of it. If it's a number that controls behaviour, it belongs here.
+- NEVER add, edit, or remove entries without understanding the full downstream impact.
+- NEVER duplicate a constant that already exists here. Search before adding.
+- When removing a constant, grep every `.c`/`.h` file first — if anything references it, the removal is a breaking change.
+- Comments are mandatory. Every constant needs a one-line explanation of what it controls and why.
+- The `CAPS & THROTTLES` section at the top lists all hard limits. New caps go there with a warning comment.
+
+
+
 
 ## Parallel Agents — Lint/Build Fail Triage
 
@@ -16,10 +46,10 @@ If the user asks a question — answer it. Do not start planning, implementing, 
 
 When lint or build fails:
 1. Read the error. Which file?
-2. Your scope? → fix it.
-3. Another agent's scope? → **stop. report to orchestrator. do not touch it.**
+2. Your scope when multiple claude sessions are running in parallel? → fix it.
+3. Another agent's scope? → **stop. report to orchestrator. do not touch it, don't build.**
 
-File ownership:
+File ownership for agents:
 - `quake3e/code/q3ide/`, `quake3e/Makefile` → **engine-adapter**
 - `capture/` → **capture-rust**
 - `spatial/` → **spatial-c**
@@ -41,57 +71,6 @@ If another agent's WIP breaks the shared build, that's their fix. Report the fai
 ## Agent Infrastructure Location
 
 **Agent definition files always go in `.agents/agents/`** (dot-prefixed, at project root) — NOT in `.claude/` or `agents/` (no dot). Commands go in `.agents/commands/`. Project manifest at `.agents/PROJECT_LOOP.md`. Claude-only settings in `.claude/`. The `.agents/` convention is the cross-IDE standard (Claude Code, OpenCode, etc.).
-
-## Stream Freeze Pattern — Pause All Windows at Zero Cost
-
-**The canonical cost-saving technique for expensive operations.** Verified in production: 100% FPS restoration instantly.
-
-```c
-// Pause — call before any expensive op (area transition, placement queue drain, etc.)
-Q3IDE_WM_PauseStreams();   // sets STREAMS_PAUSED atomic bool in Rust
-                           // get_frame() returns None → zero texture uploads
-                           // SCStreams stay warm, last frame frozen on GPU
-
-// Resume — call when done
-Q3IDE_WM_ResumeStreams();
-```
-
-**Properties:**
-- No SCStream teardown, no latency. Pure flag check per `get_frame()` call.
-- Last captured frame stays frozen on GPU — content looks alive, just static.
-- Left overlay shows amber "PAUSED" banner while active.
-- Hold ";" in-game to trigger manually.
-
-**Use this everywhere:** area transitions, placement queue drain (Stage 1.4), any operation that would otherwise spike texture upload bandwidth.
-
-**Files:** `capture/src/screencapturekit.rs` (`STREAMS_PAUSED`, `set_streams_paused`), `capture/src/lib.rs` (`q3ide_pause_all_streams`, `q3ide_resume_all_streams`), `quake3e/code/q3ide/q3ide_win_mngr.c` (`Q3IDE_WM_PauseStreams`, `Q3IDE_WM_ResumeStreams`).
-
----
-
-## q3ide_params.h — THE HOLY BOOK
-
-`quake3e/code/q3ide/q3ide_params.h` is the **single source of truth** for every tunable constant in q3ide.
-
-**Rules — no exceptions:**
-- ALL new magic numbers go here. Never hardcode values in `.c` files.
-- This includes **every timeout, delay, threshold, interval, cap, and timer** — `1000ULL`, `2000ULL`, `500ms`, `30px`, all of it. If it's a number that controls behaviour, it belongs here.
-- NEVER add, edit, or remove entries without understanding the full downstream impact.
-- NEVER duplicate a constant that already exists here. Search before adding.
-- When removing a constant, grep every `.c`/`.h` file first — if anything references it, the removal is a breaking change.
-- Comments are mandatory. Every constant needs a one-line explanation of what it controls and why.
-- The `CAPS & THROTTLES` section at the top lists all hard limits. New caps go there with a warning comment.
-
-## Coding Style
-
-- Minimize Quake3e internal code changes — keep engine swappable.
-- **File size:** max 400 lines, sweet spot 200. Never grow internal Quake3e files.
-- **C99 (q3ide/):** tabs, K&R braces, `snake_case`. All public symbols prefixed `q3ide_`/`Q3IDE_`. All Quake3e hooks inside `#ifdef USE_Q3IDE`.
-- **Rust (capture/):** No `unsafe` outside `lib.rs`. `Result`/`?` for errors. `crossbeam` for concurrency.
-- **Naming:** VisionOS terminology — Window, Ornament (not panel/toolbar).
-- **File names:** never too short or cryptic. Must be tiny, human-readable. Spell out what the file does. `q3ide_wm.h` → `q3ide_win_mngr.h`, `q3ide_cmd.c` → `q3ide_commands.c`, `q3ide_geom.c` → `q3ide_geometry.c`. If a new teammate can't guess the contents from the name alone, rename it.
-- **ALWAYS remind the user to `--clean` build** after C source changes. `make` timestamps can miss changes across Docker/macOS sync.
-- **When running inside Docker** — use the Remote API + WebSocket bridge (see section below). Do NOT fall back to log polling; use the live WebSocket stream instead.
-
 
 ## NO Unsolicited Optimizations
 

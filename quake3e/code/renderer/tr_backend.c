@@ -972,13 +972,6 @@ void RB_SetGL2D( void ) {
 		int cw = ri.Cvar_VariableIntegerValue( "r_mmCenterW" );
 		int ch = ri.Cvar_VariableIntegerValue( "r_mmCenterH" );
 		if ( cw > 0 && ch > 0 ) {
-// q3ide [BEGIN] RB_SetGL2D Debug Log - code/renderer/tr_backend.c
-			static int q3ide_gl2d_logged;
-			if ( !q3ide_gl2d_logged ) {
-				ri.Printf( PRINT_ALL, "q3ide RB_SetGL2D: viewport(%d,0,%d,%d) ortho(0,%d,%d,0)\n", cx, cw, ch, cw, ch );
-				q3ide_gl2d_logged = 1;
-			}
-// q3ide [END] RB_SetGL2D Debug Log
 			qglViewport( cx, 0, cw, ch );
 			qglScissor( cx, 0, cw, ch );
 			qglMatrixMode( GL_PROJECTION );

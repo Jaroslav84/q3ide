@@ -75,7 +75,7 @@
 
 /* ── Wall placement (legacy — shoot-to-place) ──────────────────── */
 
-#define Q3IDE_WALL_DIST   512.0f /* wall-scan trace length */
+#define Q3IDE_WALL_DIST   6666.0f /* wall-scan trace length */
 #define Q3IDE_WALL_OFFSET 3.0f   /* push off wall surface to avoid z-fighting */
 
 

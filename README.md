@@ -224,7 +224,7 @@ sh ./scripts/build.sh [options]
 | `--clean` | Run `make clean` before building (full rebuild) |
 | `--engine-only` | Skip Rust dylib build — only recompile the engine (faster iteration). **Never combine with `--clean`** — clean deletes the dylib and engine-only won't copy it back. |
 | `--api` | Start the Remote API server (`scripts/remote_api.py`) in the background before launching |
-| `--level <map>` | Map to load. Shorthand: `0`→`q3dm0`, `7`→`q3dm7`, or full name like `q3dm17`. Default: whatever is in `autoexec.cfg` |
+| `--level <map>` | Map to load. Shorthand: `0`→`q3dm0`, `7`→`q3dm7`, or full name like `q3dm17` or `r` for random custom map made by other cool people ;) Default: whatever is in `autoexec.cfg` |
 | `--execute '<cmd>'` | Console command(s) to run after the map loads (~60 frames after spawn). Supports semicolons: `'q3ide attach all; set cg_drawFPS 1'` |
 | `--bots <n>` | Add N bots to the game (sets `bot_minplayers` to N+1) |
 | `--music` | Enable random background music track on q3dm0 |

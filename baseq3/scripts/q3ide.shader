@@ -1,3 +1,21 @@
+/* Black background behind each tunnel face — diagnostic: always visible, no LOS gate.
+ * Logo texture: change gfx/misc/q3logo to any image in pak0 you prefer. */
+q3ide/bg
+{
+    nomipmaps
+    nopicmip
+    {
+        map $whiteimage
+        rgbGen const ( 0 0 0 )
+        depthWrite
+    }
+    {
+        map gfx/misc/q3logo
+        blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
+        rgbGen identity
+    }
+}
+
 q3ide/mirror
 {
     portal

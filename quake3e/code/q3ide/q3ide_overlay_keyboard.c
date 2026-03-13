@@ -12,7 +12,6 @@
  */
 
 #include "q3ide_engine_hooks.h"
-#include "q3ide_log.h"
 #include "q3ide_params.h"
 #include "q3ide_params_theme.h"
 #include "q3ide_win_mngr.h"
@@ -64,21 +63,23 @@ float g_kb_max_right; /* max right extent of glyph cache — set by kbcache.c */
 void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 {
 	const refdef_t *fd = (const refdef_t *) refdef_ptr;
-	const float rx[3] = {-fd->viewaxis[1][0], -fd->viewaxis[1][1], -fd->viewaxis[1][2]};
+	const float rx[3] = {fd->viewaxis[1][0], fd->viewaxis[1][1], fd->viewaxis[1][2]};
 	const float ux[3] = {fd->viewaxis[2][0], fd->viewaxis[2][1], fd->viewaxis[2][2]};
 	unsigned long long now;
 	int gi;
 
+	if (fd->rdflags & RDF_NOWORLDMODEL)
+		return;
 	q3ide_ovl_init();
-	{
-		static int once;
-		if (!once) {
-			Q3IDE_LOGI("ovl_init: chars=%d AddPoly=%s", (int) g_ovl_chars, re.AddPolyToScene ? "ok" : "null");
-			once = 1;
-		}
-	}
 	if (!g_ovl_chars || !re.AddPolyToScene)
 		return;
+
+	/* Debug: bright magenta '@' at screen centre — remove once overlay confirmed visible */
+	{
+		float dbg[3];
+		q3ide_ovl_pixel_pos(fd, (float) fd->width * 0.5f, (float) fd->height * 0.5f, dbg);
+		q3ide_ovl_char(dbg[0], dbg[1], dbg[2], rx, ux, '@', 255, 0, 255);
+	}
 
 	/* Rate-limited cache rebuild */
 	now = (unsigned long long) Sys_Milliseconds();
@@ -86,26 +87,16 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		q3ide_rebuild_keyboard_cache();
 		g_ovl_last_build_ms = now;
 		g_ovl_dirty = qfalse;
-		{
-			static int once2;
-			if (!once2) {
-				Q3IDE_LOGI("ovl kbcache built: glyph_count=%d max_right=%.2f kb_bot=%.2f", g_glyph_count,
-				           g_kb_max_right, g_kb_bot);
-				once2 = 1;
-			}
-		}
 	}
 
-	/* ── Keyboard anchor: top-right corner ─────────────────────────── */
+	/* ── Keyboard anchor: top-left corner ──────────────────────────── */
 	float kbpos[3];
-	q3ide_ovl_pixel_pos(fd, (float) fd->width - Q3IDE_OVL_KB_RIGHT_MARGIN_PX, (float) Q3IDE_OVL_KB_TOP_MARGIN_PX,
-	                    kbpos);
+	q3ide_ovl_pixel_pos(fd, (float) Q3IDE_OVL_KB_LEFT_MARGIN_PX, (float) Q3IDE_OVL_KB_TOP_MARGIN_PX, kbpos);
 
-	/* Replay glyph cache — shift right by -g_kb_max_right so rightmost
-	 * glyph lands at kbpos (right screen edge minus margin). */
+	/* Replay glyph cache — leftmost glyph at kbpos, others extend RIGHT. */
 	for (gi = 0; gi < g_glyph_count; gi++) {
 		const ovl_rel_glyph_t *gp = &g_glyphs[gi];
-		float dr = gp->right - g_kb_max_right;
+		float dr = gp->right;
 		float cx = kbpos[0] + rx[0] * dr + ux[0] * gp->up;
 		float cy = kbpos[1] + rx[1] * dr + ux[1] * gp->up;
 		float cz = kbpos[2] + rx[2] * dr + ux[2] * gp->up;
@@ -124,37 +115,35 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr)
 		}
 	}
 
-	/* ── Notifications: below keyboard, right-aligned ───────────────── */
+	/* ── Notifications: below keyboard, left-aligned ────────────────── */
 	{
 		float nl = Q3IDE_OVL_LINE_H * Q3IDE_OVL_SMALL_SCALE;
-		float notif_cw = Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE;
 		int nrow = 0;
 
 		if (q3ide_wm.streams_paused) {
 			float row_up = g_kb_bot - nl * (float) (nrow + 1);
-			float tw = 6.0f * notif_cw; /* "PAUSED" = 6 chars */
-			float lx = kbpos[0] - rx[0] * tw + ux[0] * row_up;
-			float ly = kbpos[1] - rx[1] * tw + ux[1] * row_up;
-			float lz = kbpos[2] - rx[2] * tw + ux[2] * row_up;
+			float lx = kbpos[0] + ux[0] * row_up;
+			float ly = kbpos[1] + ux[1] * row_up;
+			float lz = kbpos[2] + ux[2] * row_up;
 			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, "PAUSED", Q3IDE_CLR_NOTIF_PAUSED);
 			nrow++;
 		}
 		if (q3ide_wm.wins_hidden) {
 			float row_up = g_kb_bot - nl * (float) (nrow + 1);
-			float tw = 6.0f * notif_cw; /* "HIDDEN" = 6 chars */
-			float lx = kbpos[0] - rx[0] * tw + ux[0] * row_up;
-			float ly = kbpos[1] - rx[1] * tw + ux[1] * row_up;
-			float lz = kbpos[2] - rx[2] * tw + ux[2] * row_up;
+			float lx = kbpos[0] + ux[0] * row_up;
+			float ly = kbpos[1] + ux[1] * row_up;
+			float lz = kbpos[2] + ux[2] * row_up;
 			q3ide_ovl_str_sm(lx, ly, lz, rx, ux, "HIDDEN", Q3IDE_CLR_NOTIF_HIDDEN);
 			nrow++;
 		}
 		(void) nrow;
 	}
 
-	/* ── Area label: top-left corner ────────────────────────────────── */
+	/* ── Area label: bottom-left, below window list ─────────────────── */
 	{
 		float alpos[3];
-		q3ide_ovl_pixel_pos(fd, (float) Q3IDE_OVL_WL_LEFT_MARGIN_PX, (float) Q3IDE_OVL_AREA_LABEL_TOP_PX, alpos);
+		q3ide_ovl_pixel_pos(fd, (float) Q3IDE_OVL_WL_LEFT_MARGIN_PX,
+		                    (float) fd->height - Q3IDE_OVL_AREA_LABEL_BOTTOM_PX, alpos);
 		Q3IDE_DrawAreaLabel(alpos[0], alpos[1], alpos[2], rx, ux);
 	}
 

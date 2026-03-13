@@ -23,6 +23,7 @@ typedef struct {
 static q3ide_place_item_t g_queue[Q3IDE_MAX_WIN];
 static int g_queue_head, g_queue_tail;
 static int g_active;
+static int g_was_paused; /* streams were already paused before placement started */
 
 int Q3IDE_Placement_IsActive(void)
 {
@@ -96,6 +97,10 @@ void Q3IDE_Placement_QueueAll(void)
 		int si, attempts;
 
 		if (!w->active || !w->is_tunnel)
+			continue;
+		/* Skip Focus3 display captures and overview-managed windows —
+		 * they are repositioned by their own view mode logic. */
+		if (!w->owns_stream || w->in_overview)
 			continue;
 		if (g_queue_tail >= Q3IDE_MAX_WIN)
 			break;

@@ -193,6 +193,9 @@ qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out
 	CM_BoxTrace(&tr, start, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
 	if (tr.fraction >= 1.0f || tr.startsolid)
 		return qfalse;
+	/* Reject floors, ceilings, and surfaces tilted more than 30° from vertical */
+	if (fabsf(tr.plane.normal[2]) > Q3IDE_WALL_MAX_TILT_Z)
+		return qfalse;
 	out_pos[0] = tr.endpos[0] + tr.plane.normal[0] * Q3IDE_WALL_OFFSET;
 	out_pos[1] = tr.endpos[1] + tr.plane.normal[1] * Q3IDE_WALL_OFFSET;
 	out_pos[2] = tr.endpos[2] + tr.plane.normal[2] * Q3IDE_WALL_OFFSET;

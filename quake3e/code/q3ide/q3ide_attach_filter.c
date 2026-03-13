@@ -44,9 +44,25 @@ static qboolean q3ide_is_system_junk(const Q3ideWindowInfo *w)
 	const char *a = w->app_name ? w->app_name : "";
 	int i;
 
-	for (i = 0; junk[i]; i++)
-		if (Com_Filter(junk[i], t) || Com_Filter(junk[i], a))
-			return qtrue;
+	for (i = 0; junk[i]; i++) {
+		const char *pat = junk[i];
+		/* Strip leading/trailing '*' for case-insensitive substring match */
+		int is_sub = pat[0] == '*';
+		const char *inner = is_sub ? pat + 1 : pat;
+		char core[128];
+		int clen;
+		Q_strncpyz(core, inner, sizeof(core));
+		clen = (int) strlen(core);
+		if (clen > 0 && core[clen - 1] == '*')
+			core[clen - 1] = '\0';
+		if (is_sub) {
+			if (Q_stristr(t, core) || Q_stristr(a, core))
+				return qtrue;
+		} else {
+			if (Q_stricmp(t, pat) == 0 || Q_stricmp(a, pat) == 0)
+				return qtrue;
+		}
+	}
 	return qfalse;
 }
 

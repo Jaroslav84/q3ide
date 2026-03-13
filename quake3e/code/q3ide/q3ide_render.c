@@ -19,8 +19,8 @@
 #include "../qcommon/q_shared.h"
 #include "q3ide_params.h"
 #include "q3ide_engine_hooks.h"
+#include "q3ide_main_menu.h"
 #include "q3ide_win_mngr.h"
-#include "q3ide_log.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -55,17 +55,12 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 	int center;
 
 	n = Cvar_VariableIntegerValue("r_mmNumMon");
-	{
-		static int last_log_state = -1;
-		if (cls.state != last_log_state) {
-			Q3IDE_LOGI("render state=%d rdflags=0x%x n=%d", cls.state, fd->rdflags, n);
-			last_log_state = cls.state;
-		}
-	}
 	if (n <= 1) {
 		if (!(fd->rdflags & RDF_NOWORLDMODEL) && cls.state == CA_ACTIVE) {
 			Q3IDE_WM_AddPolys();
 			Q3IDE_DrawHudMsg(fd);
+			Q3IDE_DrawLeftOverlay(fd);
+			Q3IDE_Menu_Draw(fd);
 		}
 		re.RenderScene(fd);
 		return;
@@ -123,22 +118,12 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		if (cls.state == CA_ACTIVE) {
 			Q3IDE_WM_AddPolys();
 			Q3IDE_DrawHudMsg(&view);
-			Q3IDE_DrawMonitorCorners(&view);
-			/* Left monitor (sorted[0]): draw keybinding cheat sheet overlay */
-			if (i == 0) {
-				static int ovl_logged;
-				if (!ovl_logged) {
-					Q3IDE_LOGI("DrawLeftOverlay firing mon_x=%d mon_w=%d mon_h=%d", mon_x, mon_w, mon_h);
-					ovl_logged = 1;
-				}
+			/* Left monitor: keybinding cheat sheet overlay */
+			if (i == 0)
 				Q3IDE_DrawLeftOverlay(&view);
-			}
-		} else {
-			static int skip_logged;
-			if (!skip_logged) {
-				Q3IDE_LOGI("render: CA_ACTIVE guard skipped state=%d i=%d", cls.state, i);
-				skip_logged = 1;
-			}
+			/* Centre monitor: map switcher menu */
+			if (i == center)
+				Q3IDE_Menu_Draw(&view);
 		}
 		re.RenderScene(&view);
 	}

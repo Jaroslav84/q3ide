@@ -12,6 +12,7 @@
 #include "q3ide_win_mngr_internal.h"
 #include "q3ide_view_modes.h"
 #include "q3ide_aas.h"
+#include "q3ide_main_menu.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
@@ -88,24 +89,29 @@ void Q3IDE_AddPolysToScene(void)
 
 qboolean Q3IDE_ConsumesInput(void)
 {
-	return qfalse;
+	return Q3IDE_Menu_IsOpen();
 }
 
 qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 {
 	if (!q3ide_state.initialized)
 		return qfalse;
-	/* ";" — pause/resume streams (freeze last frame, 100% FPS restore) */
+	/* ";" — pause/resume streams (killswitch: blocks all automatic resumes while active) */
 	if (key == ';') {
 		static q3ide_hotkey_t s_pause_hk = Q3IDE_HOTKEY_INIT;
 		if (down) {
-			if (q3ide_hk_down(&s_pause_hk, s_pause_hk.locked) == Q3IDE_HK_ACTIVATE)
+			if (q3ide_hk_down(&s_pause_hk, s_pause_hk.locked) == Q3IDE_HK_ACTIVATE) {
+				q3ide_wm.streams_user_paused = qtrue;
 				Q3IDE_WM_PauseStreams();
-			else
+			} else {
+				q3ide_wm.streams_user_paused = qfalse;
 				Q3IDE_WM_ResumeStreams();
+			}
 		} else {
-			if (q3ide_hk_up(&s_pause_hk, qtrue) == Q3IDE_HK_DEACTIVATE)
+			if (q3ide_hk_up(&s_pause_hk, qtrue) == Q3IDE_HK_DEACTIVATE) {
+				q3ide_wm.streams_user_paused = qfalse;
 				Q3IDE_WM_ResumeStreams();
+			}
 		}
 		return qtrue;
 	}
@@ -128,6 +134,9 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 		}
 		return qtrue;
 	}
+	/* "M" — map switcher menu */
+	if (Q3IDE_Menu_OnKey(key, down))
+		return qtrue;
 	return qfalse;
 }
 

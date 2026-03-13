@@ -47,9 +47,14 @@ qboolean Q3IDE_ViewModes_OverviewActive(void)
 
 void q3ide_overview_detach_all(void)
 {
+	int i;
 	g_ov.active = qfalse;
 	g_ov_placed = qfalse;
-	Q3IDE_WM_CmdDetachAll();
+	/* Clear in_overview flag — windows stay alive and streaming.
+	 * Avoids cap_stop/cap_start churn that leaves empty textures on second O press
+	 * (async Swift SCStream teardown races with the immediate cap_start on re-open). */
+	for (i = 0; i < Q3IDE_MAX_WIN; i++)
+		q3ide_wm.wins[i].in_overview = qfalse;
 	Q3IDE_SetHudMsg("OVERVIEW off", Q3IDE_HUD_CONFIRM_MS);
 }
 

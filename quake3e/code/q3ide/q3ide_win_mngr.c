@@ -15,6 +15,61 @@ q3ide_wm_t q3ide_wm;
 
 /* Geometry clamp — q3ide_geometry_clamp.c */
 extern void q3ide_clamp_window_size(q3ide_win_t *win);
+/* Window basis — q3ide_geometry.c */
+extern void q3ide_win_basis(q3ide_win_t *win, vec3_t right, vec3_t up);
+
+/*
+ * Push win further from the wall by Q3IDE_WALL_WINDOWS_OFFSET for each existing
+ * active window that shares the same wall and overlaps in 2D.
+ * self_idx: the wins[] index of win itself (skipped in scan).
+ */
+static void q3ide_apply_wall_stack(q3ide_win_t *win, int self_idx)
+{
+	int i;
+	float my_d, max_d, push;
+	qboolean found = qfalse;
+	vec3_t right, up;
+	q3ide_win_basis(win, right, up);
+	my_d  = DotProduct(win->origin, win->normal);
+	max_d = my_d;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+		q3ide_win_t *w;
+		vec3_t diff;
+		float along_n, dx, dz, wd;
+		if (i == self_idx)
+			continue;
+		w = &q3ide_wm.wins[i];
+		if (!w->active)
+			continue;
+		/* Same wall direction */
+		if (DotProduct(w->normal, win->normal) < 0.99f)
+			continue;
+		/* Near-coplanar: within tolerance along the shared normal */
+		VectorSubtract(win->origin, w->origin, diff);
+		along_n = DotProduct(diff, win->normal);
+		if (fabsf(along_n) > Q3IDE_WALL_OVERLAP_PLANE_TOL)
+			continue;
+		/* 2D AABB overlap in right/up space */
+		dx = DotProduct(diff, right);
+		dz = diff[2]; /* up is always world Z */
+		if (fabsf(dx) < (win->world_w + w->world_w) * 0.5f &&
+		    fabsf(dz) < (win->world_h + w->world_h) * 0.5f) {
+			wd = DotProduct(w->origin, win->normal);
+			if (wd > max_d)
+				max_d = wd;
+			found = qtrue;
+		}
+	}
+	if (!found)
+		return;
+	/* Place on top of the deepest overlapping window */
+	push = max_d + Q3IDE_WALL_WINDOWS_OFFSET - my_d;
+	if (push > 0.0f) {
+		win->origin[0] += win->normal[0] * push;
+		win->origin[1] += win->normal[1] * push;
+		win->origin[2] += win->normal[2] * push;
+	}
+}
 
 qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww, float wh, qboolean do_start,
                          qboolean skip_clamp)
@@ -79,6 +134,7 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	q3ide_wm.num_active++;
 	if (!skip_clamp)
 		q3ide_clamp_window_size(win);
+	q3ide_apply_wall_stack(win, i);
 	return qtrue;
 }
 
@@ -98,6 +154,7 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_cl
 	}
 	if (!skip_clamp)
 		q3ide_clamp_window_size(&q3ide_wm.wins[idx]);
+	q3ide_apply_wall_stack(&q3ide_wm.wins[idx], idx);
 }
 
 int Q3IDE_WM_FindById(unsigned int cid)
@@ -123,10 +180,12 @@ void Q3IDE_WM_ResumeStreams(void)
 {
 	if (!q3ide_wm.streams_paused)
 		return;
+	if (q3ide_wm.streams_user_paused)
+		return; /* ";" killswitch active — block all automatic resumes */
 	q3ide_wm.streams_paused = qfalse;
 	if (q3ide_wm.cap_resume_streams && q3ide_wm.cap)
 		q3ide_wm.cap_resume_streams(q3ide_wm.cap);
-	Q3IDE_LOGI("streams resumed (;)");
+	Q3IDE_LOGI("streams resumed");
 }
 
 void Q3IDE_WM_HideWins(void)

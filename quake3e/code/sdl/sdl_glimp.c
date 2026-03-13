@@ -261,6 +261,31 @@ static int GLW_SetMode( int mode, const char *modeFS, qboolean fullscreen, qbool
 		display = FindNearestDisplay( &x, &y, 640, 480 );
 
 		//Com_Printf("Selected display: %i\n", display );
+
+#ifdef USE_Q3IDE
+		/* Vulkan single-window mode: place on the physically centre monitor (median x) */
+		if ( vulkan && !( r_multiMonitor && r_multiMonitor->integer ) )
+		{
+			int nd = SDL_GetNumVideoDisplays();
+			if ( nd >= 3 )
+			{
+				/* Find display with median x — that's the centre screen regardless of SDL index order */
+				int di, sorted[64], ns = ( nd < 64 ? nd : 64 );
+				SDL_Rect rects[64];
+				for ( di = 0; di < ns; di++ ) { sorted[di] = di; SDL_GetDisplayBounds( di, &rects[di] ); }
+				/* bubble sort by x */
+				{ int a, b;
+				  for ( a = 0; a < ns - 1; a++ )
+				    for ( b = a + 1; b < ns; b++ )
+				      if ( rects[sorted[b]].x < rects[sorted[a]].x ) { int t = sorted[a]; sorted[a] = sorted[b]; sorted[b] = t; }
+				}
+				display = sorted[ns / 2];
+				x = rects[display].x;
+				y = rects[display].y;
+				Com_Printf( "q3ide: Vulkan — placing window on centre display[%d] at %d,%d\n", display, x, y );
+			}
+		}
+#endif
 	}
 
 	if ( display >= 0 && SDL_GetDesktopDisplayMode( display, &desktopMode ) == 0 )

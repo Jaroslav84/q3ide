@@ -997,6 +997,17 @@ static intptr_t CL_UISystemCalls( intptr_t *args ) {
 	case UI_GETGLCONFIG:
 		VM_CHECKBOUNDS( uivm, args[1], sizeof( glconfig_t ) );
 		CL_GetGlconfig( VMA(1) );
+// q3ide [BEGIN] UI VidWidth Override - code/client/cl_ui.c
+// UI uses re.GetConfig() which has vidWidth=5760 (spanning window). Override to center monitor width
+// so menu elements are positioned in 0..centerW space, matching the RB_SetGL2D ortho projection.
+#ifdef USE_Q3IDE
+		if ( Cvar_VariableIntegerValue( "r_multiMonitor" ) ) {
+			int q3ide_cw = Cvar_VariableIntegerValue( "r_mmCenterW" );
+			if ( q3ide_cw > 0 )
+				( (glconfig_t *)VMA(1) )->vidWidth = q3ide_cw;
+		}
+#endif
+// q3ide [END] UI VidWidth Override
 		return 0;
 
 	case UI_GETCONFIGSTRING:

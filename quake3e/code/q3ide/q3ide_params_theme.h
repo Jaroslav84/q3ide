@@ -40,6 +40,12 @@
 #define Q3IDE_CLR_ALERT_RED   255, 50, 50   /* red         — stream failure alert line */
 #define Q3IDE_CLR_LEGEND_GRAY 120, 120, 120 /* gray        — lamp legend annotation text */
 
+/* ── Map switcher menu ────────────────────────────────────────────── */
+
+#define Q3IDE_CLR_MENU_SEL  80, 255, 80    /* bright green — selected entry */
+#define Q3IDE_CLR_MENU_ITEM 255, 255, 255  /* white        — unselected map/skin entry */
+#define Q3IDE_CLR_MENU_CAT  220, 60, 60    /* red          — unselected category entry */
+
 /* ── Keyboard grid ───────────────────────────────────────────────── */
 
 #define Q3IDE_CLR_KEY_Q3IDE       220, 220, 220 /* white       — key bound to a q3ide handler */

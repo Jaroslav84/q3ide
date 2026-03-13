@@ -303,7 +303,7 @@ def _do_run(args=None, agent_id=''):
     """Launch the game binary. Returns dict with ok/pid/error."""
     global _game_proc, _game_start
     if args is None:
-        args = ['--level', '0']
+        args = ['--level', 'r']
     with _run_lock:
         # Always kill any existing quake3e before launching — prevents double instances
         # when game was started outside the API (e.g. build.sh --run).
@@ -528,7 +528,8 @@ def _queue_worker():
                          f'  queue_id={entry["id"]}  args={entry["args"]}\n'
                          f'{separator}\n')
             log_fh.flush()
-            print(f'[queue] Starting build {entry["id"]} (agent={entry["agent_id"]}): {" ".join(cmd)}', flush=True)
+            map_label = ' '.join(entry['run_args']) if entry['auto_run'] else 'no-run'
+            print(f'[queue] Starting build {entry["id"]} (agent={entry["agent_id"]}) → {map_label}: {" ".join(cmd)}', flush=True)
 
             _build_proc = subprocess.Popen(
                 cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, cwd=str(ROOT),
@@ -568,7 +569,7 @@ def _queue_worker():
                     _queue_history.pop(0)
 
             if rc == 0 and entry['auto_run']:
-                print(f'[queue] Build {entry["id"]} OK — launching game…', flush=True)
+                print(f'[queue] Build {entry["id"]} OK — launching game ({" ".join(entry["run_args"])})…', flush=True)
                 _do_run(entry['run_args'], agent_id=entry['agent_id'])
             elif rc != 0:
                 print(f'[queue] Build {entry["id"]} FAILED (rc={rc})', flush=True)
@@ -921,7 +922,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _handle_build(self, body):
         args = body.get('args', [])
-        run_args = body.get('run_args', ['--level', '0'])
+        run_args = body.get('run_args', ['--level', 'r'])
         auto_run = body.get('auto_run', True)
         agent_id = body.get('agent_id', '')
         entry = _enqueue_build(args, run_args, auto_run, agent_id)
@@ -1012,7 +1013,7 @@ class Handler(BaseHTTPRequestHandler):
         return out
 
     def _handle_run(self, body):
-        args = body.get('args', ['--level', '0'])
+        args = body.get('args', ['--level', 'r'])
         agent_id = body.get('agent_id', '')
         result = _do_run(args, agent_id=agent_id)
         if result.get('ok'):
@@ -1169,6 +1170,12 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     LOG_DIR.mkdir(parents=True, exist_ok=True)
+    # Parse CLI flags
+    build_args = []
+    if '--engine-only' in sys.argv[1:]:
+        build_args.append('--engine-only')
+    if '--clean' in sys.argv[1:]:
+        build_args.append('--clean')
     # Start build queue worker
     threading.Thread(target=_queue_worker, daemon=True, name='build-queue').start()
     server = ThreadingHTTPServer(('0.0.0.0', PORT), Handler)
@@ -1176,6 +1183,9 @@ def main():
     print(f'  WebSocket:  ws://{CLIENT_HOST}:{PORT}/ws?logs=engine,multimon,capture', flush=True)
     print(f'  From Docker: http://{CLIENT_HOST}:{PORT}/', flush=True)
     print(f'  RCON: {RCON_HOST}:{RCON_PORT}  password={RCON_PASSWORD!r}', flush=True)
+    if build_args:
+        print(f'  Auto-build: {build_args} → run --level r', flush=True)
+        _enqueue_build(build_args, run_args=['--level', 'r'], auto_run=True, agent_id='cli')
     try:
         server.serve_forever()
     except KeyboardInterrupt:
