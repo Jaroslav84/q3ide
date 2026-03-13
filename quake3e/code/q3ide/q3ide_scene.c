@@ -102,8 +102,7 @@ void Q3IDE_WM_AddPolys(void)
 			/* ── Wall render ── */
 			if (win->wall_placed && win->los_visible) {
 				int bm = (idx == highlight_win) ? 1 : 0;
-				if (!win->shader)
-					q3ide_add_bg(win, win->origin, win->normal);
+				q3ide_add_bg(win, win->origin, win->normal);
 #if !Q3IDE_DISABLE_EDGE_QUADS
 				q3ide_add_frame(win, bm, win->origin, win->normal);
 #endif
@@ -114,13 +113,18 @@ void Q3IDE_WM_AddPolys(void)
 			/* ── Arc render ── */
 			if (win->in_overview) {
 				int arc_bm = (idx == highlight_win) ? 1 : (win->wall_placed ? 2 : 0);
-				if (!win->shader)
-					q3ide_add_bg(win, win->ov_origin, win->ov_normal);
+				/* Use base (unzoomed) size for arc geometry — zoom must not affect I/O modes. */
+				float saved_w = win->world_w, saved_h = win->world_h;
+				win->world_w = win->base_world_w;
+				win->world_h = win->base_world_h;
+				q3ide_add_bg(win, win->ov_origin, win->ov_normal);
 #if !Q3IDE_DISABLE_EDGE_QUADS
 				q3ide_add_frame(win, arc_bm, win->ov_origin, win->ov_normal);
 #endif
 				if (win->shader)
 					q3ide_add_poly(win, win->ov_origin, win->ov_normal);
+				win->world_w = saved_w;
+				win->world_h = saved_h;
 			}
 		}
 	}
@@ -169,6 +173,27 @@ void Q3IDE_WM_CmdDetachAll(void)
 		n++;
 	}
 	Com_Printf("q3ide: %d tunnel(s) detached\n", n);
+}
+
+/*
+ * Soft-detach: clear C-side geometry without calling cap_stop.
+ * Rust streams stay warm so the next shoot-to-place reuses them and content
+ * appears on the very first frame instead of after the SCK cold-start delay.
+ * Used by the K key; hard detach (CmdDetachAll) is reserved for dylib reload.
+ */
+void Q3IDE_WM_CmdSoftDetachAll(void)
+{
+	int i, n = 0;
+	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+		q3ide_win_t *w = &q3ide_wm.wins[i];
+		if (!w->active || !w->is_tunnel)
+			continue;
+		/* intentionally skip cap_stop — streams stay live in Rust */
+		memset(w, 0, sizeof(q3ide_win_t));
+		q3ide_wm.num_active--;
+		n++;
+	}
+	Com_Printf("q3ide: %d tunnel(s) soft-detached (streams warm)\n", n);
 }
 
 void Q3IDE_WM_CmdStatus(void)

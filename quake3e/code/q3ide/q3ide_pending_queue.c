@@ -59,8 +59,12 @@ static qboolean q3ide_attach_one(const q3ide_attach_item_t *it, vec3_t pos, vec3
 	qboolean ok;
 
 	if (it->is_display) {
-		if (!q3ide_win_mngr.cap_start_disp ||
-		    q3ide_win_mngr.cap_start_disp(q3ide_win_mngr.cap, it->id, Q3IDE_CAPTURE_FPS) != 0)
+		int err;
+		if (!q3ide_win_mngr.cap_start_disp)
+			return qfalse;
+		err = q3ide_win_mngr.cap_start_disp(q3ide_win_mngr.cap, it->id, Q3IDE_CAPTURE_FPS);
+		/* Q3IDE_ERR_ALREADY_CAPTURING: display stream still warm after soft-detach — reuse it */
+		if (err != 0 && err != Q3IDE_ERR_ALREADY_CAPTURING)
 			return qfalse;
 		ok = Q3IDE_WM_Attach(it->id, pos, norm, ww, wh, qfalse, qfalse);
 	} else {

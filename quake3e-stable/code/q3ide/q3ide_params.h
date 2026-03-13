@@ -46,6 +46,8 @@ changes easily.
 #define Q3IDE_SCK_FOCUS3_RETRY_COUNT    10  /* retries — max cap_start_disp failures during focus3 show */
 #define Q3IDE_SCK_FOCUS3_RETRY_MS       300 /* ms  — delay between each focus3 retry attempt */
 #define Q3IDE_CAPTURE_RING_BUF_SIZE     3   /* NOT_USED_YET — per-window ring buffer depth (current + 2 ahead) */
+#define Q3IDE_ERR_ALREADY_CAPTURING                                                                                    \
+	4 /* NEW Rust Q3ideError::AlreadyCapturing discriminant — stream still warm, safe to reuse */
 
 /* ── Multi-monitor rendering ─────────────────────────────────────── */
 
@@ -124,16 +126,23 @@ changes easily.
 #define Q3IDE_RESIZE_MAX_INCHES  9999.0f /* maximum resize diagonal — effectively no limit */
 #define Q3IDE_RESIZE_MIN_DIAG    (Q3IDE_RESIZE_MIN_INCHES * Q3IDE_WORLD_UNITS_PER_INCH)
 #define Q3IDE_RESIZE_MAX_DIAG    (Q3IDE_RESIZE_MAX_INCHES * Q3IDE_WORLD_UNITS_PER_INCH)
+#define Q3IDE_OVERLAY_ZOOM_WINDOW_DELAY                                                                                 \
+	700 /* NEW ms — aim at a window this long in O/I mode before CMD+scroll zooms it alone (default: zooms whole arc) \
+	     */
 
 /* ── Interaction & timing ────────────────────────────────────────── */
 
-#define Q3IDE_SHORTPRESS_MS          300  /* ms — hold threshold: below = tap, at or above = hold */
-#define Q3IDE_REPOSITION_MS          3000 /* ms — window stays selected waiting for shoot-to-move target */
-#define Q3IDE_PLACE_COOLDOWN_MS      2000 /* ms — after placing, this long before newly-placed can be selected */
-#define Q3IDE_BURST_PLACE_MS         150  /* ms — min interval between placements during rapid-fire sweep */
-#define Q3IDE_IDLE_TIMEOUT_MS        5000 /* ms — no frame for this long → window marked IDLE */
-#define Q3IDE_AUTOEXEC_DELAY_MS      1000 /* ms — after map load before firing the autoexec nextdemo command */
-#define Q3IDE_HEARTBEAT_MS           5000 /* ms — interval between heartbeat FPS log entries */
+#define Q3IDE_SHORTPRESS_MS     300  /* ms — hold threshold: below = tap, at or above = hold */
+#define Q3IDE_REPOSITION_MS     3000 /* ms — window stays selected waiting for shoot-to-move target */
+#define Q3IDE_PLACE_COOLDOWN_MS 2000 /* ms — after placing, this long before newly-placed can be selected */
+#define Q3IDE_BURST_PLACE_MS    150  /* ms — min interval between placements during rapid-fire sweep */
+#define Q3IDE_IDLE_TIMEOUT_MS   5000 /* ms — no frame for this long → window marked IDLE */
+#define Q3IDE_AUTOEXEC_DELAY_MS 1000 /* ms — after map load before firing the autoexec nextdemo command */
+#define Q3IDE_HEARTBEAT_MS      5000 /* ms — interval between heartbeat FPS log entries */
+#define Q3IDE_MOVE_THRESHOLD                                                                                           \
+	1.0f /* NEW world units — min per-frame XYZ delta to count as "moving" (filters float drift while standing) */
+#define Q3IDE_MOVE_STOP_DELAY_MS                                                                                       \
+	150ULL /* NEW ms — player must be still this long before auto-resume fires (prevents flicker on brief stops) */
 #define Q3IDE_HUD_CONFIRM_MS         1000 /* ms — brief confirmation toast (mode off, not in game) */
 #define Q3IDE_HUD_STATUS_MS          1500 /* ms — status toast (mode activated, no windows found) */
 #define Q3IDE_HUD_ERROR_MS           2000 /* ms — error toast (no dylib, no displays found) */
@@ -181,9 +190,10 @@ changes easily.
 
 #include "q3ide_params_windows.h"
 
-/* ── Window background (black + logo behind tunnel face) ────────── */
+/* ── Window background ───────────────────────────────────────────── */
 
-#define Q3IDE_BG_DEPTH_OFFSET 0.0001f /* normal units — bg pushed behind tunnel face to prevent z-fight */
+#define Q3IDE_BG_DEPTH_OFFSET                                                                                          \
+	0.5f /* NEW world units — black bg placed this far behind content quad (away from player) */
 
 /* ── Async logging ───────────────────────────────────────────────── */
 

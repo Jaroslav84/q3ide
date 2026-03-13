@@ -98,6 +98,7 @@ typedef struct {
 	int tex_w, tex_h;
 	vec3_t origin, normal;
 	float world_w, world_h;
+	float base_world_w, base_world_h; /* attach-time size — never modified by zoom; used by I/O arc modes */
 	qhandle_t shader;
 	unsigned long long frames;
 	/* Batch 1: Status tracking */
@@ -149,7 +150,11 @@ typedef struct {
 	q3ide_fn_free_changes cap_free_changes;     /* optional */
 	qboolean streams_paused;                    /* qtrue while streams are paused */
 	qboolean streams_user_paused;               /* qtrue when user explicitly paused via ";" — blocks ResumeStreams */
-	qboolean wins_hidden;                       /* qtrue while "H" hides all windows */
+	qboolean streams_move_paused;               /* qtrue when auto-paused because player is moving */
+	vec3_t move_origin;                         /* player origin sampled last frame — for per-frame delta */
+	unsigned long long move_stop_ms; /* timestamp when movement stopped (0 = still moving or not yet stopped) */
+	qboolean move_initialized;       /* qtrue after first origin sample; prevents false-positive on spawn */
+	qboolean wins_hidden;            /* qtrue while "H" hides all windows */
 	Q3ideCapture *cap;
 	vec3_t player_eye;               /* eye position, set each frame by UpdatePlayerPos */
 	unsigned long long last_scan_ms; /* last time we polled for changes */
@@ -160,7 +165,7 @@ typedef struct {
 	int fbuf_size;
 	qhandle_t border_shader;   /* scratch slot 63: solid red — hover/select borders */
 	qhandle_t edge_shader;     /* scratch slot 62: solid black — TV chassis edge quads */
-	qhandle_t bg_shader;       /* q3ide/bg: black + logo — always-rendered diagnostic backdrop */
+	qhandle_t bg_shader;       /* q3ide/bg: black + dim Quake logo — shown behind every window */
 	qhandle_t ov_green_shader; /* scratch slot 61: solid green — wall-placed windows in arc */
 	/* Background poll thread — fetches SCK change list off the main thread */
 	pthread_t poll_thread;

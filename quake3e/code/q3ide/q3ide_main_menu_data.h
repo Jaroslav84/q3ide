@@ -112,6 +112,15 @@ typedef struct {
 
 /* clang-format off */
 static const skin_entry_t k_skins[] = {
+	/* Custom models — listed first, homer is the default */
+	{NULL,                  "--- Custom ---"},
+	{"homer/default",       "Homer (default)"},
+	{"bender/default",      "Bender (default)"},
+	{"ewj/default",         "Earthworm Jim (default)"},
+	{"SargentDoom/default", "SargentDoom (default)"},
+	{"SargentDoom/blue",    "SargentDoom (blue)"},
+	{"SargentDoom/red",     "SargentDoom (red)"},
+	{"SargentDoom/psyco",   "SargentDoom (psyco)"},
 	/* Standard Q3 models */
 	{NULL,               "--- Standard ---"},
 	{"sarge/default",    "Sarge (default)"},  {"sarge/blue",     "Sarge (blue)"},
@@ -123,12 +132,6 @@ static const skin_entry_t k_skins[] = {
 	{"hunter/default",   "Hunter (default)"}, {"orbb/default",   "Orbb (default)"},
 	{"sorlag/default",   "Sorlag (default)"}, {"tankjr/default", "TankJr (default)"},
 	{"biker/default",    "Biker (default)"},  {"major/default",  "Major (default)"},
-	/* Custom models */
-	{NULL,               "--- Custom ---"},
-	{"SargentDoom/default", "SargentDoom (default)"},
-	{"SargentDoom/blue",    "SargentDoom (blue)"},
-	{"SargentDoom/red",     "SargentDoom (red)"},
-	{"SargentDoom/psyco",   "SargentDoom (psyco)"},
 };
 /* clang-format on */
 

@@ -63,11 +63,18 @@ qboolean Q3IDE_OnKeyEvent(int key, qboolean down)
 		}
 		return qtrue;
 	}
-	/* "K" — kill all windows (detach everything, fresh start) */
+	/* "K" — global kill: wipe all windows, keep streams warm for instant reuse */
 	if (key == 'k' && down) {
-		extern void q3ide_overview_detach_all(void);
-		q3ide_overview_detach_all();
-		Q3IDE_WM_CmdDetachAll();
+		extern void q3ide_overview_reset_state(void);
+		extern void q3ide_focus3_reset_state(void);
+		q3ide_overview_reset_state(); /* reset O flags, no cap_stop */
+		q3ide_focus3_reset_state();   /* reset I flags, no cap_stop */
+		Q3IDE_WM_CmdSoftDetachAll();  /* clear ALL tunnel windows, streams stay live */
+		/* Force-clear pause flags so warm streams deliver frames the moment windows
+		 * are re-placed.  Without this, movement-pause blocks the first frame. */
+		q3ide_wm.streams_user_paused = qfalse;
+		q3ide_wm.streams_move_paused = qfalse;
+		Q3IDE_WM_ResumeStreams();
 		Q3IDE_SetHudMsg("KILL WIN — all detached", Q3IDE_HUD_CONFIRM_MS);
 		return qtrue;
 	}

@@ -1,4 +1,8 @@
-![Version](https://img.shields.io/badge/Version-v0.3.1-red?style=for-the-badge)
+![Version](https://img.shields.io/badge/Version-v0.4-red?style=for-the-badge)
+![macOS](https://img.shields.io/badge/macOS-000000?style=for-the-badge&logo=apple&logoColor=white)
+![Vulkan](https://img.shields.io/badge/Vulkan-AC162C?style=for-the-badge&logo=vulkan&logoColor=white)
+![OpenGL](https://img.shields.io/badge/OpenGL1-5586A4?style=for-the-badge&logo=opengl&logoColor=white)
+![Monitors](https://img.shields.io/badge/1024_Monitors-FF6B00?style=for-the-badge&logo=monitor&logoColor=white)
 
 # q3ide
 
@@ -58,7 +62,13 @@ sh ./scripts/build.sh --release stable --run --level q3dm0 --bots 0 --music 0 --
     - COMPOSITE for CPU apps (Terminal, etc) - 1 screen where each terminal window gets cropped - more efficient
     - DEDICATED for GPU apps (Browser, VLC, etc)
   - **Both-sides window rendering**: windows are visible from front AND back efficiently 
-  - **Pause SCStream**: to get back the 90 FPS in game (`STREAMS_PAUSED` AtomicBool — `get_frame()` returns None, last frame frozen on GPU, streams stay warm). This can be leveraged in a BIG BIG matter.
+  - **Pause SCStream**: 
+    - to get back the 90 FPS in game (`STREAMS_PAUSED` AtomicBool — `get_frame()` returns None, last frame frozen on GPU, streams stay warm). This can be leveraged in a BIG BIG matter.
+    - **Auto-pause streams while moving** — streams freeze when you run (same FPS boost as holding `;`), resume when you stop.
+      - Window you're **looking at stays live** — the aimed/highlighted window is never paused, even while moving.
+      - **Movement** = position change in X/Y/Z (running, strafing, getting knocked back by explosions or other players).
+      - **Not moving** = standing still, turning, looking around — these do NOT trigger a pause.
+      - Uses client-predicted position (not server snapshots) so detection is accurate every frame.
   - **Gracefull FPS control**: new windows spawns with [1,2,4,8,16,32,auto]
   - **Idle SCStream**: `IN-PROGRESS` apple idle detector is not that great for use. We sample every 1s for changes and pause streams :) FPS saver feature!
 - **Window Manager**
@@ -89,6 +99,9 @@ sh ./scripts/build.sh --release stable --run --level q3dm0 --bots 0 --music 0 --
   - list of windows
   - stats
 - **Console commands**: q3ide list / status / detach
+- **Extras**: 
+  - Quake CiNEmatic mod for 4K/8K/16K AI-redrawn, specifically recommends quake3e
+  - Vulkan `graphics CFG settings` are MAXED OUT for my (not bad) RX580 8GB card
 
 ---
 

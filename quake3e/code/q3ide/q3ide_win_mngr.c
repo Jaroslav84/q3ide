@@ -18,6 +18,8 @@ q3ide_wm_t q3ide_wm;
 extern void q3ide_clamp_window_size(q3ide_win_t *win);
 /* Window basis — q3ide_geometry.c */
 extern void q3ide_win_basis(q3ide_win_t *win, vec3_t right, vec3_t up);
+/* Corner wall-clip correction — q3ide_window_trace.c */
+extern void q3ide_clamp_corners_to_walls(q3ide_win_t *win);
 
 /*
  * Push win further from the wall by Q3IDE_WALL_WINDOWS_OFFSET for each existing
@@ -107,9 +109,13 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 		return qfalse;
 	}
 
-	if (do_start && q3ide_wm.cap_start && q3ide_wm.cap_start(q3ide_wm.cap, id, Q3IDE_CAPTURE_FPS) != 0) {
-		Com_Printf("q3ide: capture start failed id=%u\n", id);
-		return qfalse;
+	if (do_start && q3ide_wm.cap_start) {
+		int err = q3ide_wm.cap_start(q3ide_wm.cap, id, Q3IDE_CAPTURE_FPS);
+		if (err != 0 && err != Q3IDE_ERR_ALREADY_CAPTURING) {
+			/* Q3IDE_ERR_ALREADY_CAPTURING: stream still warm after soft-detach — reuse it */
+			Com_Printf("q3ide: capture start failed id=%u err=%d\n", id, err);
+			return qfalse;
+		}
 	}
 	win = &q3ide_wm.wins[i];
 	memset(win, 0, sizeof(*win));
@@ -126,6 +132,8 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	}
 	win->world_w = ww;
 	win->world_h = wh;
+	win->base_world_w = ww;
+	win->base_world_h = wh;
 	win->is_tunnel = qtrue;   /* OS screen-capture window — removed by detach-all */
 	win->wall_placed = qtrue; /* Attach = wall placement by default; overview clears this for arc-only windows */
 	win->uv_x0 = 0.0f;
@@ -135,6 +143,7 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	q3ide_wm.num_active++;
 	if (!skip_clamp)
 		q3ide_clamp_window_size(win);
+	q3ide_clamp_corners_to_walls(win);
 	q3ide_apply_wall_stack(win, i);
 	return qtrue;
 }
@@ -158,6 +167,7 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_cl
 	}
 	if (!skip_clamp)
 		q3ide_clamp_window_size(&q3ide_wm.wins[idx]);
+	q3ide_clamp_corners_to_walls(&q3ide_wm.wins[idx]);
 	/* User shot this window onto a wall during overview: mark it wall-placed,
 	 * pull it from the arc.  Do NOT reflow the arc — remaining windows keep
 	 * their current grid positions so the 3xN structure stays intact. */

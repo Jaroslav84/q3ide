@@ -6,6 +6,9 @@
 #include "../qcommon/qcommon.h"
 #include <math.h>
 
+/* Window basis — q3ide_geometry.c */
+extern void q3ide_win_basis(q3ide_win_t *win, vec3_t right, vec3_t up);
+
 int Q3IDE_WM_TraceWindowHit(const vec3_t start, const vec3_t dir, int skip_idx)
 {
 	/*
@@ -73,8 +76,8 @@ int Q3IDE_WM_TraceWindowHit(const vec3_t start, const vec3_t dir, int skip_idx)
 			VectorSubtract(hit, o, diff);
 			lx = DotProduct(diff, right);
 			ly = DotProduct(diff, up);
-			hw = win->world_w * 0.5f;
-			hh = win->world_h * 0.5f;
+			hw = (win->in_overview ? win->base_world_w : win->world_w) * 0.5f;
+			hh = (win->in_overview ? win->base_world_h : win->world_h) * 0.5f;
 
 			if (fabsf(lx) <= hw && fabsf(ly) <= hh) {
 				best_t = t;
@@ -104,4 +107,75 @@ qboolean Q3IDE_WM_TraceWall(vec3_t start, vec3_t dir, vec3_t out_pos, vec3_t out
 	out_pos[2] = tr.endpos[2] + tr.plane.normal[2] * Q3IDE_WALL_OFFSET;
 	VectorCopy(tr.plane.normal, out_normal);
 	return qtrue;
+}
+
+
+/*
+ * q3ide_clamp_corners_to_walls — shift win->origin in the wall plane so no
+ * corner clips into solid geometry.
+ *
+ * For each of the 4 corners: if the corner starts inside solid, trace from
+ * win->origin (guaranteed clear — it was just placed on a wall surface + offset)
+ * toward that corner to find the exact wall face it crossed.  This keeps the
+ * probe short and local — no risk of hitting a distant wall on the other side
+ * of the map.  The largest-magnitude shift per axis is applied to win->origin.
+ */
+void q3ide_clamp_corners_to_walls(q3ide_win_t *win)
+{
+	/* BL, BR, TR, TL — right/up multipliers for each corner */
+	static const float sx[4] = {-1.0f, 1.0f, 1.0f, -1.0f};
+	static const float sy[4] = {-1.0f, -1.0f, 1.0f, 1.0f};
+	vec3_t right, up;
+	float hw, hh, shift_r, shift_u;
+	int i;
+
+	q3ide_win_basis(win, right, up);
+	hw = win->world_w * 0.5f;
+	hh = win->world_h * 0.5f;
+	shift_r = 0.0f;
+	shift_u = 0.0f;
+
+	for (i = 0; i < 4; i++) {
+		trace_t chk, probe;
+		vec3_t corner, end, mins, maxs, delta;
+		float dr, du;
+
+		VectorSet(mins, 0, 0, 0);
+		VectorSet(maxs, 0, 0, 0);
+		corner[0] = win->origin[0] + right[0] * sx[i] * hw + up[0] * sy[i] * hh;
+		corner[1] = win->origin[1] + right[1] * sx[i] * hw + up[1] * sy[i] * hh;
+		corner[2] = win->origin[2] + right[2] * sx[i] * hw + up[2] * sy[i] * hh;
+
+		CM_BoxTrace(&chk, corner, corner, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+		if (!chk.startsolid)
+			continue;
+
+		/*
+		 * Trace from the clear origin toward the corner (10% past it so the
+		 * trace endpoint is clearly behind the wall face).  This finds the
+		 * exact local wall face the corner crossed — never a distant wall.
+		 */
+		end[0] = corner[0] + (corner[0] - win->origin[0]) * 0.1f;
+		end[1] = corner[1] + (corner[1] - win->origin[1]) * 0.1f;
+		end[2] = corner[2] + (corner[2] - win->origin[2]) * 0.1f;
+
+		CM_BoxTrace(&probe, win->origin, end, mins, maxs, 0, CONTENTS_SOLID, qfalse);
+		if (probe.fraction >= 1.0f || probe.startsolid)
+			continue;
+
+		/* Move corner to just outside the wall face, keep shift largest per axis */
+		delta[0] = probe.endpos[0] + probe.plane.normal[0] * Q3IDE_WALL_OFFSET - corner[0];
+		delta[1] = probe.endpos[1] + probe.plane.normal[1] * Q3IDE_WALL_OFFSET - corner[1];
+		delta[2] = probe.endpos[2] + probe.plane.normal[2] * Q3IDE_WALL_OFFSET - corner[2];
+		dr = DotProduct(delta, right);
+		du = DotProduct(delta, up);
+		if (fabsf(dr) > fabsf(shift_r))
+			shift_r = dr;
+		if (fabsf(du) > fabsf(shift_u))
+			shift_u = du;
+	}
+
+	win->origin[0] += right[0] * shift_r + up[0] * shift_u;
+	win->origin[1] += right[1] * shift_r + up[1] * shift_u;
+	win->origin[2] += right[2] * shift_r + up[2] * shift_u;
 }

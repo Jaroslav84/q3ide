@@ -93,7 +93,7 @@ void q3ide_overview_layout(void)
 
 		wh = 0.0f;
 		for (i = 0; i < row_n; i++) {
-			float h = q3ide_wm.wins[row_idxs[i]].world_h;
+			float h = q3ide_wm.wins[row_idxs[i]].base_world_h;
 			if (h > wh)
 				wh = h;
 		}

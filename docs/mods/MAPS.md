@@ -41,7 +41,7 @@ map cpm2..29           — Full CPMA map pack (cpm2–cpm29)
 map cpmctf1..5         — CPMA CTF maps
 map cpma3              — CPMA 3
 map dc-mappack         — DC map pack
-map jlctf2, jlctf3    — JL CTF maps
+map jlctf2, jlctf3     — JL CTF maps
 map map-jlctf1         — JL CTF1
 map m3amap1            — M3A map
 ```

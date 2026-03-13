@@ -64,6 +64,17 @@ void q3ide_overview_detach_all(void)
 	Q3IDE_SetHudMsg("OVERVIEW off", Q3IDE_HUD_CONFIRM_MS);
 }
 
+/* Reset overview flags only — no stream/window changes.
+ * Called by K (global kill): CmdSoftDetachAll handles all windows separately. */
+void q3ide_overview_reset_state(void)
+{
+	g_ov_active = qfalse;
+	g_ov_placed = qfalse;
+	g_ov_scroll_z = 0.0f;
+	g_ov_scrolling = qfalse;
+	s_ov_hk.locked = qfalse;
+}
+
 /* ── Show / hide ─────────────────────────────────────────────────────── */
 
 static void overview_show(void)

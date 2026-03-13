@@ -4,6 +4,10 @@
  *   mouse move  → window follows crosshair (ray-plane intersection with wall).
  *   scroll up   → smaller.  scroll down → bigger.
  * Release key to stick.
+ *
+ * In O or I arc mode, CMD+scroll zooms the entire arc uniformly.
+ * Exception: aim at one window for Q3IDE_OVERLAY_ZOOM_WINDOW_DELAY ms — then
+ * scroll zooms only that window.
  */
 
 #include "q3ide_engine_hooks.h"
@@ -27,6 +31,10 @@ static float s_base_h = 0.0f;     /* world_h when resize session started */
 static float s_base_diag = 0.0f;  /* diagonal when resize session started */
 static int s_scroll_acc = 0;      /* accumulated scroll ticks this session */
 static float s_prev_scale = 1.0f; /* scale applied on previous scroll tick */
+
+/* Arc-mode aim tracking — for the 700ms single-window threshold */
+static int s_arc_aim_win = -1;                    /* window aimed at while CMD held in arc mode */
+static unsigned long long s_arc_aim_start_ms = 0; /* when s_arc_aim_win was first set */
 
 static void drag_start(int win_idx)
 {
@@ -58,8 +66,11 @@ static void drag_end(void)
 void Q3IDE_DragResize_OnCmdKey(qboolean down)
 {
 	s_cmd_held = down;
-	if (!down)
+	if (!down) {
 		drag_end();
+		s_arc_aim_win = -1;
+		s_arc_aim_start_ms = 0;
+	}
 }
 
 int Q3IDE_DragResize_GetDragWin(void)
@@ -68,17 +79,30 @@ int Q3IDE_DragResize_GetDragWin(void)
 }
 
 /* Called from Q3IDE_Frame after q3ide_aimed_win is set.
- * Projects player aim onto the window's wall plane and moves the window there. */
+ * Projects player aim onto the window's wall plane and moves the window there.
+ * In arc mode (O or I), skips drag-move and instead tracks aim for zoom delay. */
 void Q3IDE_DragResize_Frame(void)
 {
 	vec3_t eye, fwd, diff, hit;
 	float p, y, denom, t;
 	q3ide_win_t *w;
+	qboolean in_arc;
 
 	if (!s_cmd_held)
 		return;
 
-	/* Claim the aimed window as drag target if not yet started. */
+	in_arc = Q3IDE_ViewModes_Focus3Active() || Q3IDE_ViewModes_OverviewActive();
+
+	if (in_arc) {
+		/* Track which window the player is aiming at, and for how long. */
+		if (q3ide_aimed_win != s_arc_aim_win) {
+			s_arc_aim_win = q3ide_aimed_win;
+			s_arc_aim_start_ms = (unsigned long long) Sys_Milliseconds();
+		}
+		return; /* no drag-move in arc mode */
+	}
+
+	/* Wall mode — claim the aimed window as drag target if not yet started. */
 	if (s_drag_win < 0 && q3ide_aimed_win >= 0)
 		drag_start(q3ide_aimed_win);
 
@@ -125,6 +149,68 @@ qboolean Q3IDE_OnMouseEvent(int dx, int dy)
 	return qfalse;
 }
 
+/*
+ * Arc-mode zoom: scales all in_overview windows' base sizes uniformly.
+ * If the player has been aiming at one window for >= Q3IDE_OVERLAY_ZOOM_WINDOW_DELAY ms,
+ * zooms only that window instead.
+ */
+static qboolean arc_zoom_scroll(int dir)
+{
+	unsigned long long now = (unsigned long long) Sys_Milliseconds();
+	qboolean single = s_arc_aim_win >= 0 && (now - s_arc_aim_start_ms >= Q3IDE_OVERLAY_ZOOM_WINDOW_DELAY);
+	int i;
+
+	if (single) {
+		/* Single-window zoom: scale base size of the aimed arc window. */
+		q3ide_win_t *w = &q3ide_wm.wins[s_arc_aim_win];
+		if (w->active && w->in_overview) {
+			float diag = sqrtf(w->base_world_w * w->base_world_w + w->base_world_h * w->base_world_h);
+			float new_diag = diag + (float) dir * Q3IDE_RESIZE_SCROLL_STEP;
+			if (new_diag < Q3IDE_RESIZE_MIN_DIAG)
+				new_diag = Q3IDE_RESIZE_MIN_DIAG;
+			if (new_diag > Q3IDE_RESIZE_MAX_DIAG)
+				new_diag = Q3IDE_RESIZE_MAX_DIAG;
+			float scale = new_diag / diag;
+			w->base_world_w *= scale;
+			w->base_world_h *= scale;
+		}
+		return qtrue;
+	}
+
+	/* Whole-arc zoom: average diagonal as reference, scale all arc windows. */
+	{
+		float ref_diag = 0.0f;
+		int n = 0;
+		float new_diag, scale;
+		for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+			q3ide_win_t *w = &q3ide_wm.wins[i];
+			if (w->active && w->in_overview) {
+				ref_diag += sqrtf(w->base_world_w * w->base_world_w + w->base_world_h * w->base_world_h);
+				n++;
+			}
+		}
+		if (n == 0)
+			return qfalse;
+		ref_diag /= n;
+		if (ref_diag < 1.0f)
+			return qfalse;
+		new_diag = ref_diag + (float) dir * Q3IDE_RESIZE_SCROLL_STEP;
+		if (new_diag < Q3IDE_RESIZE_MIN_DIAG)
+			new_diag = Q3IDE_RESIZE_MIN_DIAG;
+		if (new_diag > Q3IDE_RESIZE_MAX_DIAG)
+			new_diag = Q3IDE_RESIZE_MAX_DIAG;
+		scale = new_diag / ref_diag;
+		for (i = 0; i < Q3IDE_MAX_WIN; i++) {
+			q3ide_win_t *w = &q3ide_wm.wins[i];
+			if (!w->active || !w->in_overview)
+				continue;
+			w->base_world_w *= scale;
+			w->base_world_h *= scale;
+		}
+	}
+	return qtrue;
+}
+
 /* Called from key event handler on scroll wheel.
  * dir: +1 = scroll up (smaller), -1 = scroll down (bigger).
  * Returns qtrue if consumed (drag active), qfalse to fall through to overview scroll. */
@@ -133,6 +219,11 @@ qboolean Q3IDE_DragResize_OnScroll(int dir)
 	float new_diag, scale;
 	q3ide_win_t *w;
 
+	/* Arc mode (O or I): CMD+scroll zooms whole arc (or single window after delay). */
+	if (s_cmd_held && (Q3IDE_ViewModes_Focus3Active() || Q3IDE_ViewModes_OverviewActive()))
+		return arc_zoom_scroll(dir);
+
+	/* Wall mode: needs an active drag session. */
 	if (s_drag_win < 0 || s_base_diag < 1.0f)
 		return qfalse;
 	w = &q3ide_wm.wins[s_drag_win];
@@ -150,20 +241,6 @@ qboolean Q3IDE_DragResize_OnScroll(int dir)
 	w->world_w = s_base_w * scale;
 	w->world_h = s_base_h * scale;
 
-	/* Focus3 (I): resize all display captures together.
-	 * Apply delta (scale / prev_scale) so companions stay in sync without
-	 * needing their own base sizes stored. */
-	if (Q3IDE_ViewModes_Focus3Active() && s_prev_scale > 0.001f) {
-		float delta = scale / s_prev_scale;
-		int i;
-		for (i = 0; i < Q3IDE_MAX_WIN; i++) {
-			q3ide_win_t *fw = &q3ide_wm.wins[i];
-			if (!fw->active || fw->owns_stream || i == s_drag_win)
-				continue;
-			fw->world_w *= delta;
-			fw->world_h *= delta;
-		}
-	}
 	s_prev_scale = scale;
 	return qtrue;
 }

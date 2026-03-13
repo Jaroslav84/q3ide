@@ -30,60 +30,44 @@ static void normal_basis(vec3_t normal, vec3_t right, vec3_t up)
 }
 
 /*
- * q3ide_add_bg — black+logo backdrop sandwiched around the tunnel face.
- * Caller passes explicit origin/normal (wall or arc position).
+ * q3ide_add_bg — solid black backdrop placed Q3IDE_BG_DEPTH_OFFSET units behind the content quad.
  *
- * Two quads submitted as one poly call (numPolys=2):
- *   front bg: depth = 1.0 - BG_DEPTH_OFFSET — behind front face, CCW from front
- *   back  bg: depth = 1.0 + BG_DEPTH_OFFSET — behind back  face, CCW from back
+ * Single quad, player-side aware: dot(player_eye - origin, normal) tells which side
+ * the player is on. Quad is pushed away from the player so it never floats in front
+ * of the stream. edge_shader has cull-disable so it's visible from any angle.
  */
 void q3ide_add_bg(q3ide_win_t *win, vec3_t origin, vec3_t normal)
 {
 	static const float sx[4] = {-1, 1, 1, -1};
 	static const float sy[4] = {-1, -1, 1, 1};
-	static const int back_idx[4] = {3, 2, 1, 0};
-	polyVert_t verts[8];
+	polyVert_t verts[4];
 	vec3_t right, up;
 	float hw = win->world_w * 0.5f, hh = win->world_h * 0.5f;
-	float fd = 1.0f - Q3IDE_BG_DEPTH_OFFSET;
-	float bd = 1.0f + Q3IDE_BG_DEPTH_OFFSET;
-	int i, bi;
+	float dot, depth;
+	int i;
 
 	if (!q3ide_wm.bg_shader || !re.AddPolyToScene)
 		return;
 
+	/* Which side is the player on? Positive = front, negative = behind. */
+	dot = (q3ide_wm.player_eye[0] - origin[0]) * normal[0] + (q3ide_wm.player_eye[1] - origin[1]) * normal[1] +
+	      (q3ide_wm.player_eye[2] - origin[2]) * normal[2];
+	/* Push bg away from player: front viewer → depth < 1, back viewer → depth > 1. */
+	depth = (dot >= 0.0f) ? (1.0f - Q3IDE_BG_DEPTH_OFFSET) : (1.0f + Q3IDE_BG_DEPTH_OFFSET);
+
 	normal_basis(normal, right, up);
 	for (i = 0; i < 4; i++) {
-		float bx = right[0] * sx[i] * hw + up[0] * sy[i] * hh;
-		float by = right[1] * sx[i] * hw + up[1] * sy[i] * hh;
-		float bz = right[2] * sx[i] * hw + up[2] * sy[i] * hh;
-		float u = (sx[i] + 1.0f) * 0.5f;
-		float v = (1.0f - sy[i]) * 0.5f;
-
-		/* Front bg — CCW from front, at depth fd */
-		verts[i].xyz[0] = origin[0] + bx + normal[0] * fd;
-		verts[i].xyz[1] = origin[1] + by + normal[1] * fd;
-		verts[i].xyz[2] = origin[2] + bz + normal[2] * fd;
-		verts[i].st[0] = u;
-		verts[i].st[1] = v;
+		verts[i].xyz[0] = origin[0] + right[0] * sx[i] * hw + up[0] * sy[i] * hh + normal[0] * depth;
+		verts[i].xyz[1] = origin[1] + right[1] * sx[i] * hw + up[1] * sy[i] * hh + normal[1] * depth;
+		verts[i].xyz[2] = origin[2] + right[2] * sx[i] * hw + up[2] * sy[i] * hh + normal[2] * depth;
+		verts[i].st[0] = 0.5f;
+		verts[i].st[1] = 0.5f;
 		verts[i].modulate.rgba[0] = 255;
 		verts[i].modulate.rgba[1] = 255;
 		verts[i].modulate.rgba[2] = 255;
 		verts[i].modulate.rgba[3] = 255;
-
-		/* Back bg — reversed winding (CCW from back), at depth bd */
-		bi = 4 + back_idx[i];
-		verts[bi].xyz[0] = origin[0] + bx + normal[0] * bd;
-		verts[bi].xyz[1] = origin[1] + by + normal[1] * bd;
-		verts[bi].xyz[2] = origin[2] + bz + normal[2] * bd;
-		verts[bi].st[0] = u;
-		verts[bi].st[1] = v;
-		verts[bi].modulate.rgba[0] = 255;
-		verts[bi].modulate.rgba[1] = 255;
-		verts[bi].modulate.rgba[2] = 255;
-		verts[bi].modulate.rgba[3] = 255;
 	}
-	re.AddPolyToScene(q3ide_wm.bg_shader, 4, verts, 2);
+	re.AddPolyToScene(q3ide_wm.bg_shader, 4, verts, 1);
 }
 
 /*

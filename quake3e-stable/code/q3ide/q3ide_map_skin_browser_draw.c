@@ -113,7 +113,7 @@ void Q3IDE_MMenu_Draw(const void *refdef_ptr)
 
 	/* ── Root page ── */
 	if (g_open == 1) {
-		const char *labels[2] = {"MAPS", "SKINS"};
+		const char *labels[2] = {"MAPS", "MODELS"};
 		for (i = 0; i < 2; i++) {
 			float lx = ox + rx[0] * CW * 2 + ux[0] * (-(float) row * LH);
 			float ly = oy + rx[1] * CW * 2 + ux[1] * (-(float) row * LH);
@@ -156,9 +156,9 @@ void Q3IDE_MMenu_Draw(const void *refdef_ptr)
 		return;
 	}
 
-	/* ── Skins page ── */
+	/* ── Models page ── */
 	if (g_open == 3) {
-		ROW_Y(row, "SKINS", MENU_SCALE);
+		ROW_Y(row, "MODELS", MENU_SCALE);
 		row++;
 		for (i = g_skin_scroll; i < K_SKINS_N && i < g_skin_scroll + VISIBLE_ROWS; i++) {
 			const skin_entry_t *e = &k_skins[i];

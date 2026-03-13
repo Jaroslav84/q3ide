@@ -91,6 +91,14 @@ void q3ide_focus3_show(void)
 
 	g_f3_retry_count = 0;
 
+	/* Reset display window sizes to base (unzoomed) before arc placement.
+	 * Ensures I mode always shows default-sized panels regardless of wall zoom. */
+	for (i = 0; i < n_disp; i++) {
+		q3ide_win_t *w = &q3ide_wm.wins[disp_idxs[i]];
+		w->world_w = w->base_world_w;
+		w->world_h = w->base_world_h;
+	}
+
 	q3ide_focus3_place_arc(eye, fwd, disp_idxs, n_disp, 0.0f);
 	g_f3_active = qtrue;
 	Q3IDE_SetHudMsg("FOCUS 3", Q3IDE_HUD_STATUS_MS);
@@ -114,6 +122,17 @@ void q3ide_focus3_hide(void)
 	}
 	g_f3_active = qfalse;
 	Q3IDE_SetHudMsg("FOCUS 3 off", Q3IDE_HUD_CONFIRM_MS);
+}
+
+/* Reset focus3 flags only — no stream/window changes.
+ * Called by K (global kill): CmdSoftDetachAll handles all windows separately. */
+void q3ide_focus3_reset_state(void)
+{
+	g_f3_retry_at = 0;
+	g_f3_retry_count = 0;
+	g_f3_active = qfalse;
+	g_f3_held = qfalse;
+	s_f3_hk.locked = qfalse;
 }
 
 /* ── Command callbacks ───────────────────────────────────────────────── */

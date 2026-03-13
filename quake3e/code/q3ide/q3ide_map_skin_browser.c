@@ -70,6 +70,13 @@ static void map_move(int delta)
 	clamp_scroll(&g_map_sel, &g_map_scroll, n);
 }
 
+static void skin_preview(void)
+{
+	const char *id = k_skins[g_skin_sel].id;
+	if (id)
+		Cbuf_AddText(va("model %s; headmodel %s\n", id, id));
+}
+
 static void skin_move(int delta)
 {
 	int n = K_SKINS_N;
@@ -89,6 +96,7 @@ static void skin_move(int delta)
 		snd(g_snd_move);
 	g_skin_sel = next;
 	clamp_scroll(&g_skin_sel, &g_skin_scroll, n);
+	skin_preview();
 }
 
 void Q3IDE_MMenu_Init(void)
@@ -96,6 +104,7 @@ void Q3IDE_MMenu_Init(void)
 	g_snd_move = S_RegisterSound("sound/misc/menu1.wav", qfalse);
 	g_snd_select = S_RegisterSound("sound/misc/menu2.wav", qfalse);
 	g_snd_back = S_RegisterSound("sound/misc/menu3.wav", qfalse);
+	g_skin_sel = 1; /* default selection: homer/default (index 1, after the Custom header) */
 }
 
 qboolean Q3IDE_MMenu_IsOpen(void)
@@ -158,6 +167,8 @@ qboolean Q3IDE_MMenu_OnKey(int key, qboolean down)
 		} else if (key == K_ENTER || key == K_KP_ENTER) {
 			g_open = g_root_sel == 0 ? 2 : 3;
 			snd(g_snd_select);
+			if (g_open == 3)
+				skin_preview(); /* show current selection immediately on open */
 		}
 		return qtrue;
 	}
@@ -184,10 +195,8 @@ qboolean Q3IDE_MMenu_OnKey(int key, qboolean down)
 			skin_move(1);
 		else if (key == K_ENTER || key == K_KP_ENTER) {
 			if (k_skins[g_skin_sel].id) {
-				const char *id = k_skins[g_skin_sel].id;
 				snd(g_snd_select);
-				g_open = 0;
-				Cbuf_AddText(va("model %s\n", id));
+				g_open = 0; /* model already applied live by skin_preview() */
 			}
 		}
 		return qtrue;

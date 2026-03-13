@@ -65,10 +65,10 @@ void q3ide_ov_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_ra
 	VectorCopy(norm, q3ide_wm.wins[idxs[0]].ov_normal);
 	q3ide_wm.wins[idxs[0]].in_overview = qtrue;
 
-	a = q3ide_wm.wins[idxs[0]].world_w * 0.5f;
+	a = q3ide_wm.wins[idxs[0]].base_world_w * 0.5f;
 
 	for (k = 1; k < n && k < 3; k++) {
-		b = q3ide_wm.wins[idxs[k]].world_w * 0.5f;
+		b = q3ide_wm.wins[idxs[k]].base_world_w * 0.5f;
 		if (Rh > 0.001f)
 			theta = atan2f(b, Rh) + asinf(a / sqrtf(Rh * Rh + b * b));
 		else
@@ -128,11 +128,11 @@ void q3ide_focus3_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitc
 	norm[2] = -sp;
 	Q3IDE_WM_MoveWindow(idxs[0], pos, norm, qtrue);
 
-	a = q3ide_wm.wins[idxs[0]].world_w * 0.5f;
+	a = q3ide_wm.wins[idxs[0]].base_world_w * 0.5f;
 
 	/* k=1 left (−θ), k=2 right (+θ) — same pitch, rotated horizontally */
 	for (k = 1; k < n && k < 3; k++) {
-		b = q3ide_wm.wins[idxs[k]].world_w * 0.5f;
+		b = q3ide_wm.wins[idxs[k]].base_world_w * 0.5f;
 		if (Rh > 0.001f)
 			theta = atan2f(b, Rh) + asinf(a / sqrtf(Rh * Rh + b * b));
 		else

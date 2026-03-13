@@ -1,4 +1,3 @@
-So u can place windows in air and on walls. Great. But our window placement on wall algorithm sucks. GArbage it. Create a custom class because this will be heavily used through out the whole project.
 
 
 ● The 2fps cap only limits how often new pixels are fetched from SCK. The game still does this work every frame for every
@@ -25,28 +24,26 @@ So u can place windows in air and on walls. Great. But our window placement on w
 
 
 ======
-- highlight window on wall -> hold "CMD" to move existing windows on wall
-- highlight window on wall -> hold "CMD" + scroll with mouse to make existing window on wall bigger/smaller. Scroll UP is smaller
-- multiplay in mind?
+
+
+AFTER ARCHITECTURE REFACTOR:
+============================
 - matrix needed
 - grapple neeeded
 - laser neeeded
 
 
-WHEN TO PAUSE STREAM HACKS (to gain FPS back)
-===============================================
-`pause window` = same hack we used when pressing ";". it instantly regains FPS.
 
-- **1st HIGHEST RULE**: do NOT `pause a window stream` for currenly aimed/highlighted window 
-- **2nd HIGHEST RULE**: IF user is `moving` THEN `pause all windows streams` and `resume all window streams` when user `not moving`
-  - detect by his X,Y,Z coordinate on the sceene. That's his position.
-  - `not moving` = standing in one position, turning in one place, looking around. 
-  - `not moving` should NOT trigger 'pause all stream'. Do NOT trigger shit in these cases. 
-  - If external object (explosion, other players, etc) moves player out of his position -> 'pause all stream' while moving then resume when player stopped moving in scene  
+- multiplay in mind?
+- known quake issue: too dark, input lag. People solved it. Did quake3e solve it? see youytube video
 
+- lol: https://terminal.lvlworld.com/ascii-q3a
+
+
+ 
 And then lets look at the "wall placing" feature, "O" and "I": 
-lets introduce one tiny-miny little hacks to make things
-  smoother: when windows are spawned -> spwawn the window with stream paused (just like we do the fps pausing
+lets introduce one tiny-miny little hacks to make things smoother: 
+- when windows are spawned anywhere -> spwawn the window with stream paused (just like we do the fps pausing
   using ";" hotkey) -> then wait 150ms (Q3IDE_SCK_FPS_DELAY=250)  -> and then start gracefully ajdjusting fps ONLY for
   that window, so window.stream.fps=1fps ->wait 200ms->2 fps -> wait 200ms -> 4 -> wait 200ms -> 8 -> wait 200ms -> 16 -> wait 200ms -> -1(auto by apple) in this period of amount of time
   Q3IDE_SCK_FPS_GREACEFULL_ON_DURATION=1000 (ms) because we have 5 delays in between. this is how I call this feature: "- **Gracefull FPS control**: new
@@ -100,6 +97,22 @@ those on your machine.
   │ Stability          │ Rock solid                 │ Broken                    │ Good                            │
   └────────────────────┴────────────────────────────┴───────────────────────────┴─────────────────────────────────┘
 
+  ┌─────┬─────────────────────────┬────────────────────────────────────────────────────────┬─────────────────────┐
+  │  #  │          Pack           │                        Quality                         │       Install       │
+  ├─────┼─────────────────────────┼────────────────────────────────────────────────────────┼─────────────────────┤
+  │ 1   │ CiNEmatic Mod           │ 4K/8K/16K AI-redrawn, specifically recommends quake3e  │ drop .pk3 in        │
+  │     │                         │                                                        │ baseq3/             │
+  ├─────┼─────────────────────────┼────────────────────────────────────────────────────────┼─────────────────────┤
+  │ 2   │ Quake 3 Neural Upscale  │ AI-upscaled originals (3 packs: world, players,        │ drop .pk3 in        │
+  │     │                         │ objects)                                               │ baseq3/             │
+  ├─────┼─────────────────────────┼────────────────────────────────────────────────────────┼─────────────────────┤
+  │ 3   │ High Quality Quake      │ HD UI/HUD/icons, built into quake3e                    │ drop .pk3 in        │
+  │     │ (HQQ)                   │                                                        │ baseq3/             │
+  ├─────┼─────────────────────────┼────────────────────────────────────────────────────────┼─────────────────────┤
+  │ 4   │ ioquake3 CC Pack        │ General hi-res world textures                          │ drop .pk3 in        │
+  │     │                         │                                                        │ baseq3/             │
+  └─────┴─────────────────────────┴────────────────────────────────────────────────────────┴─────────────────────┘
+
 
 Maps
 =====
@@ -128,10 +141,7 @@ sh ./scripts/build.sh --run --level quatrix
 # Minecraft
 sh ./scripts/build.sh --run --level r7-blockworld1 
 
-
-- known quake issue: too dark, input lag. People solved it. Did quake3e solve it? see youytube video
-
-- lol: https://terminal.lvlworld.com/ascii-q3a
+============
 
 Yeah. 2,164 lines of vision is more planning than 99% of shipped products ever get. You have:
 

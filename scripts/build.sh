@@ -286,6 +286,13 @@ _api() {
 IFS=$'\n' read -r -d '' -a _MON <<< "$MONITOR_LAYOUT" 2>/dev/null || true
 [ ${#_MON[@]} -eq 0 ] && _MON=("unknown")
 
+# CiNEmatic HD texture pack detection
+if ls "$ROOT/baseq3/zzzpak"*.pk3 >/dev/null 2>&1; then
+    _CINEMATIC="${_G}CiNEmatic ✅${_R0}"
+else
+    _CINEMATIC="${_DIM}CiNEmatic ⛔${_R0}"
+fi
+
 # ASCII skull art — 17 lines (shifted down 1, left 2), each ≤32 chars
 _A=(
     ""
@@ -327,7 +334,7 @@ _R=(
     "${_MON[0]:-}"
     "${_MON[1]:-}"
     "${_MON[2]:-}"
-    ""
+    "$_CINEMATIC"
 )
 
 printf '\n'
@@ -336,6 +343,37 @@ for _i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do
     printf '  ║  %-32s  │  %s\n' "${_A[$_i]}" "${_R[$_i]}"
 done
 printf '  ╚══════════════════════════════════════════════════════════════════════════════════════════\n'
+
+# ── Active autoexec.cfg settings — 3 columns, no comments ────────────────────
+_CFG="$ROOT/baseq3/autoexec.cfg"
+if [ -f "$_CFG" ]; then
+    printf '  ┌─ autoexec.cfg ────────────────────────────────────────────────────────────────────────\n'
+    python3 - "$_CFG" <<'PYEOF'
+import sys
+
+entries = []
+with open(sys.argv[1]) as f:
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('//'):
+            continue
+        if '//' in line:
+            line = line[:line.index('//')].strip()
+        if not line:
+            continue
+        parts = line.split()
+        if parts[0] in ('seta', 'set') and len(parts) >= 3:
+            entries.append(f'{parts[1]}={parts[2].strip(chr(34))}')
+        elif parts[0] == 'bind' and len(parts) >= 3:
+            entries.append(f'bind {parts[1]}={parts[2].strip(chr(34))}')
+
+col_w, cols = 30, 3
+for i in range(0, len(entries), cols):
+    row = entries[i:i+cols]
+    print('  │  ' + ''.join(e.ljust(col_w) for e in row))
+PYEOF
+    printf '  └──────────────────────────────────────────────────────────────────────────────────────\n'
+fi
 printf '\n'
 
 # 1. Build qagame + ui dylibs from ioq3 source (skipped with --engine-only)
@@ -697,7 +735,15 @@ if [ "$DO_RUN" = "1" ]; then
 
     # Build command args
     # vm_game 0 = native dylib; vm_cgame 2 = standard QVM (native cgame is incompatible with quake3e)
-    ENGINE_ARGS="+set vm_game 0 +set vm_cgame 2 +set vm_ui 2 +set cl_renderer $AUTO_RENDERER +set r_multiMonitor 1"
+    ENGINE_ARGS="+set vm_game 0 +set vm_cgame 2 +set vm_ui 2 +set cl_renderer $AUTO_RENDERER +set r_multiMonitor 1 +set com_hunkMegs 1024 +set com_zoneMegs 64 +set com_soundMegs 256"
+
+    # Renderer-specific shadow settings
+    case "$AUTO_RENDERER" in
+        vulkan|opengl1)
+            ENGINE_ARGS="$ENGINE_ARGS +set r_shadows 2" ;;  # stencil shadow volumes
+        opengl2)
+            ENGINE_ARGS="$ENGINE_ARGS +set r_sunShadows 1 +set r_shadowMapSize 2048" ;;  # cascaded shadow maps
+    esac
 
     # --release stable: disable q3ide file logging (no dev noise in production runs)
     if [ "$RELEASE_BUILD" = "stable" ]; then

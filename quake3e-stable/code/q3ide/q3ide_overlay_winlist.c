@@ -49,7 +49,10 @@ void Q3IDE_DrawWinList(const void *refdef_ptr, unsigned long long now)
 	int n_active, wi, wrow;
 	float sm_lh;
 
-	q3ide_ovl_pixel_pos(fd, Q3IDE_OVL_WL_LEFT_MARGIN_PX, (float) fd->height - Q3IDE_OVL_WINLIST_BOTTOM_PX, anchor);
+	/* X axis in pixel_pos is flipped: px=0 → visual RIGHT, px=width → visual LEFT.
+	 * So "10px from visual left edge" = px = width - left_margin. */
+	q3ide_ovl_pixel_pos(fd, (float) fd->width - Q3IDE_OVL_WL_LEFT_MARGIN_PX,
+	                    (float) fd->height - Q3IDE_OVL_WINLIST_BOTTOM_PX, anchor);
 	ox = anchor[0];
 	oy = anchor[1];
 	oz = anchor[2];

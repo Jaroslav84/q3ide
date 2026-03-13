@@ -135,6 +135,7 @@ void Q3IDE_Frame(void)
 		Q3IDE_WM_UpdatePlayerPos(eye[0], eye[1], eye[2]);
 
 		Q3IDE_UpdateLOS(eye);
+		Q3IDE_WM_TickMovePause(cl.snap.ps.origin); /* auto-pause streams while moving */
 		q3ide_shoot_frame();
 		Q3IDE_DragResize_Frame();
 	}
@@ -145,13 +146,22 @@ void Q3IDE_Frame(void)
 	/* Heartbeat + FPS stats every 5 seconds */
 	{
 		static unsigned long long last_hb_ms;
+		static int hunk_peak_mb;
 		unsigned long long now_ms = Sys_Milliseconds();
 		if (now_ms - last_hb_ms >= Q3IDE_HEARTBEAT_MS) {
 			static int last_framecount;
 			unsigned long long elapsed = now_ms - last_hb_ms;
 			int frames = cls.framecount - last_framecount;
 			int fps = (int) ((unsigned long long) frames * 1000 / elapsed);
-			Q3IDE_LOGI("heartbeat active=%d fps=%d uploads=%d", q3ide_wm.num_active, fps, q3ide_wm.frame_uploads);
+
+			int hunk_total_mb = Cvar_VariableIntegerValue("com_hunkMegs");
+			int hunk_free = Hunk_MemoryRemaining();
+			int hunk_used_mb = (hunk_total_mb * 1024 * 1024 - hunk_free) / (1024 * 1024);
+			if (hunk_used_mb > hunk_peak_mb)
+				hunk_peak_mb = hunk_used_mb;
+
+			Q3IDE_LOGI("heartbeat active=%d fps=%d uploads=%d hunk=%dMB/%dMB peak=%dMB", q3ide_wm.num_active, fps,
+			           q3ide_wm.frame_uploads, hunk_used_mb, hunk_total_mb, hunk_peak_mb);
 			q3ide_wm.frame_uploads = 0;
 			last_hb_ms = now_ms;
 			last_framecount = cls.framecount;

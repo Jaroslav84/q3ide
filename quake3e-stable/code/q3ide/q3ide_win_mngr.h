@@ -47,6 +47,9 @@ int Q3IDE_WM_FindById(unsigned int cid);
 void Q3IDE_WM_PauseStreams(void);
 void Q3IDE_WM_ResumeStreams(void);
 
+/* Auto-pause streams while player is moving; resume when still. Call each frame with raw origin (no viewheight). */
+void Q3IDE_WM_TickMovePause(const vec3_t origin);
+
 /* Hide/show all windows visually ("H" tap=toggle, hold=temp). */
 void Q3IDE_WM_HideWins(void);
 void Q3IDE_WM_ShowWins(void);
@@ -69,6 +72,8 @@ int Q3IDE_StreamCount(void); /* active per-window SCK streams */
 /* Simple commands (in q3ide_win_mngr.c) */
 void Q3IDE_WM_CmdList(void);
 void Q3IDE_WM_CmdDetachAll(void);
+/* Soft-detach: clear C-side geometry but keep Rust streams warm (used by K key). */
+void Q3IDE_WM_CmdSoftDetachAll(void);
 void Q3IDE_WM_CmdStatus(void);
 
 /* Detach exactly one window by capture id; prints result. (in q3ide_commands.c) */
