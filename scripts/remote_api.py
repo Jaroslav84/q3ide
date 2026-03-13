@@ -72,6 +72,30 @@ _Q3_MUSIC_TRACKS = [
     'music/sonic6.wav',
 ]
 
+def _random_map():
+    """Scan all pk3 files in baseq3 and return a random map name (without .bsp extension)."""
+    import zipfile
+    import random
+    baseq3 = ROOT / 'baseq3'
+    maps = set()
+    if baseq3.is_dir():
+        for pk3 in baseq3.glob('*.pk3'):
+            try:
+                with zipfile.ZipFile(pk3, 'r') as z:
+                    for name in z.namelist():
+                        if name.startswith('maps/') and name.endswith('.bsp'):
+                            mapname = name[len('maps/'):-len('.bsp')]
+                            if mapname:
+                                maps.add(mapname)
+            except Exception:
+                pass
+    if not maps:
+        return 'q3dm1'
+    chosen = random.choice(sorted(maps))
+    print(f'[game] Random map pool: {len(maps)} maps → {chosen}', flush=True)
+    return chosen
+
+
 def _build_engine_args(args):
     """Convert API args list (['--level','0','--music','--execute','q3ide attach all; give grappling hook; weapon 10']) to engine args."""
     import random
@@ -84,7 +108,9 @@ def _build_engine_args(args):
         a = str(args[i])
         if a == '--level' and i + 1 < len(args):
             level = str(args[i + 1])
-            if level.isdigit() or (len(level) <= 2 and level.lstrip('-').isdigit()):
+            if level == 'r':
+                level = _random_map()
+            elif level.isdigit() or (len(level) <= 2 and level.lstrip('-').isdigit()):
                 level = f'q3dm{level}'
             engine_args += ['+devmap', level]
             i += 2
@@ -325,6 +351,14 @@ def _do_run_locked(args, agent_id, binary_info):
         engine_args = ['+set', 'ttycon', '0'] + engine_args
     # Prepend before map loads: native VM (loads our patched qagame dylib), cheats + grapple
     engine_args = ['+set', 'vm_game', '0', '+set', 'sv_cheats', '1', '+set', 'g_grapple', '1'] + engine_args
+    # q3ide defaults: spanning window + Vulkan on discrete GPU (auto-detected by GPU vendor string)
+    import subprocess as _sp
+    try:
+        _gpu = _sp.check_output(['system_profiler', 'SPDisplaysDataType'], text=True, timeout=5)
+        _renderer = 'vulkan' if any(v in _gpu for v in ('AMD', 'Radeon', 'NVIDIA', 'GeForce')) else 'opengl1'
+    except Exception:
+        _renderer = 'opengl1'
+    engine_args = ['+set', 'r_multiMonitor', '1', '+set', 'cl_renderer', _renderer] + engine_args
     cmd = [str(binary)] + engine_args
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 

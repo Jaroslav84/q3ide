@@ -1,7 +1,8 @@
-/* Black background behind each tunnel face — diagnostic: always visible, no LOS gate.
- * Logo texture: change gfx/misc/q3logo to any image in pak0 you prefer. */
+/* Black background + dim logo: shown on windows that have no streaming texture yet.
+ * Lets you spot freshly placed windows that aren't capturing. */
 q3ide/bg
 {
+    cull disable
     nomipmaps
     nopicmip
     {
@@ -10,9 +11,9 @@ q3ide/bg
         depthWrite
     }
     {
-        map gfx/misc/q3logo
-        blendFunc GL_SRC_ALPHA GL_ONE_MINUS_SRC_ALPHA
-        rgbGen identity
+        map textures/sfx/logo512.jpg
+        blendFunc add
+        rgbGen const ( 0.25 0.25 0.25 )
     }
 }
 
@@ -654,6 +655,7 @@ q3ide/win60
 }
 q3ide/win61
 {
+    cull disable
     nomipmaps
     nopicmip
     {

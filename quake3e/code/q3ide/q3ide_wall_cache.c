@@ -1,4 +1,4 @@
-/*
+/* NOT_USED_YET
  * q3ide_wall_cache.c — Wall pre-scan cache: build + sort + dump.
  * AAS wall extraction: q3ide_aas_walls.c.  Placement: q3ide_placement.c.
  */

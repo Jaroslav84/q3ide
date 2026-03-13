@@ -120,6 +120,9 @@ void q3ide_focus3_hide(void)
 
 void q3ide_cmd_focus3_down(void)
 {
+	if (g_f3_held)
+		return; /* key repeat — ignore */
+
 	if (Q3IDE_ViewModes_OverviewActive() || g_ov_placed)
 		q3ide_overview_detach_all();
 

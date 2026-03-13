@@ -4,6 +4,14 @@
  * Change here; rebuild. No magic numbers scattered in .c files.
  * Runtime params struct (q3ide_params_t) is at the bottom.
  */
+
+/*
+RULES:
+- DO NOT FUCK UP MY TABULATIONS AFTER PARAM NAME!!! Q3IDE_SOME PARAM			<-- until this point is reached
+- IF YOU ADD NEW PARAMS THEN MARK IT WITH "NEW" IN COMMENTS and do NOT use tabulations. This will I will spot the
+changes easily.
+*/
+
 #pragma once
 #include "../qcommon/q_shared.h"
 
@@ -56,34 +64,40 @@
 #define Q3IDE_VIEWMODE_ARC_DIST 190.0f /* world units — arc spawn radius shared by Focus3 and Overview (~10ft) */
 #define Q3IDE_FOCUS3_MIN_DIST   75.0f  /* world units — minimum arc radius after wall-clip shrink */
 #define Q3IDE_OVERVIEW_GAP      5.0f   /* world units — vertical gap between Overview grid rows */
+#define Q3IDE_OVERVIEW_SCROLL_Z_STEP                                                                                   \
+	120.0f /* world units shifted per scroll tick — continuous vertical slide of the O grid */
+#define Q3IDE_OVERVIEW_SCROLL_COOLDOWN_MS                                                                              \
+	150 /* ms — min interval between O scroll ticks; trackpad fires many events per gesture */
+#define Q3IDE_OVERVIEW_SCROLL_IDLE_MS 400 /* ms of no scroll events before layout re-snaps to player view */
 
 /* ── LOS & tracing ───────────────────────────────────────────────── */
 
-#define Q3IDE_LOS_HIT_THRESHOLD  0.95f  /* trace fraction counted as "clear" — allows slight wall graze */
-#define Q3IDE_LOS_CORNER_INSET   0.9f   /* corner sample inset (0..1) — samples at ±90% of half-size */
-#define Q3IDE_LOS_PROXIMITY_MULT      3.0f  /* skip LOS when player is within this × window diagonal */
-#define Q3IDE_LOS_PROXIMITY_HYST_MULT 4.0f  /* hysteresis: once proximity-exempt, stay exempt until this × diagonal */
-#define Q3IDE_TRACE_BOX_HALF     4.0f   /* half-extent of box trace for arc/focus3 wall distance queries */
-#define Q3IDE_CLAMP_MIN_SIZE     32.0f  /* world units — minimum size a clamped window may shrink to */
-#define Q3IDE_CLAMP_WALL_GAP     1.5f   /* world units — margin kept between window edge and wall */
-#define Q3IDE_TRACE_PLANE_EPS    0.001f /* ray-plane dot threshold below which ray is parallel to plane */
+#define Q3IDE_LOS_HIT_THRESHOLD       0.95f  /* trace fraction counted as "clear" — allows slight wall graze */
+#define Q3IDE_LOS_CORNER_INSET        0.9f   /* corner sample inset (0..1) — samples at ±90% of half-size */
+#define Q3IDE_LOS_PROXIMITY_MULT      3.0f   /* skip LOS when player is within this × window diagonal */
+#define Q3IDE_LOS_PROXIMITY_HYST_MULT 4.0f   /* hysteresis: once proximity-exempt, stay exempt until this × diagonal */
+#define Q3IDE_TRACE_BOX_HALF          4.0f   /* half-extent of box trace for arc/focus3 wall distance queries */
+#define Q3IDE_CLAMP_MIN_SIZE          32.0f  /* world units — minimum size a clamped window may shrink to */
+#define Q3IDE_CLAMP_WALL_GAP          1.5f   /* world units — margin kept between window edge and wall */
+#define Q3IDE_TRACE_PLANE_EPS         0.001f /* ray-plane dot threshold below which ray is parallel to plane */
 
 /* ── Wall placement ──────────────────────────────────────────────── */
 
-#define Q3IDE_WALL_DIST              6666.0f /* world units — wall-scan trace length */
-#define Q3IDE_WALL_OFFSET            5.0f    /* world units — push off wall surface to avoid z-fighting */
-#define Q3IDE_WALL_MAX_TILT_Z        0.5f    /* |normal[2]| threshold — rejects floors/ceilings/tilted surfaces (sin 30°) */
-#define Q3IDE_WALL_WINDOWS_OFFSET    0.1f   /* world units — extra depth per overlapping window on same wall (z-fight stack) */
+#define Q3IDE_WALL_DIST       6666.0f /* world units — wall-scan trace length */
+#define Q3IDE_WALL_OFFSET     5.0f    /* world units — push off wall surface to avoid z-fighting */
+#define Q3IDE_WALL_MAX_TILT_Z 0.5f    /* |normal[2]| threshold — rejects floors/ceilings/tilted surfaces (sin 30°) */
+#define Q3IDE_WALL_WINDOWS_OFFSET                                                                                      \
+	0.1f /* world units — extra depth per overlapping window on same wall (z-fight stack) */
 #define Q3IDE_WALL_OVERLAP_PLANE_TOL 2.0f    /* world units — max along-normal gap to consider two windows coplanar */
-#define Q3IDE_WALL_SLOT_ASPECT 0.8718f /* 16:9 width coefficient: slot_w = ideal_diag × this (≈87u per 100u) */
-#define Q3IDE_WALL_MARGIN      8       /* world units — reserved on each side of wall edge */
-#define Q3IDE_WINDOW_GAP       8       /* world units — gap between adjacent windows on same wall */
+#define Q3IDE_WALL_SLOT_ASPECT       0.8718f /* 16:9 width coefficient: slot_w = ideal_diag × this (≈87u per 100u) */
+#define Q3IDE_WALL_MARGIN            8       /* world units — reserved on each side of wall edge */
+#define Q3IDE_WINDOW_GAP             8       /* world units — gap between adjacent windows on same wall */
 
 /* ── Placement — window sizing ───────────────────────────────────── */
 
-#define Q3IDE_IDEAL_WINDOW_SIZE 400   /* world units diagonal — ideal window size */
-#define Q3IDE_MIN_WINDOW_SIZE   220    /* world units diagonal — absolute floor */
-#define Q3IDE_MAX_WINDOW_SIZE   400   /* world units diagonal — ceiling (matches spawn size) */
+#define Q3IDE_IDEAL_WINDOW_SIZE 600   /* world units diagonal — ideal window size */
+#define Q3IDE_MIN_WINDOW_SIZE   400   /* world units diagonal — absolute floor */
+#define Q3IDE_MAX_WINDOW_SIZE   800   /* world units diagonal — ceiling (matches spawn size) */
 #define Q3IDE_WINDOW_WALL_RATIO 0.85f /* window height = this fraction of wall height */
 #define Q3IDE_MAX_CACHED_WALLS  128   /* max walls stored in area wall cache */
 #define Q3IDE_MAX_WALL_SLOTS    8     /* max window slots pre-computed per wall */
@@ -108,7 +122,7 @@
 #define Q3IDE_SHORTPRESS_MS          300  /* ms — hold threshold: below = tap, at or above = hold */
 #define Q3IDE_REPOSITION_MS          3000 /* ms — window stays selected waiting for shoot-to-move target */
 #define Q3IDE_PLACE_COOLDOWN_MS      2000 /* ms — after placing, this long before newly-placed can be selected */
-#define Q3IDE_BURST_PLACE_MS          150 /* ms — min interval between placements during rapid-fire sweep */
+#define Q3IDE_BURST_PLACE_MS         150  /* ms — min interval between placements during rapid-fire sweep */
 #define Q3IDE_IDLE_TIMEOUT_MS        5000 /* ms — no frame for this long → window marked IDLE */
 #define Q3IDE_AUTOEXEC_DELAY_MS      1000 /* ms — after map load before firing the autoexec nextdemo command */
 #define Q3IDE_HEARTBEAT_MS           5000 /* ms — interval between heartbeat FPS log entries */
@@ -130,20 +144,26 @@
 #define Q3IDE_OVL_SMALL_SCALE 0.6f                                  /* scale multiplier for small text variant */
 #define Q3IDE_OVL_KEY_ROW_H   0.26f /* world units — row pitch for keyboard grid (tighter than LINE_H) */
 #define Q3IDE_OVL_LABEL_ABOVE 0.12f /* world units — ux offset above star row for -90° label anchor */
-#define OVL_REBUILD_MS           500 /* ms — keyboard cache rebuild interval (2 Hz) */
-#define Q3IDE_MENU_VISIBLE_ROWS    60   /* map switcher: max list rows visible at once */
-#define Q3IDE_MENU_REPEAT_DELAY_MS 250  /* ms — hold delay before key-repeat starts */
-#define Q3IDE_MENU_REPEAT_RATE_MS   60  /* ms — interval between repeated nav steps */
-#define Q3IDE_MENU_FONT_SCALE      2.0f /* map switcher: char scale (1.0=normal, 2.0=2× bigger) */
-#define Q3IDE_MENU_LINE_SCALE      1.1f /* map switcher: row pitch multiplier (< FONT_SCALE = tighter rows) */
-
+#define OVL_REBUILD_MS        500   /* ms — keyboard cache rebuild interval (2 Hz) */
 /* Overlay layout — pixel anchors converted via q3ide_ovl_pixel_pos() */
-#define Q3IDE_OVL_KB_LEFT_MARGIN_PX     10  /* px — gap from left screen edge to keyboard */
-#define Q3IDE_OVL_KB_TOP_MARGIN_PX      10  /* px — gap from top to keyboard anchor */
-#define Q3IDE_OVL_WL_LEFT_MARGIN_PX     10  /* px — gap from left screen edge to window list */
+#define Q3IDE_OVL_KB_LEFT_MARGIN_PX  10 /* px — gap from left screen edge to keyboard */
+#define Q3IDE_OVL_KB_TOP_MARGIN_PX   10 /* px — gap from top to keyboard anchor */
+#define Q3IDE_OVL_WL_LEFT_MARGIN_PX  10 /* px — gap from left screen edge to window list */
+#define Q3IDE_OVL_WL_RIGHT_MARGIN_PX 20 /* NEW px — gap from right screen edge to window list anchor */
+#define Q3IDE_OVL_WL_CONTENT_PX 260 /* NEW px — total panel width (lamps + max label); anchor = right-margin - this */
 #define Q3IDE_OVL_AREA_LABEL_BOTTOM_PX  10  /* px — distance from screen bottom for area/room label */
 #define Q3IDE_OVL_WINLIST_BOTTOM_PX     180 /* px — distance from bottom of screen to winlist bottom edge */
 #define Q3IDE_OVL_WINLIST_HDR_OFFSET_PX 50  /* px — extra downward offset for Windows:/highlight header */
+#define Q3IDE_AIM_LABEL_TOP_PX          30  /* NEW px — aimed window label distance from top of each monitor */
+#define Q3IDE_OVL_WINHDR_UP_PX          30  /* NEW px — upward offset for WINDOWS: header vs default wl_top */
+
+/* Text layout — derived from calibrated char size */
+#define Q3IDE_OVL_PX_TO_WU     (Q3IDE_OVL_CHAR_W / 12.9f) /* ~0.01039 wu/px — pixel to world-unit conversion */
+#define Q3IDE_TEXT_PADDING_TOP 10                         /* px — gap from one text line to the next */
+#define Q3IDE_OVL_SM_LINE_H                                                                                            \
+	(Q3IDE_OVL_CHAR_H * Q3IDE_OVL_SMALL_SCALE +                                                                        \
+	 Q3IDE_TEXT_PADDING_TOP * Q3IDE_OVL_PX_TO_WU)             /* ~0.224 wu — small text line stride */
+#define Q3IDE_OVL_SECTION_PAD_WU (20.0f * Q3IDE_OVL_PX_TO_WU) /* ~0.208 wu — 20px section gap between UI groups */
 
 /* NOT_USED_YET overlay layout */
 #define Q3IDE_OVL_GAP          0.22f /* NOT_USED_YET — gap between key column and label column */
@@ -151,36 +171,16 @@
 #define Q3IDE_OVL_KEY_CELL     0.28f /* NOT_USED_YET — per-key column stride (2 chars + margin) */
 #define MAX_LEFT_UI_RENDER_FPS 2     /* NOT_USED_YET — keyboard section rebuilt at most 2× per second */
 
-/* ── App lists — capture routing ─────────────────────────────────── */
-
-/* Windows blocked from standalone tunnel capture (still visible in display captures).
- * Glob patterns, case-insensitive. *word* = substring match. */
-#define Q3IDE_DEDICATED_WIN_BLACKLIST                                                                                  \
-	"Dock", "LPSpringboard", "loginwindow", "*Accessibility Services*", "Spotlight", "Notification Center",            \
-	    "NotificationCenter", "*Screen & System Audio Recording*", "WindowServer", "Desktop", "*Little Snitch Agent*", \
-	    "*Keyboard Maestro Engine*", "*Quake*", "*Open and Save Panel*", "*Folder X*", "*Clipboard*", NULL
-
-/* CPU windows: composite display-crop stream. Good for: terminals, text editors (CPU-rendered). */
-#define Q3IDE_CPU_WINDOWS_LIST "iTerm2", "Terminal", NULL
-
-/* GPU windows: dedicated per-window SCStream. Good for: browsers, Electron apps (GPU-rendered). */
-#define Q3IDE_GPU_WINDOWS_LIST                                                                                         \
-	"Google Chrome", "Chromium", "Safari", "Firefox", "Arc", "Brave Browser", "Opera", "Microsoft Edge", NULL
-
-/* ── Gamma correction ────────────────────────────────────────────── */
-
-/* Bright-map list — maps whose leaf name matches get r_gamma dimmed.
- * Pattern syntax: * = any chars, ? = one char (fnmatch-style, case-insensitive). */
-#define Q3IDE_BRIGHT_MAPS                                                                                              \
-	"lun*", /* Lunaran maps (lun3dm5, lunctf1, …) */                                                                   \
-	    NULL
-
-#define Q3IDE_BRIGHT_MAP_GAMMA           0.7f /* multiply r_gamma by this on bright maps */
-#define Q3IDE_BRIGHT_MAP_OVERBRIGHT_BITS 0    /* flattest, most even lighting */
+#include "q3ide_params_windows.h"
 
 /* ── Window background (black + logo behind tunnel face) ────────── */
 
 #define Q3IDE_BG_DEPTH_OFFSET 0.0001f /* normal units — bg pushed behind tunnel face to prevent z-fight */
+
+/* ── Async logging ───────────────────────────────────────────────── */
+
+#define Q3IDE_LOG_QUEUE_CAP 512 /* NEW — ring buffer slot count (must be power of 2); drops silently on overflow */
+#define Q3IDE_LOG_LINE_LEN  512 /* NEW — max formatted line length (level+ts+msg+newline) */
 
 /* ── Teleport history ────────────────────────────────────────────── */
 

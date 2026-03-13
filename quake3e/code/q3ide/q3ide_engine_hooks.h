@@ -52,6 +52,8 @@ void Q3IDE_DrawLeftOverlay(const void *refdef_ptr);
 void Q3IDE_SetHudMsg(const char *msg, int duration_ms);
 /* Draw the current HUD message if not expired — call before re.RenderScene. */
 void Q3IDE_DrawHudMsg(const void *refdef_ptr);
+/* Draw the aimed window name centred at the top of the viewport — call on every monitor. */
+void Q3IDE_DrawAimLabel(const void *refdef_ptr);
 /* Draw 4 red corner crosses on each monitor — debug helper to verify pixel mapping. */
 void Q3IDE_DrawMonitorCorners(const void *refdef_ptr);
 /* Draw calibration rulers on the right monitor so char sizes can be measured. */

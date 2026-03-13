@@ -2,29 +2,84 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Holy Rule
+## Holy Rule **ABSOLUTELY NO FUCKING NO EXCEPTIONS**
 
-- never usr 'rm'. Use 'trash' command instead. You can dig through trashes too.
+- never use 'rm'. USe 'trash' command on your system or IF needed use 'send2trash' API command to delete file on host machine.
 
-## Communication Style
+## Communication Style Rules **NO EXCEPTIONS**
 
-**Rules — no exceptions:**
-- If the message has sentences with `?` — you are NOT allowed to write or modify any code. Answer question only.
-- Explain in plain English. Heavy jargon or math only if unavoidable — use the proper name in parentheses after. No file names in explanations. Show the constant name when it's relevant.
+- **Question mark rule**: IF the message has sentences with `?` THEN you are NOT allowed to write or modify any code. Answer question only.
+- **Jargon level rule**: apply your JARGON LEVEL according to developer `[2/10] knowledge level` value. Use heavy jargon or math only if unavoidable.
+    why:
+        1: The developer has little knowledge about how quake3 engine works. Teach him slowly. 
+        2: The developer did ray-tracing a few times for his CS computer graphics classes in which he failed
+- **Response format**: MANDATORY
+    Every response that completes a task MUST end with these 4 lines.
+    **THIS IS NOT OPTIONAL. USER RUNS MULTIPLE TERMINALS. THEY CANNOT TELL WHICH AGENT DID WHAT WITHOUT THIS SUMMARY. SKIPPING IT CAUSES REAL CONFUSION AND FRUSTRATION.**
+    ```
+    **You asked:** <what the user asked for, in plain English — not file names or symbols>
+    **Done:** <show "lines changed: X" write what was actually implemented, in plain English according to 'knowledge level` >
+    **Optimizations:** <write down any optimization hacks that were introduced (caps, throttles, rate limits, performance tuning)>
+    **Concerns:** see **I'm Concerned rules** below
+    ```
 
-## Coding Style
+    Bad ending (never do this):
+        > Done. q3ide_params.h — added Q3IDE_SHORTPRESS_MS 300. q3ide_view_modes.c — refactored: win_snapshot_t, +q3ide_focus3/-q3ide_focus3...
 
-- Minimize Quake3e internal code changes — keep engine swappable.
-- **File size:** max 400 lines, sweet spot 200. Never grow internal Quake3e files.
+    Good ending:
+        > **You asked:** make O and I use short-press (keep) / long-press (show then restore).
+        > **Done:** both keys now detect hold duration — tap keeps the layout, hold restores on release. Threshold 300ms. autoexec.cfg updated.
+        > **Optimizations:** Q3IDE_DEFAULT_WINDOW_SIZE 100.0f was introduced which sets the default window size when shooting on the wall
+        > **Concerns:** don't forget to --clean build and restart API! Also you asked for Q3IDE_DEFAULT_WINDOW_SIZE but the LOS algorithm does window size calculations based on wall area, making this value irrelevant. Solutions: ...
+
+- **I'm Concerned rules**
+    - Write `-` if the implementation is 100% clean: 
+        - no hacks
+        - no optimalizations were introduced
+        - no fallbacks
+        - no workarounds
+        - no stubbed paths
+        - no silent failures
+        - no half-done work
+        - no imitations of the requested feature!!
+    - Otherwise name exactly what was faked, skipped, or worked around — and why. Be direct. Do not bury it.
+        - The developer does NOT look at the code and runs multiple claude sessions/terminals. 
+        - Don't even post summary of which files were affected. Show the new PARAM name when it's relevant.
+- **Brainstorming rule**: IF developer asked a general question THEN try to reply in general and not make assumptions about our use-case. But push back if it effects our use-case.
+
+## Coding Rules **NO EXCEPTIONS**
+
+- **De-sloppify rule**: IF you are about to move on to the next task AND you just had multiple fix attempts to make a feature work THEN automatically apply this `.agents/commands/yay.md` command to de-sloppify code. **NO EXCEPTIONS!**
+- **FEEDBACK LOOP**: 
+    - You (Claude) are running inside Docker container and you can NOT build quake inside a container because it's for macOS!
+    - But you can `LINT -> KILL QUAKE -> BUILD(queued) -> RUN -> INTERACT WITH PLAYER or QUAKE (if needed) -> -> DEBUG (if needed) -> READ LOGS (if needed) -> FIX ANY EXPERIENCED ISSUES -> REPEAT LOOP UNTIL ISSUE RESOLVED`! No user intervention is needed! Don't ask user to press "M" button if you can do it yourself. Use the Remote API + WebSocket bridge when needed (see section below).
+- **No Imitation Implementations**: 
+    - IF a user asks for a new feature THEN do not build a shallow imitation that mimics the surface appearance without the real underlying behavior. 
+    - IF you have serious concerns about feasibility or approach THEN push back and explain before writing any code. 
+- **Keybind cleanup rule**: IF a feature with a hotkey is deleted THEN add `unbind <KEY>` to `baseq3/autoexec.cfg` in the same task. Never leave ghost binds.
+- **Minimize internal code changes**: the current `QUAKE3E CODE CHANGE RATIO is 1.85%`. Keep this number minimized while developing
+- **NO Unsolicited Optimizations**: 
+    - Agents are forbidden to introduce optimizations, caps, throttles, rate limits, or performance tuning of any kind unless the user explicitly asks.
+        Why: performance improvements are introduced gradually and deliberately. Agents adding their own caps or throttles introduce unexpected behaviour that breaks the developer's mental model of the system and causes hard-to-trace bugs.
+
+        If you think something could be optimized — say so in **Concerns**, but do NOT implement it.
+- **File size:** max 400 lines, sweet spot 200. Never grow internal Quake3e files. This rule does not apply to internal quake3e files.
+- **Swappable and working engines support**: Q3IDE must work with `opengl1` and `vulkan`
 - **C99 (q3ide/):** tabs, K&R braces, `snake_case`. All public symbols prefixed `q3ide_`/`Q3IDE_`. All Quake3e hooks inside `#ifdef USE_Q3IDE`.
 - **Rust (capture/):** No `unsafe` outside `lib.rs`. `Result`/`?` for errors. `crossbeam` for concurrency.
 - **Naming:** VisionOS terminology — Window, Ornament (not panel/toolbar).
-- **File names:** never too short or cryptic. Must be tiny, human-readable. Spell out what the file does. `q3ide_wm.h` → `q3ide_win_mngr.h`, `q3ide_cmd.c` → `q3ide_commands.c`, `q3ide_geom.c` → `q3ide_geometry.c`. If a new teammate can't guess the contents from the name alone, rename it.
-- **ALWAYS remind the user to `--clean` build** after C source changes. `make` timestamps can miss changes across Docker/macOS sync.
-- **When running inside Docker** — use the Remote API + WebSocket bridge (see section below). Do NOT fall back to log polling; use the live WebSocket stream instead.
+- **File names:** never too short or cryptic. Must be tiny, human-readable. Spell out what the file does. If a new teammate can't guess the contents from the name alone, rename it. Examples:
+    - `q3ide_wm.h` → `q3ide_win_mngr.h`
+    - `q3ide_cmd.c` → `q3ide_commands.c`
+    - `q3ide_geom.c` → `q3ide_geometry.c`.     
+- `quake3e-orig/` — **untouched original** Read-only. Peek at it if you need to see the original unmodified version of quake3e. Handy when restoring original code.
+- `quake3e-stable/` — **user's last known-good stable build**. Read-only. Use as reference when the active codebase is broken or behaviour is uncertain.
+- `README.md` -> `## Features working` Read-only section includes all the working feature. New feature must not break or interfere with the working features.
+- `README.md` -> `## Q3IDE Roadmap` Read-only section includes the status of our confirmed to be working progress
+- `README.md` -> `## Quake3e Changes` Read-only section includes all the surgically inserted code into quake3e.
 
 
-## q3ide_params.h — THE HOLY BOOK
+## q3ide_params.h — THE HOLY BOOK RILES
 
 `quake3e/code/q3ide/q3ide_params.h` is the **single source of truth** for every tunable constant in q3ide.
 
@@ -38,86 +93,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - The `CAPS & THROTTLES` section at the top lists all hard limits. New caps go there with a warning comment.
 
 
+## Multi Agent Orchestration
+
+- If task difficulty is above `0.5` → use orchestrator with multiple q3agents (see `.agents/PARALLEL_AGENTS.md`)
+- Otherwise → run with main agent
 
 
-## Parallel Agents — Lint/Build Fail Triage
+## Swift Bridge — Async Rules
 
-**4–6 agents run simultaneously. Each owns specific files. Never fix another agent's files.**
+- **Stream.swift**: fire-and-forget `Task {}` only. **NO `DispatchSemaphore`** — Q3 thread = macOS main queue → deadlock.
+- **ShareableContent.swift**: `DispatchSemaphore` + 5s timeout is fine (called from background Rust thread).
 
-When lint or build fails:
-1. Read the error. Which file?
-2. Your scope when multiple claude sessions are running in parallel? → fix it.
-3. Another agent's scope? → **stop. report to orchestrator. do not touch it, don't build.**
 
-File ownership for agents:
-- `quake3e/code/q3ide/`, `quake3e/Makefile` → **engine-adapter**
-- `capture/` → **capture-rust**
-- `spatial/` → **spatial-c**
-- `daemon/` → **daemon-rust**
+## Deleted Features — DO NOT Re-add Without Explicit User Request
 
-If another agent's WIP breaks the shared build, that's their fix. Report the failing file+error to orchestrator and work on independent tasks or wait. **Never edit outside your scope to unblock a build** — it corrupts their in-progress work.
+- Pointer/Keyboard mode (L key, Enter)
+- Blood splat effect
+- Grapple rope visual
+- Respawn focus (spawn.c)
+- `q3ide attach` / `q3ide desktop` / `q3ide walls` commands
+- Multi-window app panel grouping (`window_ids[]`, `app_name` in `q3ide_win_t`)
+- Wall pre-scanner (`q3ide_wall_scanner.c`)
+- Interaction system (`q3ide_interaction.c/.h`, `q3ide_interaction_frame.c`)
+- `q3ide_laser.c`, `q3ide_rope.c`, `q3ide_effects.c`, `q3ide_entity.c`, `q3ide_spawn.c`
+- `q3ide_placement.c/.h`
 
-## Agent Autonomy — NON-NEGOTIABLE
-
-**The agent does everything. Never ask the user to run, build, test, or check anything.**
-
-- Lint → build → run → read logs → fix → repeat. All of it. Autonomous loop.
-- Use the Remote API (`host.docker.internal:6666`) to build, run, stop, and tail logs.
-- Use `dbg.cmd(...)` / `dbg.watch(...)` to read live output. Never ask the user to paste logs.
-- If the API server is unreachable, say so once and wait — do NOT ask the user to start it.
-- Fix compiler errors yourself. Read the struct definitions. Don't ship code that doesn't compile.
-- When something breaks, diagnose from logs before touching code. Don't guess.
-
-## Agent Infrastructure Location
-
-**Agent definition files always go in `.agents/agents/`** (dot-prefixed, at project root) — NOT in `.claude/` or `agents/` (no dot). Commands go in `.agents/commands/`. Project manifest at `.agents/PROJECT_LOOP.md`. Claude-only settings in `.claude/`. The `.agents/` convention is the cross-IDE standard (Claude Code, OpenCode, etc.).
-
-## NO Unsolicited Optimizations
-
-**Agents are forbidden to introduce optimizations, caps, throttles, rate limits, or performance tuning of any kind unless the user explicitly asks.**
-
-Why: performance improvements are introduced gradually and deliberately. Agents adding their own caps or throttles introduce unexpected behaviour that breaks the developer's mental model of the system and causes hard-to-trace bugs.
-
-If you think something could be optimized — say so in **Concerns**, but do NOT implement it.
-
-## Debug Tips
-
-- Engine logs via `tee` are garbled (CR progress bars) — use RCON `q3ide status` to verify state
-- `/run` tracks build shell PID not game process — `/stop` uses `pkill -f quake3e` as fallback
-- **Stuck?** `POST /kill` — kills game + running build + clears queue in one call
-- **Queue:** `POST /queue/clear` — drains pending builds + kills stuck build (leaves game running)
-- **Status:** `GET /status` — returns `running`, `pid`, `uptime_s`, `build.active`, `build.pending`
-- `--engine-only` flag skips `cargo build --release` for fast C-only iteration
-- Use `/run` (non-blocking) instead of `/build` (blocks, 600s timeout) when build takes long
-- `q3ide status` via RCON is ground truth: shows active windows, dylib state, frame counts, shader slots
-
-## Logging
-
-Three outputs — use the right one per purpose:
-
-| Output | API call | When to use |
-|--------|----------|-------------|
-| **Structured events** | `GET /events?type=<t>&pid=<p>` | Machine queries — filterable, typed, reliable |
-| **q3ide levelled log** | `GET /logs?file=q3ide` | Human-readable — no Q3 engine noise, session-bounded |
-| **engine.log** | `GET /logs?file=engine` | Last resort — noisy, mixed Q3 + q3ide output |
-
-**Always use `/events` to verify what happened. Never grep engine.log.**
-
-```python
-evts = api('GET', f'/events?type=dylib_loaded&pid={game_pid}')['events']
-assert evts, "dylib never loaded"
-
-evts = api('GET', f'/events?type=attach_done&pid={game_pid}')['events']
-print(f"Attached {evts[-1]['attached']}/{evts[-1]['total']}")
-```
-
-Event types: `session_start`, `session_end`, `dylib_loaded`, `dylib_failed`,
-`window_found`, `display_found`, `window_attached`, `display_attached`, `attach_done`
-
-Log aliases: `engine`, `multimon`, `capture`, `build`, `q3ide`
-
-**Always fetch 400 lines. Never use n=40, n=50, n=100 — 400 is the minimum.**
-WebSocket streams: same aliases. In Docker use `Q3Debug.watch()` — never poll manually.
 
 ## Architecture
 
@@ -128,8 +128,6 @@ macOS Window → ScreenCaptureKit → Rust dylib (ring buffer) → C-ABI → Qua
 1. **q3ide-capture** (`capture/`) — Rust cdylib wrapping ScreenCaptureKit. Lock-free ring buffer. C-ABI: `q3ide_init()`, `q3ide_get_frame()`, `q3ide_shutdown()`, etc.
 2. **Engine Hooks** (`quake3e/code/q3ide/`) — Texture upload via `RE_UploadCinematic`, wall tracing via `CM_BoxTrace`, rendering via `AddPolyToScene`. Hooks in `cl_main.c`, guarded by `#ifdef USE_Q3IDE`.
 
-`quake3e-orig/` — **untouched original** Quake3e source. Read-only. Never modify.
-`quake3e-stable/` — **user's last known-good build**. Read-only. Use as reference when the active codebase is broken or behaviour is uncertain.
 
 ## Key Files
 
@@ -144,123 +142,52 @@ macOS Window → ScreenCaptureKit → Rust dylib (ring buffer) → C-ABI → Qua
 - `baseq3/autoexec.cfg` — game settings
 - `docs/screencapturekit-rs/API_REFERENCE.md` — verified SCK API ref
 
-## Linting — MANDATORY
 
-**Run after every C/Rust edit.** From Docker:
+## Debug, Logging, Lint, Build
 
+**Stuck?** `POST /kill` — kills game + build + clears queue. `GET /status` → `running`, `pid`, `uptime_s`, `build.active/pending`.
+Engine logs are garbled — use `q3ide status` via RCON as ground truth. `--engine-only` skips Rust rebuild (C-only changes). `/run` is non-blocking; prefer over `/build`.
+
+**Logging — always `/events` first, never grep engine.log. Always fetch n=400.**
+- `GET /events?type=<t>&pid=<p>` — machine queries (typed, filterable)
+- `GET /logs?file=q3ide` — human-readable, session-bounded
+- `GET /logs?file=engine` — last resort, noisy
+
+Event types: `session_start/end`, `dylib_loaded/failed`, `window/display_found/attached`, `attach_done`
+Log aliases: `engine`, `multimon`, `capture`, `build`, `q3ide` — WebSocket: use `Q3Debug.watch()`, never poll.
+
+**Lint — MANDATORY after every C/Rust edit:**
 ```python
-result = api('POST', '/lint', {'fix': True})  # auto-fix clang-format, then check
-print(result['output'])
-assert result['ok'], "Lint errors — fix before building"
+result = api('POST', '/lint', {'fix': True}); assert result['ok'], result['output']
+# cppcheck (slow, last resort): api('POST', '/lint', {'fix': True, 'args': ['--cppcheck']})
 ```
+macOS: `sh ./scripts/lint.sh`. Checks: clang-format + file length (warn>200, err>400) + symbol prefix + `#ifdef USE_Q3IDE` guards + no `unsafe` outside `lib.rs`.
 
-**cppcheck is OFF by default** (slow). Use as last resort when suspecting memory/logic bugs:
-
-```python
-result = api('POST', '/lint', {'fix': True, 'args': ['--cppcheck']})
-```
-
-On macOS: `sh ./scripts/lint.sh` (fast) or `sh ./scripts/lint.sh --cppcheck` (thorough)
-
-| Scope | Tool | Default | Checks |
-|---|---|---|---|
-| `q3ide/` C files | clang-format | ✅ on | Style, indentation, braces |
-| `q3ide/` C files | cppcheck | ❌ `--cppcheck` flag | Null deref, uninit vars, logic bugs |
-| `q3ide/` C files | basic | ✅ on | File length (warn >200, error >400), symbol prefix |
-| Modified Quake3e files | basic | ✅ on | `#ifdef USE_Q3IDE` guards |
-| `capture/` Rust | basic | ✅ on | No `unsafe` outside `lib.rs` |
-
-macOS: `brew install clang-format cppcheck`. Docker: clang-format-14 static binary installed at `/usr/local/bin/clang-format` (persistent in container).
-
-**Agents MUST run clang-format on every C file they write or modify. No exceptions.**
-
-## Build & Run — Docker Workflow
-
-**From Docker always use `host.docker.internal:6666`** — `localhost` does NOT reach the Mac.
-Detect Docker: `os.path.exists('/.dockerenv')`.
-
+**Build & Run — Docker (`host.docker.internal:6666`, never `localhost`):**
 ```python
 import os, sys, json, time, uuid, urllib.request
 sys.path.insert(0, '/root/Projects/q3ide/scripts')
 from ws_debug import Q3Debug
-
-AGENT_NAME = 'engine-adapter'  # set per agent
-SESSION_ID = uuid.uuid4().hex[:8]
-
+AGENT_NAME = 'my-agent'; SESSION_ID = uuid.uuid4().hex[:8]
 def api(method, path, body=None, timeout=600):
     data = json.dumps(body).encode() if body else None
-    headers = {'Content-Type': 'application/json', 'X-Agent-ID': f'{AGENT_NAME}/{SESSION_ID}'}
-    req = urllib.request.Request(f'http://host.docker.internal:6666{path}',
-                                  data=data, method=method, headers=headers)
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())
+    req = urllib.request.Request(f'http://host.docker.internal:6666{path}', data=data, method=method,
+        headers={'Content-Type': 'application/json', 'X-Agent-ID': f'{AGENT_NAME}/{SESSION_ID}'})
+    with urllib.request.urlopen(req, timeout=timeout) as r: return json.loads(r.read())
 
-# 1. lint
-result = api('POST', '/lint', {'fix': True})
-assert result['ok'], result['output']
-
-# 2. build — long-poll, no sleep loop, no Docker timeout risk
-r = api('POST', '/build', {'args': ['--clean', '--engine-only'], 'agent_id': AGENT_NAME})
+api('POST', '/lint', {'fix': True})  # lint first
+r = api('POST', '/build', {'args': ['--engine-only'], 'agent_id': AGENT_NAME})  # omit --clean if Rust unchanged
 qid = r['queue_id']
 while True:
-    s = api('GET', f'/build_status?id={qid}&wait=30')  # blocks up to 30s server-side
+    s = api('GET', f'/build_status?id={qid}&wait=30')
     if s.get('timed_out'): continue
     if s['status'] in ('done', 'failed', 'cancelled', 'gone'): break
-if s['status'] != 'done':
-    print(s.get('log_tail', '(no output)'))  # build.log tail included automatically
-    raise RuntimeError(f"Build {s['status']} rc={s.get('returncode')}")
-
-# 3. run + WebSocket debug
-api('POST', '/run', {'args': ['--level', '0']})
+if s['status'] != 'done': raise RuntimeError(s.get('log_tail'))
+api('POST', '/run', {'args': ['--level', 'r']})
 time.sleep(5)
-with Q3Debug() as dbg:
-    dbg.watch(seconds=15, filter_fn=lambda f, l: True)
-    print(dbg.cmd('q3ide status'))
-
-# 4. stop
-api('POST', '/stop')
+with Q3Debug() as dbg: dbg.watch(seconds=15); print(dbg.cmd('q3ide status'))
 ```
+Rules: `--clean` after C changes · **NEVER `--clean` + `--engine-only` together** (wipes dylib, engine-only skips re-copy → "not ready") · `/run` auto-stops old game.
 
-Rules: always `--clean` after C changes · always `host.docker.internal` · use `--engine-only` to skip Rust · `/run` auto-stops old game.
-
-## Build & Run (macOS)
-
-```sh
-sh ./scripts/build.sh --api --clean --run --level 0
-```
-
-| Flag | Description |
-|------|-------------|
-| `--clean` | `make clean` before build — required after C changes |
-| `--run` | Launch game after build |
-| `--api` | Start `remote_api.py` in background |
-| `--level <map>` | `0`→`q3dm0`, `7`→`q3dm7`, or full map name |
-| `--bots <n>` | Add N bots |
-| `--execute '<cmd>'` | Console command after map loads |
-| `--release <alias\|path>` | Engine source to build. Aliases: `nightbuild` (default=`quake3e/`), `stable` (`quake3e-stable/`), `orig` (`quake3e-orig/`). Or pass an absolute path. |
-
-## Task Completion — MANDATORY response format
-
-**THIS IS NOT OPTIONAL. USER RUNS 4+ TERMINALS. THEY CANNOT TELL WHICH AGENT DID WHAT WITHOUT THIS SUMMARY. SKIPPING IT CAUSES REAL CONFUSION AND FRUSTRATION.**
-
-**Every response that completes a task MUST end with these three lines. No exceptions.**
-
-```
-**You asked:** <what the user asked for, in plain English — not file names or symbols>
-**Done:** <what was actually implemented, in plain English>
-**Concerns:** <see below>
-```
-
-**Concerns rules:**
-- Write `-` if the implementation is 100% clean: no hacks, no fallbacks, no workarounds, no stubbed paths, no silent failures, nothing half-done.
-- Otherwise name exactly what was faked, skipped, or worked around — and why. Be direct. Do not bury it.
-
-**The zero-copy cautionary tale:** Claude implemented "zero-copy IOSurface upload", silently fell back to CPU copy when it failed, and never told the user. The feature appeared done. It wasn't. This section exists to prevent that exact failure.
-
-Bad ending (never do this):
-> Done. q3ide_params.h — added Q3IDE_SHORTPRESS_MS 300. q3ide_view_modes.c — refactored: win_snapshot_t, +q3ide_focus3/-q3ide_focus3...
-
-Good ending:
-> **You asked:** make O and I use short-press (keep) / long-press (show then restore).
-> **Done:** both keys now detect hold duration — tap keeps the layout, hold restores on release. Threshold 300ms. autoexec.cfg updated.
-> **Concerns:** -
+**remote_api.py — macOS only, needs restart to pick up changes.**
+Build timeouts: `--clean`=600s · engine-only=300s · full=900s.

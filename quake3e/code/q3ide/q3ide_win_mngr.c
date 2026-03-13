@@ -1,6 +1,7 @@
 /*
  * q3ide_win_mngr.c — Window manager: global state, attach, move, find.
  * Dylib load / poll thread / init / shutdown: q3ide_dylib.c.
+ * Stream pause/resume + hide/show: q3ide_win_streams.c.
  */
 
 #include "q3ide_win_mngr.h"
@@ -30,7 +31,7 @@ static void q3ide_apply_wall_stack(q3ide_win_t *win, int self_idx)
 	qboolean found = qfalse;
 	vec3_t right, up;
 	q3ide_win_basis(win, right, up);
-	my_d  = DotProduct(win->origin, win->normal);
+	my_d = DotProduct(win->origin, win->normal);
 	max_d = my_d;
 	for (i = 0; i < Q3IDE_MAX_WIN; i++) {
 		q3ide_win_t *w;
@@ -52,8 +53,7 @@ static void q3ide_apply_wall_stack(q3ide_win_t *win, int self_idx)
 		/* 2D AABB overlap in right/up space */
 		dx = DotProduct(diff, right);
 		dz = diff[2]; /* up is always world Z */
-		if (fabsf(dx) < (win->world_w + w->world_w) * 0.5f &&
-		    fabsf(dz) < (win->world_h + w->world_h) * 0.5f) {
+		if (fabsf(dx) < (win->world_w + w->world_w) * 0.5f && fabsf(dz) < (win->world_h + w->world_h) * 0.5f) {
 			wd = DotProduct(w->origin, win->normal);
 			if (wd > max_d)
 				max_d = wd;
@@ -126,7 +126,8 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	}
 	win->world_w = ww;
 	win->world_h = wh;
-	win->is_tunnel = qtrue; /* OS screen-capture window — removed by detach-all */
+	win->is_tunnel = qtrue;   /* OS screen-capture window — removed by detach-all */
+	win->wall_placed = qtrue; /* Attach = wall placement by default; overview clears this for arc-only windows */
 	win->uv_x0 = 0.0f;
 	win->uv_x1 = 1.0f;
 	win->owns_stream = do_start;
@@ -137,6 +138,11 @@ qboolean Q3IDE_WM_Attach(unsigned int id, vec3_t origin, vec3_t normal, float ww
 	q3ide_apply_wall_stack(win, i);
 	return qtrue;
 }
+
+/* g_ov_active: true while overview is showing (q3ide_view_modes_overview.c) */
+extern qboolean g_ov_active;
+/* Restack arc after a window leaves it (q3ide_view_modes_grid.c) */
+extern void q3ide_overview_layout(void);
 
 void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_clamp)
 {
@@ -154,6 +160,13 @@ void Q3IDE_WM_MoveWindow(int idx, vec3_t origin, vec3_t normal, qboolean skip_cl
 	}
 	if (!skip_clamp)
 		q3ide_clamp_window_size(&q3ide_wm.wins[idx]);
+	/* User shot this window onto a wall during overview: mark it wall-placed,
+	 * pull it from the arc, and restack the remaining arc windows. */
+	if (!skip_clamp && g_ov_active) {
+		q3ide_wm.wins[idx].wall_placed = qtrue;
+		q3ide_wm.wins[idx].in_overview = qfalse;
+		q3ide_overview_layout();
+	}
 	q3ide_apply_wall_stack(&q3ide_wm.wins[idx], idx);
 }
 
@@ -164,43 +177,4 @@ int Q3IDE_WM_FindById(unsigned int cid)
 		if (q3ide_wm.wins[i].active && q3ide_wm.wins[i].capture_id == cid)
 			return i;
 	return -1;
-}
-
-void Q3IDE_WM_PauseStreams(void)
-{
-	if (q3ide_wm.streams_paused)
-		return;
-	q3ide_wm.streams_paused = qtrue;
-	if (q3ide_wm.cap_pause_streams && q3ide_wm.cap)
-		q3ide_wm.cap_pause_streams(q3ide_wm.cap);
-	Q3IDE_LOGI("streams paused (;)");
-}
-
-void Q3IDE_WM_ResumeStreams(void)
-{
-	if (!q3ide_wm.streams_paused)
-		return;
-	if (q3ide_wm.streams_user_paused)
-		return; /* ";" killswitch active — block all automatic resumes */
-	q3ide_wm.streams_paused = qfalse;
-	if (q3ide_wm.cap_resume_streams && q3ide_wm.cap)
-		q3ide_wm.cap_resume_streams(q3ide_wm.cap);
-	Q3IDE_LOGI("streams resumed");
-}
-
-void Q3IDE_WM_HideWins(void)
-{
-	q3ide_wm.wins_hidden = qtrue;
-	Q3IDE_LOGI("windows hidden (H)");
-}
-
-void Q3IDE_WM_ShowWins(void)
-{
-	q3ide_wm.wins_hidden = qfalse;
-	Q3IDE_LOGI("windows shown (H)");
-}
-
-qboolean Q3IDE_WM_WinsHidden(void)
-{
-	return q3ide_wm.wins_hidden;
 }

@@ -23,8 +23,9 @@ EXECUTE=""
 BOTS=""
 RELEASE_BUILD="nightbuild"
 QUEUE_ID=""
+RENDERER=""
 
-while [[ $# -gt 0 ]]; do
+while [ "$#" -gt 0 ]; do
     case "$1" in
         --run)          DO_RUN=1; shift ;;
         --clean)        DO_CLEAN=1; shift ;;
@@ -94,10 +95,14 @@ while [[ $# -gt 0 ]]; do
                         ori_apt quatrix r7-blockworld1 m3amap1
                     )
                     LEVEL="${_maps[$RANDOM % ${#_maps[@]}]}"
-                    echo "[build] Random map: $LEVEL"
                     shift 2 ;;
                 *)
                     LEVEL="$2"; shift 2 ;;
+            esac ;;
+        --renderer)
+            case "${2:-}" in
+                opengl1|opengl2|vulkan) RENDERER="$2"; shift 2 ;;
+                *) echo "--renderer requires: opengl1 | opengl2 | vulkan"; exit 1 ;;
             esac ;;
         --execute)      EXECUTE="$2"; shift 2 ;;
         --bots)         BOTS="$2"; shift 2 ;;
@@ -174,6 +179,20 @@ if [ "$OS_TYPE" = "Darwin" ]; then
     HIDPI_N=$(echo "$SP_DISP" | grep -ic "HiDPI: Yes\|Retina: Yes" || true)
     [ "${HIDPI_N:-0}" -gt 0 ] && HIDPI_STR="YES" || HIDPI_STR="NO"
     OPENGL_STR="YES"  # always present on macOS (deprecated but present)
+    if [ -f "/usr/local/lib/libMoltenVK.dylib" ] || \
+       [ -f "$HOME/VulkanSDK/macOS/lib/libMoltenVK.dylib" ] || \
+       [ -d "/usr/local/share/vulkan" ]; then
+        VULKAN_STR="YES"
+    else
+        VULKAN_STR="NO"
+    fi
+
+    # Auto-detect renderer from GPU — overridden by --renderer flag
+    case "$GPU" in
+        *AMD*|*Radeon*|*NVIDIA*|*GeForce*) AUTO_RENDERER="vulkan" ;;
+        *) AUTO_RENDERER="opengl1" ;;
+    esac
+    [ -n "$RENDERER" ] && AUTO_RENDERER="$RENDERER"
 
     # Monitor info: one line per display "[n] WxH @ HzHz  Retina|Non-Retina"
     MONITOR_LAYOUT=$(python3 - <<'PYEOF' 2>/dev/null
@@ -235,15 +254,33 @@ else
     GPU_VRAM="?"
     METAL_STR="NO"; OPENCL_STR="NO"; HIDPI_STR="NO"; OPENGL_STR="YES"
     MONITOR_LAYOUT="unknown"
+    case "$GPU" in
+        *AMD*|*Radeon*|*NVIDIA*|*GeForce*) AUTO_RENDERER="vulkan" ;;
+        *) AUTO_RENDERER="opengl1" ;;
+    esac
+    [ -n "$RENDERER" ] && AUTO_RENDERER="$RENDERER"
 fi
 
 # ── System banner: ASCII skull left (32) │ system info right (49) ───────────
 # Per-line: "  ║  " (5) + art(32) + "  │  " (5) + info(49) + "  ║" (3) = 94
 _TS="$(date '+%H:%M:%S')"
 _RDIV="─────────────────────────────────────────────────"
-_G='\033[32m'; _D='\033[2m'; _R0='\033[0m'
-_yn() { [ "$1" = "YES" ] && printf "${_G}YES${_R0}" || printf "${_D}NO${_R0}"; }
-_api() { printf "%-6s %s" "$1" "$(_yn "$2")"; }
+_G='\033[32m'; _RED='\033[31m'; _DIM='\033[2m'; _R0='\033[0m'
+# _api NAME SUPPORTED RENDERER_PREFIX
+_api() {
+    if [ "$2" = "YES" ]; then
+        if [ -z "$3" ]; then
+            printf "${_G}%s ✅${_R0}\t" "$1"
+        else
+            case "$AUTO_RENDERER" in
+                "$3"*) printf "${_G}%s ✅${_R0}\t" "$1" ;;
+                *)     printf "${_G}%s ${_RED}✗${_R0}\t"  "$1" ;;
+            esac
+        fi
+    else
+        printf "${_DIM}%s ⛔${_R0}\t" "$1"
+    fi
+}
 
 # Parse monitor lines into array (one per display)
 IFS=$'\n' read -r -d '' -a _MON <<< "$MONITOR_LAYOUT" 2>/dev/null || true
@@ -268,36 +305,34 @@ _A=(
     "            8 88 8"
     ""
     "       Quake III IDE"
+    ""
 )
 
 # Info column — 18 rows. API rows use ANSI color; no right-wall so width is free.
 _R=(
     "Q3IDE BUILD ENVIRONMENT  [$_TS]"
     "$_RDIV"
-    "Version   $Q3IDE_VERSION"
-    "Release   $RELEASE_LABEL"
-    "$(printf 'Arch  %-12s  OS    %s' "$Q3E_ARCH" "$SYS_TYPE")"
+    "$(printf '%-14s%s'        'Version' "$Q3IDE_VERSION")"
+    "$(printf '%-14s%s'        'Release' "$RELEASE_LABEL")"
+    "$(printf '%-14s%s'        'Engine'  "$AUTO_RENDERER")"
+    "$(printf '%-14s%s'        'Map'     "${LEVEL:-}")"
+    "$(printf '%-14s%-8s%s'   'Arch'    "$Q3E_ARCH" "$SYS_TYPE")"
     "$_RDIV"
-    "CPU   $CPU"
-    "$(printf 'RAM   %-8s  GPU   %s' "$RAM" "$GPU")"
-    "VRAM  $GPU_VRAM"
+    "$(printf '%-14s%-24s%-8s%s' 'CPU'  "$CPU"     'RAM'  "$RAM")"
+    "$(printf '%-14s%-24s%-8s%s' 'GPU'  "$GPU"     'VRAM' "$GPU_VRAM")"
     "$_RDIV"
-    "$(_api Metal "$METAL_STR")   $(_api OpenGL "$OPENGL_STR")   $(_api OpenCL "$OPENCL_STR")   $(_api HiDPI "$HIDPI_STR")"
+    "$(_api Vulkan "$VULKAN_STR" vulkan)$(_api OpenGL1 "$OPENGL_STR" opengl1)$(_api OpenGL2 "$OPENGL_STR" opengl2)"
+    "$(_api Metal "$METAL_STR" "")$(_api OpenCL "$OPENCL_STR" "")$(_api HiDPI "$HIDPI_STR" "")"
     "$_RDIV"
     "${_MON[0]:-}"
     "${_MON[1]:-}"
     "${_MON[2]:-}"
     ""
-    "$_RDIV"
-    "${LEVEL:+Map   $LEVEL}"
 )
-
-# ASCII art needs 19 lines too — pad with blanks
-_A+=( "" )
 
 printf '\n'
 printf '  ╔══════════════════════════════════════════════════════════════════════════════════════════\n'
-for _i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18; do
+for _i in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17; do
     printf '  ║  %-32s  │  %s\n' "${_A[$_i]}" "${_R[$_i]}"
 done
 printf '  ╚══════════════════════════════════════════════════════════════════════════════════════════\n'
@@ -430,7 +465,7 @@ def stem(fn):
 
 def wipe_obj(s):
     """Delete <stem>.o from all known build subdirs."""
-    for bd in ('client', 'rendergl1', 'rendergl2', 'rendervk'):
+    for bd in ('client', 'rend1', 'rend2', 'rendv'):
         obj = os.path.join(build_dir, bd, s + '.o')
         if os.path.exists(obj):
             os.remove(obj)
@@ -572,8 +607,6 @@ else
 fi
 echo ""
 echo "  In-game console (~):"
-	echo "    q3ide desktop        - capture all monitors on nearest wall (default)"
-	echo "    q3ide attach all     - attach iTerm/Terminal windows"
 	echo "    q3ide list           - list capturable windows"
 	echo "    q3ide detach         - detach all windows"
 	echo "    q3ide status         - show active windows"
@@ -664,7 +697,12 @@ if [ "$DO_RUN" = "1" ]; then
 
     # Build command args
     # vm_game 0 = native dylib; vm_cgame 2 = standard QVM (native cgame is incompatible with quake3e)
-    ENGINE_ARGS="+set vm_game 0 +set vm_cgame 2 +set vm_ui 2 +set cl_renderer opengl1"
+    ENGINE_ARGS="+set vm_game 0 +set vm_cgame 2 +set vm_ui 2 +set cl_renderer $AUTO_RENDERER +set r_multiMonitor 1"
+
+    # --release stable: disable q3ide file logging (no dev noise in production runs)
+    if [ "$RELEASE_BUILD" = "stable" ]; then
+        ENGINE_ARGS="$ENGINE_ARGS +set q3ide_log_disable 1"
+    fi
 
     # --level: override the map
     if [ -n "$LEVEL" ]; then

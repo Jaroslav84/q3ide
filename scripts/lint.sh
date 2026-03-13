@@ -147,9 +147,10 @@ run_guard_checks() {
         quake3e/code/renderer/tr_local.h
         quake3e/code/renderer/tr_init.c
         quake3e/code/renderer/tr_scene.c
-        quake3e/code/renderer2/tr_backend.c
-        quake3e/code/renderer2/tr_init.c
-        quake3e/code/renderer2/tr_scene.c
+        quake3e/code/renderervk/tr_backend.c
+        quake3e/code/renderervk/tr_init.c
+        quake3e/code/renderervk/tr_scene.c
+        quake3e/code/renderervk/vk.c
         quake3e/code/renderercommon/tr_public.h
     "
 

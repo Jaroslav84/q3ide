@@ -6,15 +6,13 @@
  */
 
 #include "q3ide_params.h"
-#include "q3ide_params_theme.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include "q3ide_overlay_keys.h"
 #include <string.h>
 
-/* keyboard extents — written here, read by keyboard.c */
-extern float g_kb_bot;       /* keyboard bottom ux offset from anchor (negative = below) */
-extern float g_kb_max_right; /* max right extent across all cached glyphs */
+/* kb_bot written here, read by keyboard.c for winlist/area positioning */
+extern float g_kb_bot;
 
 /* ── Key dimensions ─────────────────────────────────────────────────── */
 #define KCW    (Q3IDE_OVL_CHAR_W * Q3IDE_OVL_SMALL_SCALE)
@@ -24,32 +22,33 @@ extern float g_kb_max_right; /* max right extent across all cached glyphs */
 /* ── Color lookup ───────────────────────────────────────────────────── */
 static void key_color(key_state_t st, byte *r, byte *g, byte *b)
 {
-#define SETCLR_X(R, G, B)                                                                                              \
-	do {                                                                                                               \
-		*r = (R);                                                                                                      \
-		*g = (G);                                                                                                      \
-		*b = (B);                                                                                                      \
-	} while (0)
-#define SETCLR(clr) SETCLR_X(clr)
 	switch (st) {
 	case KEY_Q3IDE:
-		SETCLR(Q3IDE_CLR_KEY_Q3IDE);
-		break;
+		*r = 220;
+		*g = 220;
+		*b = 220;
+		break; /* white    */
 	case KEY_QUAKE:
-		SETCLR(Q3IDE_CLR_KEY_QUAKE);
-		break;
+		*r = 190;
+		*g = 155;
+		*b = 25;
+		break; /* amber    */
 	case KEY_COLLISION:
-		SETCLR(Q3IDE_CLR_KEY_COLLISION);
-		break;
+		*r = 255;
+		*g = 30;
+		*b = 30;
+		break; /* red      */
 	case KEY_PASSTHROUGH:
-		SETCLR(Q3IDE_CLR_KEY_PASSTHROUGH);
-		break;
+		*r = 60;
+		*g = 200;
+		*b = 120;
+		break; /* green   */
 	default:
-		SETCLR(Q3IDE_CLR_KEY_DEFAULT);
-		break;
+		*r = 155;
+		*g = 155;
+		*b = 155;
+		break; /* gray +40% */
 	}
-#undef SETCLR
-#undef SETCLR_X
 }
 
 /* ── Solid thin line: tight glyph chain between two cache points ─────── */
@@ -66,7 +65,7 @@ static void emit_line(float r0, float u0, float r1, float u1)
 		return;
 	for (k = 1; k < n; k++) {
 		float t = (float) k / (float) n;
-		ovl_emit_sm(r0 + dr * t, u0 + du * t, '*', Q3IDE_CLR_KEY_LINE);
+		ovl_emit_sm(r0 + dr * t, u0 + du * t, '*', 130, 130, 130);
 	}
 }
 
@@ -124,7 +123,7 @@ void q3ide_rebuild_keyboard_cache(void)
 				if (!krows[i][j].display || classify(krows[i][j].keynum) != KEY_Q3IDE)
 					continue;
 				Com_sprintf(lbl_buf, sizeof(lbl_buf), "%c: %s", krows[i][j].display, q3ide_label(krows[i][j].keynum));
-				ovl_emit_str_rot(lbl_r, 0.0f, lbl_buf, Q3IDE_CLR_KEY_LABEL);
+				ovl_emit_str_rot(lbl_r, 0.0f, lbl_buf, 230, 230, 230);
 				key_r = krow_indent[i] * KCELL + j * KCELL + KCW;
 				key_u = kb_top - i * Q3IDE_OVL_KEY_ROW_H;
 				emit_line(lbl_r, 0.0f, key_r, key_u);
@@ -137,21 +136,11 @@ void q3ide_rebuild_keyboard_cache(void)
 			if (classify(kextras[i].keynum) != KEY_Q3IDE)
 				continue;
 			Com_sprintf(lbl_buf, sizeof(lbl_buf), "%s: %s", kextras[i].disp, q3ide_label(kextras[i].keynum));
-			ovl_emit_str_rot(lbl_r, 0.0f, lbl_buf, Q3IDE_CLR_KEY_LABEL);
+			ovl_emit_str_rot(lbl_r, 0.0f, lbl_buf, 230, 230, 230);
 			key_r = kextras[i].col * KCELL + KCW;
 			key_u = kb_top - kextras[i].row * Q3IDE_OVL_KEY_ROW_H;
 			emit_line(lbl_r, 0.0f, key_r, key_u);
 			lbl_r += (float) strlen(lbl_buf) * lbl_cw + 0.25f;
 		}
-	}
-
-	/* Record max right extent so keyboard.c can right-align the cache to its anchor */
-	{
-		float mr = 0.0f;
-		int k;
-		for (k = 0; k < g_glyph_count; k++)
-			if (g_glyphs[k].right > mr)
-				mr = g_glyphs[k].right;
-		g_kb_max_right = mr;
 	}
 }

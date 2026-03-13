@@ -1,4 +1,4 @@
-/*
+/* NOT_USED_YET
  * q3ide_placement.c — Area transition placement: queue + FPS-gated drain.
  * Wall cache: q3ide_wall_cache.c.  Window manager: q3ide_win_mngr.c.
  */

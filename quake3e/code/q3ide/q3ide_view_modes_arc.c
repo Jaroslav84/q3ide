@@ -31,6 +31,65 @@ static float trace_arc_dist(vec3_t eye, vec3_t fwd, float ideal_dist)
 	return d;
 }
 
+/* ── Overview arc placement — writes ov_origin/ov_normal, no MoveWindow ─ */
+
+/*
+ * Same math as q3ide_focus3_place_arc but stores results in each window's
+ * ov_origin/ov_normal fields instead of calling Q3IDE_WM_MoveWindow.
+ * Also sets in_overview=qtrue so the scene renders these at the arc position.
+ */
+void q3ide_ov_place_arc(vec3_t eye, vec3_t fwd, int *idxs, int n, float pitch_rad)
+{
+	float R, Rh, Rv, cp, sp;
+	float a, b, theta, rad, c, s;
+	vec3_t dir, pos, norm;
+	int k;
+
+	if (n == 0)
+		return;
+
+	R = trace_arc_dist(eye, fwd, Q3IDE_VIEWMODE_ARC_DIST);
+	cp = cosf(pitch_rad);
+	sp = sinf(pitch_rad);
+	Rh = R * cp;
+	Rv = R * sp;
+
+	/* Center panel straight ahead */
+	pos[0] = eye[0] + fwd[0] * Rh;
+	pos[1] = eye[1] + fwd[1] * Rh;
+	pos[2] = eye[2] + Rv;
+	norm[0] = -fwd[0] * cp;
+	norm[1] = -fwd[1] * cp;
+	norm[2] = -sp;
+	VectorCopy(pos, q3ide_wm.wins[idxs[0]].ov_origin);
+	VectorCopy(norm, q3ide_wm.wins[idxs[0]].ov_normal);
+	q3ide_wm.wins[idxs[0]].in_overview = qtrue;
+
+	a = q3ide_wm.wins[idxs[0]].world_w * 0.5f;
+
+	for (k = 1; k < n && k < 3; k++) {
+		b = q3ide_wm.wins[idxs[k]].world_w * 0.5f;
+		if (Rh > 0.001f)
+			theta = atan2f(b, Rh) + asinf(a / sqrtf(Rh * Rh + b * b));
+		else
+			theta = (float) M_PI * 0.5f;
+		rad = (k == 1) ? -theta : theta;
+		c = cosf(rad);
+		s = sinf(rad);
+		dir[0] = fwd[0] * c - fwd[1] * s;
+		dir[1] = fwd[0] * s + fwd[1] * c;
+		pos[0] = eye[0] + dir[0] * Rh;
+		pos[1] = eye[1] + dir[1] * Rh;
+		pos[2] = eye[2] + Rv;
+		norm[0] = -dir[0] * cp;
+		norm[1] = -dir[1] * cp;
+		norm[2] = -sp;
+		VectorCopy(pos, q3ide_wm.wins[idxs[k]].ov_origin);
+		VectorCopy(norm, q3ide_wm.wins[idxs[k]].ov_normal);
+		q3ide_wm.wins[idxs[k]].in_overview = qtrue;
+	}
+}
+
 /* ── Focus3 arc placement ────────────────────────────────────────────── */
 
 /*

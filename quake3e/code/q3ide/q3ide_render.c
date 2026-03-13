@@ -19,7 +19,7 @@
 #include "../qcommon/q_shared.h"
 #include "q3ide_params.h"
 #include "q3ide_engine_hooks.h"
-#include "q3ide_main_menu.h"
+#include "q3ide_map_skin_browser.h"
 #include "q3ide_win_mngr.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
@@ -59,8 +59,9 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		if (!(fd->rdflags & RDF_NOWORLDMODEL) && cls.state == CA_ACTIVE) {
 			Q3IDE_WM_AddPolys();
 			Q3IDE_DrawHudMsg(fd);
+			Q3IDE_DrawAimLabel(fd);
 			Q3IDE_DrawLeftOverlay(fd);
-			Q3IDE_Menu_Draw(fd);
+			Q3IDE_MMenu_Draw(fd);
 		}
 		re.RenderScene(fd);
 		return;
@@ -118,12 +119,13 @@ void Q3IDE_MultiMonitorRender(const void *refdef_ptr)
 		if (cls.state == CA_ACTIVE) {
 			Q3IDE_WM_AddPolys();
 			Q3IDE_DrawHudMsg(&view);
+			Q3IDE_DrawAimLabel(&view);
 			/* Left monitor: keybinding cheat sheet overlay */
 			if (i == 0)
 				Q3IDE_DrawLeftOverlay(&view);
-			/* Centre monitor: map switcher menu */
+			/* Centre monitor: map/skin browser */
 			if (i == center)
-				Q3IDE_Menu_Draw(&view);
+				Q3IDE_MMenu_Draw(&view);
 		}
 		re.RenderScene(&view);
 	}

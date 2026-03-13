@@ -1062,6 +1062,7 @@ qboolean ARB_UpdatePrograms( void )
 
 	if ( !ARB_CompileProgram( Fragment, va( blend2gammaFP, ARB_BuildGreyscaleProgram( buf ) ), programs[ BLEND2_GAMMA_FRAGMENT ] ) )
 		return qfalse;
+
 #endif // USE_FBO
 
 	programCompiled = 1;

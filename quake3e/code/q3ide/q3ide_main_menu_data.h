@@ -1,6 +1,6 @@
 /*
  * q3ide_main_menu_data.h — Map and skin tables for M-menu.
- * Included once by q3ide_main_menu.c.
+ * Included by q3ide_map_skin_browser.c and q3ide_map_skin_browser_draw.c.
  */
 
 #ifndef Q3IDE_MAIN_MENU_DATA_H
@@ -103,10 +103,10 @@ static const map_entry_t k_maps[] = {
 };
 /* clang-format on */
 
-#define K_MAPS_N ((int)(sizeof(k_maps) / sizeof(k_maps[0])))
+#define K_MAPS_N ((int) (sizeof(k_maps) / sizeof(k_maps[0])))
 
 typedef struct {
-	const char *id;    /* NULL = category header */
+	const char *id; /* NULL = category header */
 	const char *label;
 } skin_entry_t;
 
@@ -132,6 +132,6 @@ static const skin_entry_t k_skins[] = {
 };
 /* clang-format on */
 
-#define K_SKINS_N ((int)(sizeof(k_skins) / sizeof(k_skins[0])))
+#define K_SKINS_N ((int) (sizeof(k_skins) / sizeof(k_skins[0])))
 
 #endif /* Q3IDE_MAIN_MENU_DATA_H */

@@ -1115,6 +1115,15 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 
 	if ( !tr.scratchImage[ client ] ) {
 		tr.scratchImage[ client ] = R_CreateImage( va( "*scratch%i", client ), NULL, data, cols, rows, IMGFLAG_CLAMPTOEDGE | IMGFLAG_RGB | IMGFLAG_NOSCALE );
+#ifdef USE_VULKAN
+		/* q3ide: SCStream delivers BGRA — override the default RGBA format so the GPU
+		 * interprets bytes correctly without any CPU swizzle. */
+		if ( format == 0x80E1 /* GL_BGRA */ && tr.scratchImage[ client ] ) {
+			tr.scratchImage[ client ]->internalFormat = VK_FORMAT_B8G8R8A8_UNORM;
+			vk_create_image( tr.scratchImage[ client ], cols, rows, 1 );
+			vk_upload_image_data( tr.scratchImage[ client ], 0, 0, cols, rows, 1, data, cols * rows * 4, qfalse );
+		}
+#endif
 		return;
 	}
 
@@ -1129,6 +1138,9 @@ void RE_UploadCinematic( int w, int h, int cols, int rows, byte *data, int clien
 		image->width = image->uploadWidth = cols;
 		image->height = image->uploadHeight = rows;
 #ifdef USE_VULKAN
+		/* q3ide: keep BGRA format across resizes */
+		if ( format == 0x80E1 /* GL_BGRA */ )
+			image->internalFormat = VK_FORMAT_B8G8R8A8_UNORM;
 		vk_create_image( image, cols, rows, 1 );
 		vk_upload_image_data( image, 0, 0, cols, rows, 1, data, cols * rows * 4, qfalse );
 #else

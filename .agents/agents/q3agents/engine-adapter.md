@@ -10,15 +10,13 @@ Implements Quake3e-specific parts of Q3IDE. Keeps the adapter minimal and swappa
 
 ## File Scope (ONLY these)
 
-- `engine/quake3e/q3ide_adapter.c` — adapter implementation
-- `engine/quake3e/q3ide_texture.{h,c}` — texture management
-- `engine/quake3e/q3ide_placement.{h,c}` — wall trace, quad placement
-- `quake3e/code/q3ide/q3ide_hooks.{h,c}` — engine integration hooks
-- `quake3e/code/q3ide/q3ide_wm.{h,c}` — window manager
-- `quake3e/code/q3ide/q3ide_wm_internal.h` — private types
-- `quake3e/code/q3ide/q3ide_cmd.c` — complex commands
+- `quake3e/code/q3ide/q3ide_engine.c` — engine hooks (Init/Shutdown/AddPolys/OnKeyEvent)
+- `quake3e/code/q3ide/q3ide_engine_hooks.h` — hook declarations
+- `quake3e/code/q3ide/q3ide_win_mngr.{h,c}` — window manager
+- `quake3e/code/q3ide/q3ide_win_mngr_internal.h` — private types
+- `quake3e/code/q3ide/q3ide_commands.c` — console commands
 - `quake3e/code/q3ide/q3ide_render.c` — multi-monitor rendering
-- `quake3e/code/q3ide/q3ide_interaction.{h,c}` — NEW: interaction mode
+- `quake3e/code/q3ide/q3ide_shoot_to_place.c` — shoot-to-place placement
 - `quake3e/Makefile` — build rules for q3ide files
 
 ## Parallel Build Triage

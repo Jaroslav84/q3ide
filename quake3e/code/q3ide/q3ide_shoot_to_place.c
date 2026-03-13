@@ -1,14 +1,18 @@
-/*
- * q3ide_engine_hooks_input.c — Q3IDE shooting/repositioning input handling.
- */
+/* q3ide_shoot_to_place.c — Shoot-to-place: window selection, repositioning, wall placement. */
 
 #include "q3ide_engine_hooks.h"
 #include "q3ide_log.h"
 #include "q3ide_win_mngr.h"
 #include "q3ide_win_mngr_internal.h"
+#include "q3ide_params.h"
 #include "../qcommon/qcommon.h"
 #include "../client/client.h"
 #include <math.h>
+
+/* Missile tracking — q3ide_missile_tracking.c */
+extern void q3ide_missile_track_frame(void);
+extern void q3ide_missile_tracking_reset(void);
+extern int q3ide_burst_place_end; /* defined in q3ide_missile_tracking.c */
 
 /* Shoot-to-place state — shared with q3ide_engine.c */
 extern int q3ide_selected_win; /* wins[] index, -1 = none selected */
@@ -19,26 +23,52 @@ extern int q3ide_aimed_win;    /* window under crosshair this frame, -1 = none *
 /* Placement cooldown: suppress window selection for Q3IDE_PLACE_COOLDOWN_MS after
  * placing a window, so rapid wall shots keep placing new windows instead of
  * accidentally entering reposition mode on the freshly-placed one. */
-static int q3ide_place_cooldown_end = 0;
-static int q3ide_burst_place_end    = 0;
+int q3ide_place_cooldown_end = 0;
 
-/* Rapid-fire weapons: machinegun=2, lightning=6, plasmagun=8 */
-static qboolean q3ide_is_rapid_fire(int weapon)
+/* Projectile weapons — placement handled via missile entity tracking, not attack edge. */
+static qboolean q3ide_is_projectile(int weapon)
 {
-	return weapon == 2 || weapon == 6 || weapon == 8;
+	return weapon == 4 || weapon == 5 || weapon == 8 || weapon == 9;
 }
+
+/* ── Hitscan fire detection ───────────────────────────────────────────── */
+
+/* weaponTime counts down to 0 between shots. When the weapon fires, the game
+ * resets it to the fire interval — so weaponTime *increasing* = gun just fired.
+ * Tracking the weapon number prevents false triggers on weapon switch. */
+static int g_prev_weapon_time = -1;
+static int g_prev_weapon = -1;
+
+static qboolean q3ide_weapon_fired_this_frame(void)
+{
+	int cur_time = cl.snap.ps.weaponTime;
+	int cur_weapon = cl.snap.ps.weapon;
+	qboolean fired = qfalse;
+	if (g_prev_weapon == cur_weapon && g_prev_weapon_time >= 0)
+		fired = (cur_time > g_prev_weapon_time);
+	g_prev_weapon_time = cur_time;
+	g_prev_weapon = cur_weapon;
+	return fired;
+}
+
+/* ── Hitscan shoot frame ──────────────────────────────────────────────── */
 
 void q3ide_shoot_frame(void)
 {
 	vec3_t eye, fwd;
 	float p, y;
-	int buttons, attacking, hit;
-	qboolean rapid_hold;
+	int buttons, hit;
 
 	if (cls.state != CA_ACTIVE) {
 		q3ide_aimed_win = -1;
+		q3ide_missile_tracking_reset();
+		g_prev_weapon_time = -1;
+		g_prev_weapon = -1;
 		return;
 	}
+
+	/* Projectile tracking — handles all ET_MISSILE based weapons. */
+	q3ide_missile_track_frame();
 
 	/* Compute eye + forward every frame — needed for aim highlight and shoot. */
 	VectorCopy(cl.snap.ps.origin, eye);
@@ -55,27 +85,18 @@ void q3ide_shoot_frame(void)
 	hit = (Sys_Milliseconds() < q3ide_place_cooldown_end) ? -1 : q3ide_aimed_win;
 
 	buttons = cl.cmds[cl.cmdNumber & CMD_MASK].buttons;
-	attacking = buttons & BUTTON_ATTACK;
+	q3ide_last_attack = buttons & BUTTON_ATTACK;
 
-	/* Rapid-fire hold: bypass leading-edge gate when holding attack with a
-	 * rapid-fire weapon — covers both reposition (selected win) and burst
-	 * placement sweep (no selection, aiming across a wall). */
-	rapid_hold = (attacking && q3ide_is_rapid_fire(cl.snap.ps.weapon) &&
-	              (q3ide_selected_win >= 0
-	                   ? Sys_Milliseconds() - q3ide_select_time < Q3IDE_REPOSITION_MS
-	                   : qtrue));
-
-	/* Only act on the leading edge of the attack button (unless rapid-fire hold) */
-	if (!rapid_hold && (!attacking || q3ide_last_attack)) {
-		q3ide_last_attack = attacking;
-		/* Expire stale selection */
-		if (q3ide_selected_win >= 0 && Sys_Milliseconds() - q3ide_select_time >= Q3IDE_REPOSITION_MS) {
-			Q3IDE_LOGI("selection expired");
-			q3ide_selected_win = -1;
-		}
-		return;
+	/* Expire stale selection regardless of fire state. */
+	if (q3ide_selected_win >= 0 && Sys_Milliseconds() - q3ide_select_time >= Q3IDE_REPOSITION_MS) {
+		Q3IDE_LOGI("selection expired");
+		q3ide_selected_win = -1;
 	}
-	q3ide_last_attack = attacking;
+
+	/* Gate all hitscan placement on the weapon actually discharging this frame.
+	 * Prevents placement during reload (railgun, shotgun, etc.). */
+	if (!q3ide_weapon_fired_this_frame())
+		return;
 
 	if (hit >= 0 && hit == q3ide_selected_win) {
 		/* Re-hit the already-selected window: cycle to the next one behind it */
@@ -98,11 +119,20 @@ void q3ide_shoot_frame(void)
 		return;
 	}
 
+	/* Projectile weapons: placement handled by missile impact tracking, not here.
+	 * Pre-populate the queue now (at fire time) so it's ready when the missile
+	 * hits — avoids the expensive PopulateQueue call mid-flight. */
+	if (q3ide_is_projectile(cl.snap.ps.weapon)) {
+		if (Q3IDE_WM_PendingCount() == 0)
+			Q3IDE_WM_PopulateQueue(qfalse);
+		return;
+	}
+
 	if (hit < 0 && q3ide_selected_win >= 0 && Sys_Milliseconds() - q3ide_select_time < Q3IDE_REPOSITION_MS) {
-		/* Selection active, shot missed windows → move to hit surface */
+		/* Selection active, shot missed windows → move to hit surface (hitscan) */
 		vec3_t wall_pos, wall_normal;
 		if (Q3IDE_WM_TraceWall(eye, fwd, wall_pos, wall_normal)) {
-			Q3IDE_WM_MoveWindow(q3ide_selected_win, wall_pos, wall_normal, qfalse); /* user-placed: clamp to fit */
+			Q3IDE_WM_MoveWindow(q3ide_selected_win, wall_pos, wall_normal, qfalse);
 			Q3IDE_LOGI("moved [%d] to (%.0f,%.0f,%.0f)", q3ide_selected_win, wall_pos[0], wall_pos[1], wall_pos[2]);
 		} else {
 			/* No wall — move to floating position in front */
@@ -116,11 +146,10 @@ void q3ide_shoot_frame(void)
 			Q3IDE_WM_MoveWindow(q3ide_selected_win, float_pos, float_normal, qfalse);
 			Q3IDE_LOGI("moved [%d] floating", q3ide_selected_win);
 		}
-		q3ide_select_time = Sys_Milliseconds(); /* restart 3s window — keep shooting to keep moving */
+		q3ide_select_time = Sys_Milliseconds();
 		Cbuf_AddText("give ammo\n");
 	} else if (hit < 0 && q3ide_selected_win < 0) {
 		/* No window hit, no selection — pop next pending window onto this wall.
-		 * Auto-populate queue on first shot (lazy init — cap may not be ready at startup).
 		 * Burst timer limits sweep rate to Q3IDE_BURST_PLACE_MS between placements. */
 		if (Sys_Milliseconds() >= q3ide_burst_place_end) {
 			vec3_t wall_pos, wall_normal;
@@ -130,7 +159,7 @@ void q3ide_shoot_frame(void)
 				if (Q3IDE_WM_PendingCount() > 0) {
 					Q3IDE_WM_AttachNextPending(wall_pos, wall_normal);
 					q3ide_place_cooldown_end = Sys_Milliseconds() + Q3IDE_PLACE_COOLDOWN_MS;
-					q3ide_burst_place_end    = Sys_Milliseconds() + Q3IDE_BURST_PLACE_MS;
+					q3ide_burst_place_end = Sys_Milliseconds() + Q3IDE_BURST_PLACE_MS;
 					Cbuf_AddText("give ammo\n");
 				}
 			}

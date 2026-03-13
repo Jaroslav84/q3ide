@@ -6,7 +6,7 @@
 
 Q3IDE ("Quake III IDE") turns a Quake III Arena (quake3e fork) into a multi-monitor, live developer workspace with all your existing tools, LLMs. Live macOS windows stream as real-time textures onto in-game surfaces using ScreenCaptureKit, rendered through a modified Quake3e engine. The project follows Apple VisionOS design language (Windows, Ornaments, Hover effects).
 
-It as it's own **window management library** it has "adaptive resolution capture pipeline." 
+It has its own **window management library** it has "adaptive resolution capture pipeline." 
 
 ## Vibe Coding? Pfff! Frag Coding! 
 
@@ -18,7 +18,7 @@ Imagine that you are...
 - Multiple AI agents and clawbots are running, coding, and shooting inside the game. 
 - You are not waiting because you're fragging the shit out of your co-worker. 
 - You setup an office desk in the corner with your radio station because Claude Code is ready. 
-- You Run, Test, Build then lauch a rocket under the desk of your boss. 
+- You Run, Test, Build then launch a rocket under the desk of your boss. 
 - Then you tell the OpenClaw game bot to order pizza before rail gunning him too.
 
 Zuk got it wrong with Meta world. We need some blood here for the love of god.
@@ -45,28 +45,26 @@ sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --
 
 --
 
-
 ## Features working
 
-- **Quake with 3 monitors**:: 1980 x 1080 @ **90FPS** *we keep this value maxiimized*
+- **Quake with 3 monitors**:: 1920 x 1080 @ **90FPS** *we keep this value maximized*
 - **Multi-window tunneling from macOS to Quake** (SCStream → texture → GPU)
   - **Stream Router**: Display Composition Stream vs Per-window SCStream - both have their advantages and disadvantages. Extra 20% FPS gains.
-    - COMPOSITE for CPU apps (Terminal, etc)
+    - COMPOSITE for CPU apps (Terminal, etc) - 1 screen where each terminal window gets cropped - more efficient
     - DEDICATED for GPU apps (Browser, VLC)
-  - **Flipped windows**: back of the window works efficiently without rendering things twice (flipped horizontally)
+  - **Both-sides window rendering**: windows are visible from front AND back efficiently 
   - **Pause SCStream**: to get back the 90 FPS in game (`STREAMS_PAUSED` AtomicBool — `get_frame()` returns None, last frame frozen on GPU, streams stay warm). This can be leveraged in a BIG BIG matter.
-  - **Idle SCStream**: `IN-PROGRESS` apple idle detector is not that great for use. We sampel every 1s for changes and pause streams :) FPS saver feature!
-- **MacOS deamon**
+  - **Gracefull FPS control**: new windows spawns with [1,2,4,8,16,32,auto]
+  - **Idle SCStream**: `IN-PROGRESS` apple idle detector is not that great for use. We sample every 1s for changes and pause streams :) FPS saver feature!
+- **Window Manager**
+  - Highlight/select window on aim
+  - Shoot wall to place window 1,2...N
+  - Shoot existing window THEN wall to position/reposition window
+  - Shoot windows inside "O" Overview then on wall to stick them
+- **MacOS daemon**
   - Auto attach/detach new and closed macOS windows into Quake (PollChanges)
   - Unminimizes every app and re-focuses Quake before first attach
   - ICC color restore on cmd-tab — monitors snap back to calibrated profiles the moment you leave Quake. Otherwise we have white windows when using SCStream
-
-  what did we add her?.....
-- **Window Manager**
-  - Shoot wall to place window 1,2...N
-  - Highlight window on aim
-  - Shoot window->wall to position/repostion
-- **Console commands**: q3ide list / status / detach
 - **Spatial Context / Window Placement**
   - LOS visibility culling (per-frame trace)
   - AAS area detection (just tracking, no placement)
@@ -74,70 +72,54 @@ sh ./scripts/build.sh --run --release stable --level q3dm0 --bots 0 --music 0 --
   - "I" to view ALL monitors
   - "O" to view ALL windows -> good for FPS stress testing
   - "H" to hide ALL windows
-  - "K" to highlight ALL windows with a laser ray pointing to it
+  - "K" to kill ALL windows
+  - "M" to show menu for custom maps/skins
   - ";" to freeze stream (last frame frozen, 100% FPS regain)
+  - `IN-PROGRESS` "L" to highlight ALL windows with a laser ray pointing to it
 - **Left Monitor Overlay**: rate-limited
   - keybindings
   - notifications
   - list of windows
   - stats
+- **Console commands**: q3ide list / status / detach
 
---- 
+---
 
 ## Quake3e Changes
 
-**CURRENT Quake3e CODE CHANGE RATIO**: 1.5%
+**Currently we have `QUAKE3E CODE CHANGE RATIO = 1.85%`**
 *we keep this number minimized while developing*
 
-405 lines across 19 files out of 27,541 total original lines.
+531 lines across 14 files out of 28,769 total original lines.
 
-The heaviest hits are sdl_glimp.c (11% changed — multi-monitor window) and sdl_gamma.c (34% changed — but it was only 123 lines to begin with). 
-Everything else is under 5%.
+The heaviest hit is sdl_glimp.c (12% — multi-monitor spanning window) and Makefile (16% — build rules and q3ide sources).
+Everything else is under 3%.
 
 Build
-- Makefile — USE_Q3IDE=1, USE_OPENGL2=0, -DSTANDALONE (no CD key), -lobjc -framework CoreGraphics, 23 q3ide object files + build rules
+- Makefile — USE_Q3IDE=1, USE_OPENGL2=0, USE_VULKAN=1, USE_RENDERER_DLOPEN=1, -DSTANDALONE (no CD key), 54 q3ide object files + build rules
 
 Renderer Common
-- tr_types.h — MAX_VIDEO_HANDLES 16 → 100
+- tr_types.h — MAX_VIDEO_HANDLES 16 → 100 (one handle per tunneled window)
 - tr_public.h — UploadCinematic() added format param (GL_BGRA/GL_RGBA)
 
 Renderer GL1
-- tr_backend.c — RE_UploadCinematic() uses format param; RB_SetGL2D() clamps 2D to center monitor when not in UI/console (r_mmUIActive)
 - tr_local.h — updated UploadCinematic signature
-- tr_scene.c — RE_RenderScene() preserves entities/dlights across side-monitor passes via r_multiViewRemaining
-
-Renderer GL2 (compiled but not active — USE_OPENGL2=0)
-- tr_backend.c, tr_local.h, tr_scene.c — same UploadCinematic + multi-viewport changes mirrored
-- tr_init.c — function pointer casts for new sigas
+- tr_arb.c — whitespace only (1 line)
 
 Renderer Vulkan
-- tr_backend.c, tr_local.h — UploadCinematic format param
+- tr_backend.c — RE_UploadCinematic() handles BGRA format param for window streams
+- tr_local.h — updated UploadCinematic signature
+- tr_scene.c — RE_RenderScene() preserves entities/dlights across side-monitor passes
+- tr_init.c — r_fbo default 0 → 1 (required for Vulkan multi-viewport)
+- vk.c — center-monitor 2D viewport offset + ortho MVP for multi-monitor HUD
 
 Client Core
-- cl_main.c — Q3IDE_Init/Shutdown/Frame/OnVidRestart hooks; CL_InitRenderer overrides vidWidth/H to center monitor size
+- cl_main.c — Q3IDE_Init/Shutdown/Frame/OnVidRestart hooks; vidWidth/H override to center monitor size
 - cl_cgame.c — Q3IDE_MultiMonitorRender() replaces re.RenderScene(); vidWidth override for HUD scale
-- cl_console.c — CON_X macro shifts console to center monitor
-- cl_cin.c — RE_UploadCinematic calls pass GL_RGBA explicitly
-
-Input
-- cl_keys.c — Q3IDE_OnKeyEvent() first; swallows key in passthrough mode; Key_SetCatcher sets r_mmUIActive cvar so
-renderer knows when menus/console are open
-- cl_input.c — Q3IDE_SaveRawButtons() + Q3IDE_ConsumesInput() suppress attack/movement in pointer mode
+- cl_keys.c — Q3IDE_OnKeyEvent() called first; key passthrough to game
 
 SDL / Platform
-- sdl_glimp.c — borderless window spanning all monitors; r_mm* cvars; Q3IDE_HideMenuBarAndDock() via ObjC
-- sdl_gamma.c — gamma LUT broadcast to all displays via CoreGraphics; ICC restore on focus lost
-- sdl_glw.h — GLW_RestoreGamma() prototype
-- sdl_input.c — GLW_RestoreGamma() on focus lost; mouse stays active in spanning mode
-- unix_main.c — unbuffered stdout
-- unix_shared.c — dlerror() debug logging
-
-Common
-- common.c — CD key read/write guarded by !defined(STANDALONE)
-
-Game Logic
-- sv_game.c — forces VMI_NATIVE for qagame (patched dylib with grapple at spawn)
-
+- sdl_glimp.c — borderless window spanning all monitors; r_multiMonitor cvar; Q3IDE_HideMenuBarAndDock() via ObjC
 
 
 --
@@ -151,7 +133,7 @@ While keeping FPS at 90..
 | 1 | **Vision, architecture, design language** | 0 | ✅ Done |
 | 2 | **MVP — terminal on nearest wall at spawn** | 0 | ✅ Done |
 | 3 | **Multiple windows, floating panels** | 0 | ✅ Done |
-| 4 | **Multi-window tuneling (unique windowID per SCStream)** | 0 | ✅ Done |
+| 4 | **Multi-window tunneling (unique windowID per SCStream)** | 0 | ✅ Done |
 | 5 | **Three-monitor support** | 0 | ✅ Done |
 | 6 | **Window Entity data model** & lifecycle management | 2 | 🔧 In Progress |
 | 6.1 | ↳ **Kill BGRA→RGBA swizzle (GL_BGRA native)** | 2 | ✅ Done |
@@ -232,8 +214,8 @@ sh ./scripts/build.sh [options]
 ### Examples
 
 ```bash
-# Full build + run on q3dm0, attach all macOS windows to walls
-sh ./scripts/build.sh --run --level 0 --execute 'q3ide attach all'
+# Full build + run on q3dm0
+sh ./scripts/build.sh --run --level 0
 
 # Engine-only rebuild (skip Rust, fast) + run
 sh ./scripts/build.sh --engine-only --run
@@ -243,9 +225,6 @@ sh ./scripts/build.sh --clean --run --level 7
 
 # Build + start API + run with bots
 sh ./scripts/build.sh --run --api --level 0 --bots 3
-
-# Mirror macOS displays into the 3 game monitors
-sh ./scripts/build.sh --run --level 0 --execute 'q3ide desktop'
 ```
 
 ---
@@ -306,11 +285,8 @@ Open with `~`. Single `q3ide` dispatcher:
 | Command | Description |
 |---------|-------------|
 | `q3ide list` | List all capturable macOS windows |
-| `q3ide attach all` | Attach iTerm2 / Terminal / browser windows to walls |
-| `q3ide desktop` | Mirror each macOS display onto its corresponding game monitor |
 | `q3ide detach` | Detach all windows |
 | `q3ide status` | Show active windows, capture status, dylib info |
-| `q3ide snap` | Snap mirror portal into the q3dm0 teleporter arch |
 
 ---
 
@@ -414,14 +390,19 @@ q3ide/
 ├── spatial/                # Engine-agnostic game logic
 │
 ├── plan/
-│   ├── 00-VISION.md                       # Full project vision
-│   ├── 01-Q3IDE_INITAL_PROMPT.md          # Initial project prompt / architecture
-│   ├── 02-VISIONOS_DESIGN_LANGUAGE.md     # VisionOS design reference
-│   ├── 03-Q3IDE_ORCHESTRATION.md          # Agent orchestration setup
-│   ├── 04-Q3IDE_SPECIFICATION.md          # Full feature spec + tracker
-│   ├── 05-Q3IDE_PERFORMANCE_OPTIMIZATION.md  # Perf brainstorm
-│   ├── 06-Q3_CONF.md                      # Quake 3 config presets
-│   └── 07-Q3_HD_UPGRADE_PROCEDURE.md      # HD texture upgrade guide
+│   ├── 00-VISION.md                          # Full project vision
+│   ├── 01-VISIONOS_DESIGN_LANGUAGE.md       # VisionOS design reference
+│   ├── 02-Q3IDE_INITIAL_PROMPT.md           # Initial project prompt / architecture
+│   ├── 03-Q3IDE_ORCHESTRATION.md           # Agent orchestration setup
+│   ├── 04-Q3IDE_SPECIFICATION.md           # Full feature spec + tracker
+│   ├── 05-Q3IDE_PERFORMANCE_OPTIMIZATION.md # Perf brainstorm
+│   ├── 06-Q3IDE_OPTIMIZATION_TRICKS.md     # Optimization tricks
+│   ├── 07-Q3_HD_UPGRADE_PROCEDURE.md       # HD texture upgrade guide
+│   ├── 08-WINDOW_RULES.md                  # Window lifecycle rules
+│   ├── 09-WINDOW_PLACEMENT_SYSTEM.md       # Placement system design
+│   ├── 10-Q3IDE_ARCHITECTURE.md            # Architecture overhaul plan
+│   ├── 11-Q3IDE_UML_MERMAID.md             # UML diagrams
+│   └── 12-QUAKE_CONSTRUCTOR.md             # Quake constructor reference
 │
 └── README.md
 ```

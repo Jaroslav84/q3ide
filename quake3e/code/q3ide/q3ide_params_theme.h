@@ -42,9 +42,9 @@
 
 /* ── Map switcher menu ────────────────────────────────────────────── */
 
-#define Q3IDE_CLR_MENU_SEL  80, 255, 80    /* bright green — selected entry */
-#define Q3IDE_CLR_MENU_ITEM 255, 255, 255  /* white        — unselected map/skin entry */
-#define Q3IDE_CLR_MENU_CAT  220, 60, 60    /* red          — unselected category entry */
+#define Q3IDE_CLR_MENU_SEL  80, 255, 80   /* bright green — selected entry */
+#define Q3IDE_CLR_MENU_ITEM 255, 255, 255 /* white        — unselected map/skin entry */
+#define Q3IDE_CLR_MENU_CAT  220, 60, 60   /* red          — unselected category entry */
 
 /* ── Keyboard grid ───────────────────────────────────────────────── */
 
